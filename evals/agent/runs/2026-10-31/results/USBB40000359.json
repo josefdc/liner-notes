@@ -1,0 +1,1560 @@
+{
+  "id": "2AP7m2dBb8ULTx4Gc1rdMc",
+  "title": "Juicy",
+  "artist": "The Notorious B.I.G.",
+  "album": "Greatest Hits",
+  "coverUrl": "[link]",
+  "spotifyUrl": "https://open.spotify.com/track/2AP7m2dBb8ULTx4Gc1rdMc",
+  "releaseYear": "2007",
+  "explicit": false,
+  "durationSeconds": 286,
+  "isrc": "USBB40706422",
+  "preview": {
+    "provider": "deezer",
+    "method": "isrc",
+    "score": null
+  },
+  "queryMatch": "exact",
+  "evidence": [
+    {
+      "id": "musicbrainz:track/recording/f9c4374a-042a-4eab-bb66-fd482b51ab92",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/f9c4374a-042a-4eab-bb66-fd482b51ab92",
+      "title": "Juicy — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Juicy\" by The Notorious B.I.G. (4:45), ISRC USBB40706422, first released 2007-03-05.",
+      "recordRef": "track/recording/f9c4374a-042a-4eab-bb66-fd482b51ab92"
+    },
+    {
+      "id": "musicbrainz:work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/f2fa9a3c-b3ed-45f1-98db-a7ebdb740439",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/4f99ef5b-691a-3ef2-bbae-21645001e51a",
+      "title": "Juicy — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Juicy\" is covered by \"Juicy\" by Scott Bradlee's Postmodern Jukebox feat. Maiya Sykes.",
+      "recordRef": "work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/f2fa9a3c-b3ed-45f1-98db-a7ebdb740439"
+    },
+    {
+      "id": "musicbrainz:work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/e408736a-f579-443e-8d76-2be42694a25b",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/4f99ef5b-691a-3ef2-bbae-21645001e51a",
+      "title": "Juicy — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Juicy\" is covered by \"Juicy\" by Vitamin Dub.",
+      "recordRef": "work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/e408736a-f579-443e-8d76-2be42694a25b"
+    },
+    {
+      "id": "musicbrainz:work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/daf30d91-f1fb-4eea-aae7-54a9d655440f",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/4f99ef5b-691a-3ef2-bbae-21645001e51a",
+      "title": "Juicy — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Juicy\" is covered by \"Juicy\" by The Lullabeats.",
+      "recordRef": "work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/daf30d91-f1fb-4eea-aae7-54a9d655440f"
+    },
+    {
+      "id": "musicbrainz:work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/793df7e2-2763-41de-a4b7-86c0931f517c",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/4f99ef5b-691a-3ef2-bbae-21645001e51a",
+      "title": "Juicy — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Juicy\" is covered by \"Juicy (Medieval Bardcore version)\" by Beedle The Bardcore.",
+      "recordRef": "work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/793df7e2-2763-41de-a4b7-86c0931f517c"
+    },
+    {
+      "id": "musicbrainz:work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/a19f3364-9850-4041-a952-09d5b6c15110",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/4f99ef5b-691a-3ef2-bbae-21645001e51a",
+      "title": "Juicy — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Juicy\" is covered by \"Juicy (The Notorious B.I.G. cover)\" by John That.",
+      "recordRef": "work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/a19f3364-9850-4041-a952-09d5b6c15110"
+    },
+    {
+      "id": "tavily:https://www.whosampled.com/The-Notorious-B.I.G./Juicy",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.whosampled.com/The-Notorious-B.I.G./Juicy",
+      "title": "Juicy by The Notorious B.I.G. feat. Total - Samples, Covers ...",
+      "retrievedAt": "[time]",
+      "excerpt": "\"Juicy\" contains samples of \"Juicy Fruit (Fruity Instrumental Mix)\" by Mtume, \"Rappin' Duke\" by Rappin' Duke and \"Juicy Fruit\" by Mtume. Who produced \"Juicy\" by",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.whosampled.com/The-Notorious-B.I.G./samples",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.whosampled.com/The-Notorious-B.I.G./samples",
+      "title": "Songs Sampled by The Notorious B.I.G.",
+      "retrievedAt": "[time]",
+      "excerpt": "Hypnotize (1997) · Big Poppa (1994) · Juicy (1994) by The Notorious B.I.G. feat. Total · Gimme the Loot (1994) · One More Chance / Stay With Me (Remix) (1994) by",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.whosampled.com/The-Notorious-B.I.G.",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.whosampled.com/The-Notorious-B.I.G.",
+      "title": "The Notorious B.I.G. - Samples, Covers and Remixes",
+      "retrievedAt": "[time]",
+      "excerpt": "Total sampled Juicy Fruit (Fruity Instrumental Mix) by Mtume (1983) Rappin' Duke by Rappin' Duke (1985) was sampled in Swish Swish by Katy Perry feat. Nicki",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.whosampled.com/The-Notorious-B.I.G./Juicy-(Remix)",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.whosampled.com/The-Notorious-B.I.G./Juicy-(Remix)",
+      "title": "Juicy (Remix) by The Notorious B.I.G.",
+      "retrievedAt": "[time]",
+      "excerpt": "\"Juicy (Remix)\" contains samples of \"Love Rap\" by Spoonie Gee and The Treacherous Three and \"Rubber Jam\" by The Rubber Band. Who produced \"Juicy (Remix)\" by The",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.youtube.com/shorts/J7syCPQuA18",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.youtube.com/shorts/J7syCPQuA18",
+      "title": "Sample vs. Original | Mtume “Juicy Fruit” & The Notorious ...",
+      "retrievedAt": "[time]",
+      "excerpt": "One of the biggest samples in hip-hop history—The Notorious B.I.G.'s “Juicy”—traces back to Mtume's 1983 R&B classic “Juicy Fruit.”",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://en.wikipedia.org/wiki/Juicy_(The_Notorious_B.I.G._song)",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://en.wikipedia.org/wiki/Juicy_(The_Notorious_B.I.G._song)",
+      "title": "Juicy (The Notorious B.I.G. song) - Wikipedia",
+      "retrievedAt": "[time]",
+      "excerpt": "\"Juicy\" is the first single by the American rapper the Notorious B.I.G. from his debut album, Ready to Die (1994). It was produced by Poke of the duo Trackmasters and Sean Combs. \"Juicy\" contains a sample \"Sample (music)\") of Mtume's 1983 song, \"Juicy Fruit \"Juicy Fruit (Mtume song)\")\", though it is directly sampled from the song's \"Fruity Instrumental\" mix, and has an alternative chorus sung by Bad Boy Records cohorts, the girl group Total \"Total (group)\") and label founder Combs. The track is…",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.youtube.com/watch?v=_JZom_gVfuw",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.youtube.com/watch?v=_JZom_gVfuw",
+      "title": "The Notorious B.I.G. - Juicy (Official Video) [4K]",
+      "retrievedAt": "[time]",
+      "excerpt": "### Description 749,810,128 views Posted: 2011-09-06 \"Juicy\" is the lead single from the 1994 debut album Ready to Die by The Notorious B.I.G. The track's production is built around a sample of the 1983 song \"Juicy Fruit\" by Mtume. The single reached No. 27 on the Billboard Hot 100. The autobiographical lyrics of The Notorious B.I.G. describe his past struggles and subsequent success in the hip hop industry. Directed by: Sean “Puffy” Combs [...] The Notorious B.I.G., also known as Biggie Smalls…",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.imdb.com/name/nm0857263/trivia",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.imdb.com/name/nm0857263/trivia",
+      "title": "The Notorious B.I.G. - Trivia",
+      "retrievedAt": "[time]",
+      "excerpt": "He recorded and released \"Ready to Die\" in 1994. He recorded his sophomore album, \"Life After Death\" while alive. but it was released a mere two weeks after his ...Read more",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.youtube.com/watch?v=z6tJLSNFb7w",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.youtube.com/watch?v=z6tJLSNFb7w",
+      "title": "The Making of Ready to Die — Biggie's Dark Masterpiece",
+      "retrievedAt": "[time]",
+      "excerpt": "From raw storytelling to timeless hits like “Juicy” and “Big Poppa,” this video breaks down how this classic debut helped define an era and",
+      "recordRef": null
+    }
+  ],
+  "segments": [
+    {
+      "label": "Intro",
+      "start": 0,
+      "end": 8
+    },
+    {
+      "label": "Verse 1",
+      "start": 8,
+      "end": 25
+    },
+    {
+      "label": "Chorus",
+      "start": 25,
+      "end": 42
+    },
+    {
+      "label": "Verse 2",
+      "start": 42,
+      "end": 58
+    },
+    {
+      "label": "Bridge",
+      "start": 58,
+      "end": 75
+    },
+    {
+      "label": "Chorus",
+      "start": 75,
+      "end": 92
+    },
+    {
+      "label": "Outro",
+      "start": 92,
+      "end": 100
+    }
+  ],
+  "segmentsSource": "template",
+  "samples": [],
+  "factoids": [
+    {
+      "id": "<id 14>",
+      "title": "A Mtume connection",
+      "content": "Source material identifies Mtume’s “Juicy Fruit” as a sample in “Juicy.” It also specifically names the “Fruity Instrumental Mix” as sampled.",
+      "type": "sample",
+      "entities": [
+        {
+          "id": "<id 15>",
+          "text": "Mtume",
+          "type": "artist",
+          "searchQuery": "Mtume"
+        },
+        {
+          "id": "<id 16>",
+          "text": "Juicy Fruit",
+          "type": "album",
+          "searchQuery": "Juicy Fruit"
+        }
+      ],
+      "claimId": "<id 5>"
+    },
+    {
+      "id": "<id 17>",
+      "title": "A second sampled track",
+      "content": "“Rappin’ Duke” by Rappin’ Duke is also listed among the tracks sampled in “Juicy.”",
+      "type": "sample",
+      "entities": [
+        {
+          "id": "<id 18>",
+          "text": "Rappin’ Duke",
+          "type": "artist",
+          "searchQuery": "Rappin’ Duke"
+        }
+      ],
+      "claimId": "<id 6>"
+    },
+    {
+      "id": "<id 19>",
+      "title": "Later interpretations",
+      "content": "MusicBrainz lists covers of the song by Scott Bradlee’s Postmodern Jukebox featuring Maiya Sykes, Vitamin Dub, The Lullabeats, and Beedle The Bardcore.",
+      "type": "connection",
+      "entities": [
+        {
+          "id": "<id 20>",
+          "text": "Scott Bradlee’s Postmodern Jukebox",
+          "type": "artist",
+          "searchQuery": "Scott Bradlee’s Postmodern Jukebox"
+        },
+        {
+          "id": "<id 21>",
+          "text": "Maiya Sykes",
+          "type": "artist",
+          "searchQuery": "Maiya Sykes"
+        },
+        {
+          "id": "<id 22>",
+          "text": "Vitamin Dub",
+          "type": "artist",
+          "searchQuery": "Vitamin Dub"
+        },
+        {
+          "id": "<id 23>",
+          "text": "The Lullabeats",
+          "type": "artist",
+          "searchQuery": "The Lullabeats"
+        },
+        {
+          "id": "<id 24>",
+          "text": "Beedle The Bardcore",
+          "type": "artist",
+          "searchQuery": "Beedle The Bardcore"
+        }
+      ],
+      "claimId": "<id 7>"
+    }
+  ],
+  "genealogy": {
+    "nodes": [
+      {
+        "id": "current",
+        "group": 1,
+        "label": "Juicy",
+        "size": 40,
+        "trackTitle": "Juicy",
+        "trackArtist": "The Notorious B.I.G.",
+        "mbid": "f9c4374a-042a-4eab-bb66-fd482b51ab92",
+        "year": 2007
+      },
+      {
+        "id": "mtume",
+        "group": 4,
+        "label": "Juicy Fruit - Mtume (1983)",
+        "size": 22,
+        "trackTitle": "Juicy Fruit",
+        "trackArtist": "Mtume",
+        "spotifyId": "223kK8LVBwzkk3Ck7Ua0Sk"
+      },
+      {
+        "id": "rappin-duke",
+        "group": 4,
+        "label": "Rappin' Duke - Rappin' Duke (1985)",
+        "size": 22,
+        "trackTitle": "Rappin' Duke",
+        "trackArtist": "Rappin' Duke"
+      }
+    ],
+    "links": [
+      {
+        "source": "mtume",
+        "target": "current",
+        "value": 1,
+        "type": "sample",
+        "kind": "inferred",
+        "origin": "model",
+        "claimId": "<id 8>",
+        "evidenceIds": [
+          "tavily:https://www.whosampled.com/The-Notorious-B.I.G./Juicy"
+        ]
+      },
+      {
+        "source": "rappin-duke",
+        "target": "current",
+        "value": 1,
+        "type": "sample",
+        "kind": "inferred",
+        "origin": "model",
+        "claimId": "<id 9>",
+        "evidenceIds": [
+          "tavily:https://www.whosampled.com/The-Notorious-B.I.G./Juicy"
+        ]
+      }
+    ]
+  },
+  "claims": [
+    {
+      "id": "<id 2>",
+      "text": "This recording of “Juicy” by The Notorious B.I.G. first appeared on March 5, 2007, according to MusicBrainz.",
+      "about": "track",
+      "evidenceIds": [
+        "musicbrainz:track/recording/f9c4374a-042a-4eab-bb66-fd482b51ab92"
+      ],
+      "scope": "recording",
+      "kind": "sourced",
+      "origin": "model",
+      "verdict": "supported",
+      "verdictReason": "The MusicBrainz recording excerpt says it was first released on March 5, 2007.",
+      "numericCheck": "n/a",
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 3>",
+      "text": "The song “Juicy” has been covered by Scott Bradlee's Postmodern Jukebox featuring Maiya Sykes and by Vitamin Dub.",
+      "about": "cover",
+      "evidenceIds": [
+        "musicbrainz:work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/f2fa9a3c-b3ed-45f1-98db-a7ebdb740439",
+        "musicbrainz:work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/e408736a-f579-443e-8d76-2be42694a25b"
+      ],
+      "scope": "work",
+      "kind": "sourced",
+      "origin": "model",
+      "verdict": "supported",
+      "verdictReason": "The two cited MusicBrainz work excerpts list both covers.",
+      "numericCheck": "n/a",
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 4>",
+      "text": "MusicBrainz also lists a cover of the song titled “Juicy (Medieval Bardcore version)” by Beedle The Bardcore.",
+      "about": "cover",
+      "evidenceIds": [
+        "musicbrainz:work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/793df7e2-2763-41de-a4b7-86c0931f517c"
+      ],
+      "scope": "work",
+      "kind": "sourced",
+      "origin": "model",
+      "verdict": "supported",
+      "verdictReason": "The cited MusicBrainz work excerpt names Beedle The Bardcore’s “Medieval Bardcore version” cover.",
+      "numericCheck": "n/a",
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 5>",
+      "text": "Source material identifies Mtume’s “Juicy Fruit” as a sample in “Juicy.” It also specifically names the “Fruity Instrumental Mix” as sampled.",
+      "about": "sample",
+      "evidenceIds": [
+        "tavily:https://www.whosampled.com/The-Notorious-B.I.G./Juicy"
+      ],
+      "scope": "recording",
+      "kind": "sourced",
+      "origin": "model",
+      "verdict": "supported",
+      "verdictReason": "The WhoSampled excerpt lists both “Juicy Fruit” and its “Fruity Instrumental Mix” as samples.",
+      "numericCheck": "n/a",
+      "factoid": {
+        "title": "A Mtume connection",
+        "type": "sample",
+        "entities": [
+          {
+            "text": "Mtume",
+            "type": "artist"
+          },
+          {
+            "text": "Juicy Fruit",
+            "type": "album"
+          }
+        ]
+      },
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 6>",
+      "text": "“Rappin’ Duke” by Rappin’ Duke is also listed among the tracks sampled in “Juicy.”",
+      "about": "sample",
+      "evidenceIds": [
+        "tavily:https://www.whosampled.com/The-Notorious-B.I.G./Juicy"
+      ],
+      "scope": "recording",
+      "kind": "sourced",
+      "origin": "model",
+      "verdict": "supported",
+      "verdictReason": "The WhoSampled excerpt lists “Rappin’ Duke” by Rappin’ Duke as sampled.",
+      "numericCheck": "n/a",
+      "factoid": {
+        "title": "A second sampled track",
+        "type": "sample",
+        "entities": [
+          {
+            "text": "Rappin’ Duke",
+            "type": "artist"
+          }
+        ]
+      },
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 7>",
+      "text": "MusicBrainz lists covers of the song by Scott Bradlee’s Postmodern Jukebox featuring Maiya Sykes, Vitamin Dub, The Lullabeats, and Beedle The Bardcore.",
+      "about": "connection",
+      "evidenceIds": [
+        "musicbrainz:work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/f2fa9a3c-b3ed-45f1-98db-a7ebdb740439",
+        "musicbrainz:work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/e408736a-f579-443e-8d76-2be42694a25b",
+        "musicbrainz:work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/daf30d91-f1fb-4eea-aae7-54a9d655440f",
+        "musicbrainz:work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/793df7e2-2763-41de-a4b7-86c0931f517c"
+      ],
+      "scope": "work",
+      "kind": "sourced",
+      "origin": "model",
+      "verdict": "supported",
+      "verdictReason": "The four cited MusicBrainz work excerpts list covers by all four named artists.",
+      "numericCheck": "n/a",
+      "factoid": {
+        "title": "Later interpretations",
+        "type": "connection",
+        "entities": [
+          {
+            "text": "Scott Bradlee’s Postmodern Jukebox",
+            "type": "artist"
+          },
+          {
+            "text": "Maiya Sykes",
+            "type": "artist"
+          },
+          {
+            "text": "Vitamin Dub",
+            "type": "artist"
+          },
+          {
+            "text": "The Lullabeats",
+            "type": "artist"
+          },
+          {
+            "text": "Beedle The Bardcore",
+            "type": "artist"
+          }
+        ]
+      },
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 8>",
+      "text": "\"Juicy - The Notorious B.I.G.\" samples \"Juicy Fruit - Mtume (1983)\".",
+      "about": "sample",
+      "evidenceIds": [
+        "tavily:https://www.whosampled.com/The-Notorious-B.I.G./Juicy"
+      ],
+      "scope": "recording",
+      "kind": "inferred",
+      "origin": "model",
+      "verdict": "partial",
+      "verdictReason": "The WhoSampled excerpt lists Mtume’s “Juicy Fruit” as sampled but gives no year.",
+      "numericCheck": "n/a"
+    },
+    {
+      "id": "<id 9>",
+      "text": "\"Juicy - The Notorious B.I.G.\" samples \"Rappin' Duke - Rappin' Duke (1985)\".",
+      "about": "sample",
+      "evidenceIds": [
+        "tavily:https://www.whosampled.com/The-Notorious-B.I.G./Juicy"
+      ],
+      "scope": "recording",
+      "kind": "inferred",
+      "origin": "model",
+      "verdict": "partial",
+      "verdictReason": "The WhoSampled excerpt lists “Rappin’ Duke” as sampled but gives no year.",
+      "numericCheck": "n/a"
+    },
+    {
+      "id": "<id 10>",
+      "text": "The work \"Juicy\" is covered by \"Juicy\" by Scott Bradlee's Postmodern Jukebox feat. Maiya Sykes.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/f2fa9a3c-b3ed-45f1-98db-a7ebdb740439"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 11>",
+      "text": "The work \"Juicy\" is covered by \"Juicy\" by Vitamin Dub.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/e408736a-f579-443e-8d76-2be42694a25b"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 12>",
+      "text": "The work \"Juicy\" is covered by \"Juicy\" by The Lullabeats.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/daf30d91-f1fb-4eea-aae7-54a9d655440f"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 13>",
+      "text": "The work \"Juicy\" is covered by \"Juicy (Medieval Bardcore version)\" by Beedle The Bardcore.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/4f99ef5b-691a-3ef2-bbae-21645001e51a/covered-by/recording/793df7e2-2763-41de-a4b7-86c0931f517c"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    }
+  ],
+  "run": {
+    "id": "<id 1>",
+    "analyzerVersion": "2.3.6+essentia.models-5c5c0c7f",
+    "fallback": false,
+    "usage": {
+      "llmCalls": 4,
+      "inputTokens": 12174,
+      "outputTokens": 1829,
+      "reasoningTokens": 232
+    },
+    "verifier": {
+      "judged": 8,
+      "unjudged": 0,
+      "restated": 0
+    },
+    "sourceErrors": [
+      {
+        "source": "discogs",
+        "code": "not_configured",
+        "message": "DISCOGS_TOKEN is not set"
+      }
+    ]
+  },
+  "audio": {
+    "version": 2,
+    "analyzerVersion": "2.3.6+essentia.models-5c5c0c7f",
+    "window": {
+      "kind": "preview-30s",
+      "durationSeconds": 29.986
+    },
+    "gate": {
+      "passed": true,
+      "reason": null
+    },
+    "tempo": {
+      "bpm": 97.36,
+      "confidence": 0.72,
+      "rawConfidence": {
+        "value": 3.83,
+        "range": [
+          0,
+          5.32
+        ]
+      },
+      "method": "essentia.RhythmExtractor2013+beat-regression",
+      "basis": "signal"
+    },
+    "key": null,
+    "loudness": {
+      "rmsMean": 0.262219,
+      "method": "mean frame RMS, 2048-sample frames at 22050 Hz, DC removed",
+      "basis": "signal"
+    },
+    "beats": {
+      "times": [
+        0.685,
+        1.37,
+        2.067,
+        2.682,
+        3.309,
+        3.924,
+        4.54,
+        5.155,
+        5.77,
+        6.385,
+        7.001,
+        7.616,
+        8.231,
+        8.847,
+        9.462,
+        10.077,
+        10.693,
+        11.308,
+        11.923,
+        12.539,
+        13.154,
+        13.769,
+        14.396,
+        15.012,
+        15.615,
+        16.231,
+        16.858,
+        17.461,
+        18.077,
+        18.692,
+        19.319,
+        19.934,
+        20.55,
+        21.165,
+        21.792,
+        22.396,
+        23.011,
+        23.626,
+        24.242,
+        24.857,
+        25.461,
+        26.088,
+        26.715,
+        27.318,
+        27.934,
+        28.549,
+        29.176,
+        29.78
+      ],
+      "method": "essentia.RhythmExtractor2013",
+      "basis": "signal"
+    },
+    "energyContour": {
+      "hopSeconds": 0.09288,
+      "values": [
+        0.313149,
+        0.158701,
+        0.4585,
+        0.239396,
+        0.139645,
+        0.357692,
+        0.197948,
+        0.207052,
+        0.216965,
+        0.43578,
+        0.395201,
+        0.170985,
+        0.173796,
+        0.389602,
+        0.330587,
+        0.343548,
+        0.361819,
+        0.142443,
+        0.128423,
+        0.310427,
+        0.382065,
+        0.201612,
+        0.301817,
+        0.362559,
+        0.461351,
+        0.42982,
+        0.337841,
+        0.223739,
+        0.312182,
+        0.475833,
+        0.216281,
+        0.255261,
+        0.07948,
+        0.238591,
+        0.065883,
+        0.237194,
+        0.39221,
+        0.149255,
+        0.323135,
+        0.202842,
+        0.2903,
+        0.28729,
+        0.458491,
+        0.312745,
+        0.369891,
+        0.20074,
+        0.317606,
+        0.294171,
+        0.241758,
+        0.360703,
+        0.382629,
+        0.286007,
+        0.475716,
+        0.252912,
+        0.129577,
+        0.406165,
+        0.384474,
+        0.130358,
+        0.240239,
+        0.230854,
+        0.057137,
+        0.199465,
+        0.349157,
+        0.358936,
+        0.217034,
+        0.258225,
+        0.191002,
+        0.12439,
+        0.391566,
+        0.391152,
+        0.160869,
+        0.301873,
+        0.272647,
+        0.377823,
+        0.24396,
+        0.300287,
+        0.325841,
+        0.473458,
+        0.367739,
+        0.39386,
+        0.228649,
+        0.229493,
+        0.461971,
+        0.319364,
+        0.148584,
+        0.098983,
+        0.114952,
+        0.276886,
+        0.267671,
+        0.284107,
+        0.285781,
+        0.086128,
+        0.027182,
+        0.028544,
+        0.25408,
+        0.459239,
+        0.234398,
+        0.143329,
+        0.372025,
+        0.216254,
+        0.135493,
+        0.207449,
+        0.355489,
+        0.450933,
+        0.272263,
+        0.437666,
+        0.414899,
+        0.168017,
+        0.349292,
+        0.381025,
+        0.1948,
+        0.109192,
+        0.299946,
+        0.336343,
+        0.100253,
+        0.342653,
+        0.260156,
+        0.274462,
+        0.163512,
+        0.123885,
+        0.107699,
+        0.289195,
+        0.379697,
+        0.19041,
+        0.279371,
+        0.218413,
+        0.390582,
+        0.349366,
+        0.347577,
+        0.349807,
+        0.445888,
+        0.352959,
+        0.415258,
+        0.257464,
+        0.114335,
+        0.474324,
+        0.408951,
+        0.333052,
+        0.369644,
+        0.068441,
+        0.206373,
+        0.429095,
+        0.263987,
+        0.047258,
+        0.043984,
+        0.337745,
+        0.292231,
+        0.273181,
+        0.433401,
+        0.3086,
+        0.258416,
+        0.158385,
+        0.328866,
+        0.293383,
+        0.231762,
+        0.414558,
+        0.388373,
+        0.349089,
+        0.442221,
+        0.38024,
+        0.252485,
+        0.355352,
+        0.415888,
+        0.325826,
+        0.08935,
+        0.159542,
+        0.110462,
+        0.204669,
+        0.353721,
+        0.392067,
+        0.316715,
+        0.153195,
+        0.325279,
+        0.390378,
+        0.303943,
+        0.402647,
+        0.19839,
+        0.115688,
+        0.18105,
+        0.188891,
+        0.082998,
+        0.284573,
+        0.232774,
+        0.450291,
+        0.357634,
+        0.460701,
+        0.316178,
+        0.098147,
+        0.438555,
+        0.224967,
+        0.13458,
+        0.160754,
+        0.133174,
+        0.209765,
+        0.212856,
+        0.282876,
+        0.046787,
+        0.201861,
+        0.279232,
+        0.14076,
+        0.162165,
+        0.411005,
+        0.356556,
+        0.152397,
+        0.141621,
+        0.268029,
+        0.301047,
+        0.260264,
+        0.366211,
+        0.367265,
+        0.291275,
+        0.463892,
+        0.327343,
+        0.214729,
+        0.366223,
+        0.293369,
+        0.265153,
+        0.195404,
+        0.199743,
+        0.083338,
+        0.085824,
+        0.334627,
+        0.206481,
+        0.224974,
+        0.192131,
+        0.150126,
+        0.131798,
+        0.20994,
+        0.416786,
+        0.195535,
+        0.15903,
+        0.18112,
+        0.136571,
+        0.160705,
+        0.276146,
+        0.319201,
+        0.446872,
+        0.369683,
+        0.419933,
+        0.265419,
+        0.112522,
+        0.442533,
+        0.282487,
+        0.245253,
+        0.139359,
+        0.122527,
+        0.130411,
+        0.175199,
+        0.328941,
+        0.231718,
+        0.24933,
+        0.215533,
+        0.166766,
+        0.158184,
+        0.384865,
+        0.25197,
+        0.201324,
+        0.169899,
+        0.182466,
+        0.139116,
+        0.110224,
+        0.3601,
+        0.333993,
+        0.328508,
+        0.414728,
+        0.297719,
+        0.206606,
+        0.318848,
+        0.319223,
+        0.230582,
+        0.234392,
+        0.344607,
+        0.196531,
+        0.121281,
+        0.205273,
+        0.162334,
+        0.163634,
+        0.218489,
+        0.364832,
+        0.148725,
+        0.159315,
+        0.424126,
+        0.233713,
+        0.135077,
+        0.201679,
+        0.189738,
+        0.116616,
+        0.282754,
+        0.313713,
+        0.419507,
+        0.289343,
+        0.44009,
+        0.244524,
+        0.124572,
+        0.406493,
+        0.254396,
+        0.14783,
+        0.097672,
+        0.112246,
+        0.16926,
+        0.172702,
+        0.319651,
+        0.100678,
+        0.086591,
+        0.114845,
+        0.100483,
+        0.079805,
+        0.392767,
+        0.308288,
+        0.158099,
+        0.11717,
+        0.210048,
+        0.119213,
+        0.044543,
+        0.336465,
+        0.350853,
+        0.365695,
+        0.426651,
+        0.324602,
+        0.217221,
+        0.308145,
+        0.382894
+      ],
+      "method": "frame RMS, 2048-sample frames at 22050 Hz, DC removed",
+      "basis": "signal"
+    },
+    "sections": {
+      "segments": [
+        {
+          "label": "A",
+          "start": 0,
+          "end": 29.986
+        }
+      ],
+      "method": "novelty-on-beat-chroma",
+      "basis": "signal"
+    },
+    "keyMoments": [
+      {
+        "time": 0.06,
+        "type": "onset",
+        "intensity": 1,
+        "description": "Onset"
+      },
+      {
+        "time": 2.11,
+        "type": "onset",
+        "intensity": 0.634,
+        "description": "Onset"
+      },
+      {
+        "time": 3.34,
+        "type": "onset",
+        "intensity": 0.635,
+        "description": "Onset"
+      },
+      {
+        "time": 4.87,
+        "type": "energy_peak",
+        "intensity": 1,
+        "description": "Energy peak"
+      },
+      {
+        "time": 5.03,
+        "type": "onset",
+        "intensity": 0.67,
+        "description": "Onset"
+      },
+      {
+        "time": 7.03,
+        "type": "onset",
+        "intensity": 0.744,
+        "description": "Onset"
+      },
+      {
+        "time": 7.19,
+        "type": "energy_peak",
+        "intensity": 0.995,
+        "description": "Energy peak"
+      },
+      {
+        "time": 9.61,
+        "type": "energy_peak",
+        "intensity": 0.948,
+        "description": "Energy peak"
+      },
+      {
+        "time": 10.72,
+        "type": "onset",
+        "intensity": 0.725,
+        "description": "Onset"
+      },
+      {
+        "time": 12.58,
+        "type": "energy_peak",
+        "intensity": 0.997,
+        "description": "Energy peak"
+      },
+      {
+        "time": 14.72,
+        "type": "energy_peak",
+        "intensity": 0.929,
+        "description": "Energy peak"
+      },
+      {
+        "time": 19.34,
+        "type": "onset",
+        "intensity": 0.579,
+        "description": "Onset"
+      },
+      {
+        "time": 19.64,
+        "type": "energy_peak",
+        "intensity": 0.975,
+        "description": "Energy peak"
+      },
+      {
+        "time": 21.96,
+        "type": "energy_peak",
+        "intensity": 0.939,
+        "description": "Energy peak"
+      },
+      {
+        "time": 24.56,
+        "type": "energy_peak",
+        "intensity": 0.872,
+        "description": "Energy peak"
+      },
+      {
+        "time": 29.21,
+        "type": "onset",
+        "intensity": 0.619,
+        "description": "Onset"
+      }
+    ],
+    "fingerprint": {
+      "styles": {
+        "model": {
+          "id": "discogs-effnet-bs64-1",
+          "licence": "CC BY-NC-SA 4.0"
+        },
+        "top": [
+          {
+            "label": "Hip Hop---G-Funk",
+            "score": 0.1718
+          },
+          {
+            "label": "Hip Hop---Conscious",
+            "score": 0.1447
+          },
+          {
+            "label": "Hip Hop---Gangsta",
+            "score": 0.1278
+          },
+          {
+            "label": "Hip Hop---Horrorcore",
+            "score": 0.1228
+          },
+          {
+            "label": "Hip Hop---Hardcore Hip-Hop",
+            "score": 0.1191
+          },
+          {
+            "label": "Funk / Soul---Contemporary R&B",
+            "score": 0.1098
+          },
+          {
+            "label": "Hip Hop---RnB/Swing",
+            "score": 0.1052
+          },
+          {
+            "label": "Funk / Soul---Neo Soul",
+            "score": 0.0837
+          },
+          {
+            "label": "Hip Hop---Boom Bap",
+            "score": 0.059
+          },
+          {
+            "label": "Funk / Soul---Soul",
+            "score": 0.0589
+          }
+        ],
+        "basis": "model"
+      },
+      "tags": {
+        "model": {
+          "id": "msd-musicnn-1",
+          "licence": "CC BY-NC-SA 4.0"
+        },
+        "scores": [
+          {
+            "label": "Hip-Hop",
+            "score": 0.6709
+          },
+          {
+            "label": "rnb",
+            "score": 0.1193
+          },
+          {
+            "label": "pop",
+            "score": 0.0831
+          },
+          {
+            "label": "soul",
+            "score": 0.075
+          },
+          {
+            "label": "dance",
+            "score": 0.0501
+          },
+          {
+            "label": "female vocalists",
+            "score": 0.0492
+          },
+          {
+            "label": "electronic",
+            "score": 0.0479
+          },
+          {
+            "label": "00s",
+            "score": 0.0209
+          },
+          {
+            "label": "funk",
+            "score": 0.0184
+          },
+          {
+            "label": "chillout",
+            "score": 0.0171
+          },
+          {
+            "label": "chill",
+            "score": 0.0148
+          },
+          {
+            "label": "sexy",
+            "score": 0.0146
+          },
+          {
+            "label": "electro",
+            "score": 0.0121
+          },
+          {
+            "label": "electronica",
+            "score": 0.0115
+          },
+          {
+            "label": "indie",
+            "score": 0.0111
+          },
+          {
+            "label": "jazz",
+            "score": 0.0105
+          },
+          {
+            "label": "90s",
+            "score": 0.01
+          },
+          {
+            "label": "male vocalists",
+            "score": 0.01
+          },
+          {
+            "label": "rock",
+            "score": 0.0099
+          },
+          {
+            "label": "party",
+            "score": 0.0094
+          },
+          {
+            "label": "alternative",
+            "score": 0.0091
+          },
+          {
+            "label": "House",
+            "score": 0.0089
+          },
+          {
+            "label": "female vocalist",
+            "score": 0.0063
+          },
+          {
+            "label": "80s",
+            "score": 0.0055
+          },
+          {
+            "label": "experimental",
+            "score": 0.0051
+          },
+          {
+            "label": "blues",
+            "score": 0.0042
+          },
+          {
+            "label": "Mellow",
+            "score": 0.0038
+          },
+          {
+            "label": "instrumental",
+            "score": 0.0035
+          },
+          {
+            "label": "beautiful",
+            "score": 0.0032
+          },
+          {
+            "label": "catchy",
+            "score": 0.003
+          },
+          {
+            "label": "ambient",
+            "score": 0.0026
+          },
+          {
+            "label": "easy listening",
+            "score": 0.0021
+          },
+          {
+            "label": "indie rock",
+            "score": 0.0021
+          },
+          {
+            "label": "indie pop",
+            "score": 0.0016
+          },
+          {
+            "label": "70s",
+            "score": 0.0015
+          },
+          {
+            "label": "punk",
+            "score": 0.0014
+          },
+          {
+            "label": "alternative rock",
+            "score": 0.0013
+          },
+          {
+            "label": "happy",
+            "score": 0.0012
+          },
+          {
+            "label": "oldies",
+            "score": 0.0012
+          },
+          {
+            "label": "acoustic",
+            "score": 0.001
+          },
+          {
+            "label": "folk",
+            "score": 0.001
+          },
+          {
+            "label": "sad",
+            "score": 0.001
+          },
+          {
+            "label": "classic rock",
+            "score": 0.0009
+          },
+          {
+            "label": "guitar",
+            "score": 0.0008
+          },
+          {
+            "label": "60s",
+            "score": 0.0007
+          },
+          {
+            "label": "country",
+            "score": 0.0005
+          },
+          {
+            "label": "metal",
+            "score": 0.0004
+          },
+          {
+            "label": "Progressive rock",
+            "score": 0.0004
+          },
+          {
+            "label": "hard rock",
+            "score": 0.0003
+          },
+          {
+            "label": "heavy metal",
+            "score": 0.0002
+          }
+        ],
+        "basis": "model"
+      },
+      "moods": {
+        "danceability": {
+          "value": 1,
+          "range": [
+            0,
+            1
+          ],
+          "model": {
+            "id": "danceability-msd-musicnn-1",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "acoustic": {
+          "value": 0.0142,
+          "range": [
+            0,
+            1
+          ],
+          "model": {
+            "id": "mood_acoustic-discogs-effnet-1",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "instrumental": {
+          "value": 0.0012,
+          "range": [
+            0,
+            1
+          ],
+          "model": {
+            "id": "voice_instrumental-msd-musicnn-1",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "valence": {
+          "value": 5.1994,
+          "range": [
+            1,
+            9
+          ],
+          "model": {
+            "id": "deam-msd-musicnn-2",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "arousal": {
+          "value": 5.5868,
+          "range": [
+            1,
+            9
+          ],
+          "model": {
+            "id": "deam-msd-musicnn-2",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        }
+      }
+    },
+    "withheld": {
+      "key": {
+        "code": "no_sustained_pitch",
+        "reason": "no sustained pitch"
+      }
+    }
+  },
+  "bpm": 97,
+  "key": null,
+  "energy": 0.969,
+  "valence": 0.525,
+  "danceability": 1,
+  "acousticness": 0.014,
+  "keyMoments": [
+    {
+      "time": 0.06,
+      "type": "onset",
+      "intensity": 1,
+      "description": "Onset"
+    },
+    {
+      "time": 2.11,
+      "type": "onset",
+      "intensity": 0.634,
+      "description": "Onset"
+    },
+    {
+      "time": 3.34,
+      "type": "onset",
+      "intensity": 0.635,
+      "description": "Onset"
+    },
+    {
+      "time": 4.87,
+      "type": "energy_peak",
+      "intensity": 1,
+      "description": "Energy peak"
+    },
+    {
+      "time": 5.03,
+      "type": "onset",
+      "intensity": 0.67,
+      "description": "Onset"
+    },
+    {
+      "time": 7.03,
+      "type": "onset",
+      "intensity": 0.744,
+      "description": "Onset"
+    },
+    {
+      "time": 7.19,
+      "type": "energy_peak",
+      "intensity": 0.995,
+      "description": "Energy peak"
+    },
+    {
+      "time": 9.61,
+      "type": "energy_peak",
+      "intensity": 0.948,
+      "description": "Energy peak"
+    },
+    {
+      "time": 10.72,
+      "type": "onset",
+      "intensity": 0.725,
+      "description": "Onset"
+    },
+    {
+      "time": 12.58,
+      "type": "energy_peak",
+      "intensity": 0.997,
+      "description": "Energy peak"
+    },
+    {
+      "time": 14.72,
+      "type": "energy_peak",
+      "intensity": 0.929,
+      "description": "Energy peak"
+    },
+    {
+      "time": 19.34,
+      "type": "onset",
+      "intensity": 0.579,
+      "description": "Onset"
+    },
+    {
+      "time": 19.64,
+      "type": "energy_peak",
+      "intensity": 0.975,
+      "description": "Energy peak"
+    },
+    {
+      "time": 21.96,
+      "type": "energy_peak",
+      "intensity": 0.939,
+      "description": "Energy peak"
+    },
+    {
+      "time": 24.56,
+      "type": "energy_peak",
+      "intensity": 0.872,
+      "description": "Energy peak"
+    },
+    {
+      "time": 29.21,
+      "type": "onset",
+      "intensity": 0.619,
+      "description": "Onset"
+    }
+  ],
+  "audioSource": "unavailable",
+  "audioConfidence": "low",
+  "audioUnavailableReason": "not_detected"
+}

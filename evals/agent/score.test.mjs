@@ -510,8 +510,8 @@ test("run records in an unknown shape are refused, naming the field", () => {
   }
 });
 
-test("the CI subset is six live rows; runs for rows outside the live subset are refused", () => {
-  assert.equal(subsetRows(golden, "ci").length, 6);
+test("the CI subset is seven live rows; runs for rows outside the live subset are refused", () => {
+  assert.equal(subsetRows(golden, "ci").length, 7);
   const notLive = golden.rows.find((r) => !r.liveSubset);
   assert.throws(() => scoreAll(golden, [run(notLive)]), /not live golden rows/);
 });

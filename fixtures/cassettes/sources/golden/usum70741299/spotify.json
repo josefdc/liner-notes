@@ -1,0 +1,336 @@
+{
+  "version": 1,
+  "entries": {
+    "GET https://api.spotify.com/v1/search?limit=1&q=Harder%2C+Better%2C+Faster%2C+Stronger+-+Daft+Punk&type=track": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "tracks": {
+          "items": [
+            {
+              "id": "5W3cjX2J3tjhG8zb6u0qHn",
+              "name": "Harder, Better, Faster, Stronger",
+              "artists": [
+                {
+                  "id": "4tZwfgrHOc3mvqYlEYSvVi",
+                  "name": "Daft Punk"
+                }
+              ],
+              "album": {
+                "name": "Discovery",
+                "release_date": "2001-03-12"
+              },
+              "duration_ms": 226413,
+              "explicit": false,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/5W3cjX2J3tjhG8zb6u0qHn"
+              },
+              "external_ids": {
+                "isrc": "GBDUW0000059"
+              }
+            }
+          ],
+          "total": 590
+        }
+      }
+    },
+    "GET https://api.spotify.com/v1/search?limit=10&q=Stronger+Kanye+West&type=track": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "tracks": {
+          "items": [
+            {
+              "id": "0j2T0R9dR9qdJYsB7ciXhf",
+              "name": "Stronger",
+              "artists": [
+                {
+                  "id": "5K4W6rqBFWDnAN6FQUkS6x",
+                  "name": "Kanye West"
+                }
+              ],
+              "album": {
+                "name": "Graduation",
+                "release_date": "2007-09-11"
+              },
+              "duration_ms": 311866,
+              "explicit": true,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/0j2T0R9dR9qdJYsB7ciXhf"
+              },
+              "external_ids": {
+                "isrc": "USUM70741299"
+              }
+            },
+            {
+              "id": "1gudTcOiMosmCC6EKEzomI",
+              "name": "Stronger",
+              "artists": [
+                {
+                  "id": "5K4W6rqBFWDnAN6FQUkS6x",
+                  "name": "Kanye West"
+                }
+              ],
+              "album": {
+                "name": "Graduation",
+                "release_date": "2007-09-11"
+              },
+              "duration_ms": 312026,
+              "explicit": false,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/1gudTcOiMosmCC6EKEzomI"
+              },
+              "external_ids": {
+                "isrc": "USUM70741329"
+              }
+            },
+            {
+              "id": "0Nlb2F9h5XS7Vn4oejbpEu",
+              "name": "Stronger - A-Trak Remix (Explicit)",
+              "artists": [
+                {
+                  "id": "5K4W6rqBFWDnAN6FQUkS6x",
+                  "name": "Kanye West"
+                },
+                {
+                  "id": "12nn1Canph6aHBF9cwra7N",
+                  "name": "DJ A-Trak"
+                }
+              ],
+              "album": {
+                "name": "Stronger (Remixes)",
+                "release_date": "2007"
+              },
+              "duration_ms": 276440,
+              "explicit": true,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/0Nlb2F9h5XS7Vn4oejbpEu"
+              },
+              "external_ids": {
+                "isrc": "USUM70802975"
+              }
+            },
+            {
+              "id": "1ZHYJ2Wwgxes4m8Ba88PeK",
+              "name": "Monster",
+              "artists": [
+                {
+                  "id": "5K4W6rqBFWDnAN6FQUkS6x",
+                  "name": "Kanye West"
+                },
+                {
+                  "id": "3nFkdlSjzX9mRTtwJOzDYB",
+                  "name": "JAŸ-Z"
+                },
+                {
+                  "id": "1sBkRIssrMs1AbVkOJbc7a",
+                  "name": "Rick Ross"
+                },
+                {
+                  "id": "0hCNtLu0JehylgoiP8L4Gh",
+                  "name": "Nicki Minaj"
+                },
+                {
+                  "id": "4LEiUm1SRbFMgfqnQTwUbQ",
+                  "name": "Bon Iver"
+                }
+              ],
+              "album": {
+                "name": "My Beautiful Dark Twisted Fantasy",
+                "release_date": "2010-11-22"
+              },
+              "duration_ms": 378893,
+              "explicit": true,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/1ZHYJ2Wwgxes4m8Ba88PeK"
+              },
+              "external_ids": {
+                "isrc": "USUM71026158"
+              }
+            },
+            {
+              "id": "7gJUHdcoPzzivvEKBEJiPO",
+              "name": "WENT WEST",
+              "artists": [
+                {
+                  "id": "1J1pGfTqp5ReVIX8Z1Wzsg",
+                  "name": "BabyChiefDoit"
+                }
+              ],
+              "album": {
+                "name": "Rise Against My Broken Odds",
+                "release_date": "2026-06-12"
+              },
+              "duration_ms": 156083,
+              "explicit": true,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/7gJUHdcoPzzivvEKBEJiPO"
+              },
+              "external_ids": {
+                "isrc": "QZZ4J2500452"
+              }
+            },
+            {
+              "id": "19a3JfW8BQwqHWUMbcqSx8",
+              "name": "Famous",
+              "artists": [
+                {
+                  "id": "5K4W6rqBFWDnAN6FQUkS6x",
+                  "name": "Kanye West"
+                }
+              ],
+              "album": {
+                "name": "The Life Of Pablo",
+                "release_date": "2016-06-10"
+              },
+              "duration_ms": 196040,
+              "explicit": true,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/19a3JfW8BQwqHWUMbcqSx8"
+              },
+              "external_ids": {
+                "isrc": "USUM71603020"
+              }
+            },
+            {
+              "id": "0fea68AdmYNygeTGI4RC18",
+              "name": "LA CANCIÓN",
+              "artists": [
+                {
+                  "id": "1vyhD5VmyZ7KMfW5gqLgo5",
+                  "name": "J Balvin"
+                },
+                {
+                  "id": "4q3ewBCX7sLwd24euuV69X",
+                  "name": "Bad Bunny"
+                }
+              ],
+              "album": {
+                "name": "OASIS",
+                "release_date": "2019-06-28"
+              },
+              "duration_ms": 242573,
+              "explicit": false,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/0fea68AdmYNygeTGI4RC18"
+              },
+              "external_ids": {
+                "isrc": "USUM71911618"
+              }
+            },
+            {
+              "id": "4G2Vf3Snr4oTOA2M1QGmAv",
+              "name": "Stronger",
+              "artists": [
+                {
+                  "id": "4rUPoWBdvcIMZa0q1gw62J",
+                  "name": "Pain"
+                }
+              ],
+              "album": {
+                "name": "Stronger",
+                "release_date": "2025-10-31"
+              },
+              "duration_ms": 179498,
+              "explicit": true,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/4G2Vf3Snr4oTOA2M1QGmAv"
+              },
+              "external_ids": {
+                "isrc": "QT6632500311"
+              }
+            },
+            {
+              "id": "25ZESWnQywbFG8dy1yeeue",
+              "name": "LA CANCIÓN",
+              "artists": [
+                {
+                  "id": "1vyhD5VmyZ7KMfW5gqLgo5",
+                  "name": "J Balvin"
+                },
+                {
+                  "id": "4q3ewBCX7sLwd24euuV69X",
+                  "name": "Bad Bunny"
+                }
+              ],
+              "album": {
+                "name": "Despecho en Español",
+                "release_date": "2026-10-24"
+              },
+              "duration_ms": 242573,
+              "explicit": false,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/25ZESWnQywbFG8dy1yeeue"
+              },
+              "external_ids": {
+                "isrc": "USUM71911618"
+              }
+            },
+            {
+              "id": "2XBItRtOOaNU3sHIXFadIb",
+              "name": "Losing My Mind",
+              "artists": [
+                {
+                  "id": "3hS8DsRuuTwjDM5gUnAVjY",
+                  "name": "Bluryy"
+                },
+                {
+                  "id": "1yxaBKkJ5DzQRzye7hFLzC",
+                  "name": "Yøung Chris"
+                }
+              ],
+              "album": {
+                "name": "Losing My Mind",
+                "release_date": "2021-07-25"
+              },
+              "duration_ms": 188624,
+              "explicit": true,
+              "external_urls": {
+                "spotify": "https://open.spotify.com/track/2XBItRtOOaNU3sHIXFadIb"
+              },
+              "external_ids": {
+                "isrc": "SE6SA2196404"
+              }
+            }
+          ],
+          "total": 24
+        }
+      }
+    },
+    "GET https://api.spotify.com/v1/tracks/0j2T0R9dR9qdJYsB7ciXhf": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "id": "0j2T0R9dR9qdJYsB7ciXhf",
+        "name": "Stronger",
+        "artists": [
+          {
+            "id": "5K4W6rqBFWDnAN6FQUkS6x",
+            "name": "Kanye West"
+          }
+        ],
+        "album": {
+          "name": "Graduation",
+          "release_date": "2007-09-11"
+        },
+        "duration_ms": 311866,
+        "explicit": true,
+        "external_urls": {
+          "spotify": "https://open.spotify.com/track/0j2T0R9dR9qdJYsB7ciXhf"
+        },
+        "external_ids": {
+          "isrc": "USUM70741299"
+        }
+      }
+    },
+    "POST https://accounts.spotify.com/api/token #c349b29ae2fc682a": {
+      "status": 200,
+      "contentType": "application/json",
+      "json": {
+        "access_token": "[redacted]",
+        "token_type": "Bearer",
+        "expires_in": 3600
+      }
+    }
+  }
+}

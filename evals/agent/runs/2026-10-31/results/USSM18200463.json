@@ -1,0 +1,2070 @@
+{
+  "id": "2374M0fQpWi3dLnB54qaLX",
+  "title": "Africa",
+  "artist": "TOTO",
+  "album": "Toto IV",
+  "coverUrl": "[link]",
+  "spotifyUrl": "https://open.spotify.com/track/2374M0fQpWi3dLnB54qaLX",
+  "releaseYear": "1982",
+  "explicit": false,
+  "durationSeconds": 295,
+  "isrc": "USSM19801941",
+  "preview": {
+    "provider": "deezer",
+    "method": "isrc",
+    "score": null
+  },
+  "queryMatch": "exact",
+  "evidence": [
+    {
+      "id": "musicbrainz:track/recording/55dc4892-b5ae-4bd7-9e98-2a0d4dd53cbc",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/55dc4892-b5ae-4bd7-9e98-2a0d4dd53cbc",
+      "title": "Africa — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Africa\" by Toto (4:57), ISRC USSM19801941, first released 1982-04-08.",
+      "recordRef": "track/recording/55dc4892-b5ae-4bd7-9e98-2a0d4dd53cbc"
+    },
+    {
+      "id": "musicbrainz:track/recording/55dc4892-b5ae-4bd7-9e98-2a0d4dd53cbc/sampled-by/recording/99a4681a-9503-4d19-9980-b16249e84762",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/55dc4892-b5ae-4bd7-9e98-2a0d4dd53cbc",
+      "title": "Africa — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Africa\" by Toto is sampled in \"[untitled]\" by Chuck Person.",
+      "recordRef": "track/recording/55dc4892-b5ae-4bd7-9e98-2a0d4dd53cbc/sampled-by/recording/99a4681a-9503-4d19-9980-b16249e84762"
+    },
+    {
+      "id": "musicbrainz:track/recording/55dc4892-b5ae-4bd7-9e98-2a0d4dd53cbc/sampled-by/recording/44e2147f-f9dd-4347-8da3-85f2fef40847",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/55dc4892-b5ae-4bd7-9e98-2a0d4dd53cbc",
+      "title": "Africa — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Africa\" by Toto is sampled in \"Anything\" by JoJo.",
+      "recordRef": "track/recording/55dc4892-b5ae-4bd7-9e98-2a0d4dd53cbc/sampled-by/recording/44e2147f-f9dd-4347-8da3-85f2fef40847"
+    },
+    {
+      "id": "musicbrainz:track/recording/55dc4892-b5ae-4bd7-9e98-2a0d4dd53cbc/sampled-by/recording/4001a083-5e7d-4796-9ae7-0765a56382c5",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/55dc4892-b5ae-4bd7-9e98-2a0d4dd53cbc",
+      "title": "Africa — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Africa\" by Toto is sampled in \"Murder Reigns\" by Ja Rule.",
+      "recordRef": "track/recording/55dc4892-b5ae-4bd7-9e98-2a0d4dd53cbc/sampled-by/recording/4001a083-5e7d-4796-9ae7-0765a56382c5"
+    },
+    {
+      "id": "musicbrainz:track/recording/55dc4892-b5ae-4bd7-9e98-2a0d4dd53cbc/sampled-by/recording/f3f89500-658d-423d-a56b-8ae7cde3c8e9",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/55dc4892-b5ae-4bd7-9e98-2a0d4dd53cbc",
+      "title": "Africa — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Africa\" by Toto is sampled in \"New World\" by Nas.",
+      "recordRef": "track/recording/55dc4892-b5ae-4bd7-9e98-2a0d4dd53cbc/sampled-by/recording/f3f89500-658d-423d-a56b-8ae7cde3c8e9"
+    },
+    {
+      "id": "musicbrainz:track/recording/55dc4892-b5ae-4bd7-9e98-2a0d4dd53cbc/sampled-by/recording/70311386-802a-43e5-b3f9-ce44c7146fc7",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/55dc4892-b5ae-4bd7-9e98-2a0d4dd53cbc",
+      "title": "Africa — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Africa\" by Toto is sampled in \"PSR41\" by New Dreams Ltd..",
+      "recordRef": "track/recording/55dc4892-b5ae-4bd7-9e98-2a0d4dd53cbc/sampled-by/recording/70311386-802a-43e5-b3f9-ce44c7146fc7"
+    },
+    {
+      "id": "musicbrainz:release/26ba5ca9-3dea-452a-bdbf-7f14ab54a279",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/release/26ba5ca9-3dea-452a-bdbf-7f14ab54a279",
+      "title": "Toto IV — MusicBrainz release",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Africa\" by Toto appears on the official album \"Toto IV\" (1982-04-08).",
+      "recordRef": "release/26ba5ca9-3dea-452a-bdbf-7f14ab54a279"
+    },
+    {
+      "id": "musicbrainz:work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4/covered-by/recording/4167c635-4022-455f-b69a-756f86aff61a",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4",
+      "title": "Africa — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Africa\" is covered by \"Africa\" by Straight No Chaser.",
+      "recordRef": "work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4/covered-by/recording/4167c635-4022-455f-b69a-756f86aff61a"
+    },
+    {
+      "id": "musicbrainz:work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4/covered-by/recording/9a7bfee6-6532-4eaf-add4-b2f3ba40bdf9",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4",
+      "title": "Africa — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Africa\" is covered by \"Africa\" by Karumanta.",
+      "recordRef": "work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4/covered-by/recording/9a7bfee6-6532-4eaf-add4-b2f3ba40bdf9"
+    },
+    {
+      "id": "musicbrainz:work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4/covered-by/recording/04e72afc-c9fb-4eb5-ba24-090be8321d8d",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4",
+      "title": "Africa — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Africa\" is covered by \"Africa\" by The Countdown Singers.",
+      "recordRef": "work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4/covered-by/recording/04e72afc-c9fb-4eb5-ba24-090be8321d8d"
+    },
+    {
+      "id": "musicbrainz:work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4/covered-by/recording/a01ba016-9c25-4261-98fa-5aa5d99af4f8",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4",
+      "title": "Africa — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Africa\" is covered by \"Buzzing > Africa\" by Howie Day.",
+      "recordRef": "work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4/covered-by/recording/a01ba016-9c25-4261-98fa-5aa5d99af4f8"
+    },
+    {
+      "id": "musicbrainz:work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4/covered-by/recording/9f0be6f6-bc8e-47cc-bad9-3f3d78129616",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4",
+      "title": "Africa — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Africa\" is covered by \"Africa\" by SubAudible Hum.",
+      "recordRef": "work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4/covered-by/recording/9f0be6f6-bc8e-47cc-bad9-3f3d78129616"
+    },
+    {
+      "id": "musicbrainz:work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4/covered-by/recording/0689b991-f6e8-4d44-a2b1-232dc4289564",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4",
+      "title": "Africa — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Africa\" is covered by \"Africa\" by Joo Kraus & Tales in Tones Trio.",
+      "recordRef": "work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4/covered-by/recording/0689b991-f6e8-4d44-a2b1-232dc4289564"
+    },
+    {
+      "id": "musicbrainz:work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4/covered-by/recording/5312943f-f67c-449e-95eb-58242b3fb4dc",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4",
+      "title": "Africa — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Africa\" is covered by \"Africa\" by Kenny Mehler.",
+      "recordRef": "work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4/covered-by/recording/5312943f-f67c-449e-95eb-58242b3fb4dc"
+    },
+    {
+      "id": "musicbrainz:work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4/covered-by/recording/49b9c5d5-0fac-4876-a991-d445325ffacd",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4",
+      "title": "Africa — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Africa\" is covered by \"Africa\" by Weezer.",
+      "recordRef": "work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4/covered-by/recording/49b9c5d5-0fac-4876-a991-d445325ffacd"
+    },
+    {
+      "id": "musicbrainz:work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4/covered-by/recording/94cce8da-2733-42c4-b893-5f39abf4b9b6",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4",
+      "title": "Africa — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Africa\" is covered by \"Africa & Outro\" by Frog Leap.",
+      "recordRef": "work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4/covered-by/recording/94cce8da-2733-42c4-b893-5f39abf4b9b6"
+    },
+    {
+      "id": "musicbrainz:work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4/covered-by/recording/4c85e54b-675b-445f-8db7-c1d4dcdceb48",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4",
+      "title": "Africa — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Africa\" is covered by \"Gawr Gura sings \"Africa\" by Toto\" by Gawr Gura.",
+      "recordRef": "work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4/covered-by/recording/4c85e54b-675b-445f-8db7-c1d4dcdceb48"
+    },
+    {
+      "id": "musicbrainz:work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4/covered-by/recording/e97f0f01-4118-49e4-a885-725f88f0a1aa",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4",
+      "title": "Africa — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Africa\" is covered by \"Africa\" by Weezer.",
+      "recordRef": "work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4/covered-by/recording/e97f0f01-4118-49e4-a885-725f88f0a1aa"
+    },
+    {
+      "id": "musicbrainz:work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4/covered-by/recording/d1a7814a-a1b4-4777-831d-34f1994f96f9",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4",
+      "title": "Africa — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Africa\" is covered by \"Africa\" by Dave Winnel.",
+      "recordRef": "work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4/covered-by/recording/d1a7814a-a1b4-4777-831d-34f1994f96f9"
+    },
+    {
+      "id": "musicbrainz:work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4/covered-by/recording/f95e88f9-93b4-4a8e-a668-97b50bab0999",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4",
+      "title": "Africa — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Africa\" is covered by \"Africa\" by The Shadows.",
+      "recordRef": "work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4/covered-by/recording/f95e88f9-93b4-4a8e-a668-97b50bab0999"
+    },
+    {
+      "id": "musicbrainz:work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4/covered-by/recording/06a1f252-4189-4807-ad0a-d3407283b548",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4",
+      "title": "Africa — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Africa\" is covered by \"Africa\" by Colgate University Thirteen.",
+      "recordRef": "work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4/covered-by/recording/06a1f252-4189-4807-ad0a-d3407283b548"
+    },
+    {
+      "id": "musicbrainz:work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4/covered-by/recording/fe122110-230b-45ac-81fd-99b94cf41e45",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4",
+      "title": "Africa — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Africa\" is covered by \"Africa\" by The Shadows.",
+      "recordRef": "work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4/covered-by/recording/fe122110-230b-45ac-81fd-99b94cf41e45"
+    },
+    {
+      "id": "musicbrainz:work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4/covered-by/recording/efee37aa-403b-43ab-bf6e-c7695729c2e1",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4",
+      "title": "Africa — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Africa\" is covered by \"Africa\" by James Last.",
+      "recordRef": "work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4/covered-by/recording/efee37aa-403b-43ab-bf6e-c7695729c2e1"
+    },
+    {
+      "id": "musicbrainz:work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4/covered-by/recording/c11a3b9c-def8-4ce5-b278-ae50a5c5aea1",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4",
+      "title": "Africa — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Africa\" is covered by \"Africa\" by Emmerson Nogueira.",
+      "recordRef": "work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4/covered-by/recording/c11a3b9c-def8-4ce5-b278-ae50a5c5aea1"
+    },
+    {
+      "id": "musicbrainz:work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4/covered-by/recording/7488e63b-9f84-4ba3-9e86-fcb67d760362",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4",
+      "title": "Africa — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Africa\" is covered by \"Africa\" by The Shadows.",
+      "recordRef": "work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4/covered-by/recording/7488e63b-9f84-4ba3-9e86-fcb67d760362"
+    },
+    {
+      "id": "musicbrainz:work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4/covered-by/recording/b7d47072-51fc-48bf-8b1b-cd18a3de8d71",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4",
+      "title": "Africa — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Africa\" is covered by \"Africa\" by Emmerson Nogueira.",
+      "recordRef": "work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4/covered-by/recording/b7d47072-51fc-48bf-8b1b-cd18a3de8d71"
+    },
+    {
+      "id": "musicbrainz:work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4/covered-by/recording/5fcb9305-4495-434c-8673-c642da8af578",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4",
+      "title": "Africa — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Africa\" is covered by \"Africa\" by Pyogenesis.",
+      "recordRef": "work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4/covered-by/recording/5fcb9305-4495-434c-8673-c642da8af578"
+    },
+    {
+      "id": "genius:work/song/105876/sampled-by/4827148",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Toto-africa-lyrics",
+      "title": "Africa — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"Africa\" by Toto is sampled in \"Selfish (Tomorrowland 2013 Aftermovie Remix)\" by Dimitri Vegas & Like Mike & Era Istrefi.",
+      "recordRef": "work/song/105876/sampled-by/4827148"
+    },
+    {
+      "id": "genius:work/song/105876/sampled-by/7720234",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Toto-africa-lyrics",
+      "title": "Africa — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"Africa\" by Toto is sampled in \"1982\" by The Hood Internet.",
+      "recordRef": "work/song/105876/sampled-by/7720234"
+    },
+    {
+      "id": "genius:work/song/105876/sampled-by/7105841",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Toto-africa-lyrics",
+      "title": "Africa — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"Africa\" by Toto is sampled in \"What’s Good\" by AZ (Ft. T-Pain).",
+      "recordRef": "work/song/105876/sampled-by/7105841"
+    },
+    {
+      "id": "genius:work/song/105876/sampled-by/7101512",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Toto-africa-lyrics",
+      "title": "Africa — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"Africa\" by Toto is sampled in \"Africa\" by Fat Joe, DJ Drama & Cool & Dre (Ft. Lil Yachty).",
+      "recordRef": "work/song/105876/sampled-by/7101512"
+    },
+    {
+      "id": "genius:work/song/105876/sampled-by/763278",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Toto-africa-lyrics",
+      "title": "Africa — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"Africa\" by Toto is sampled in \"Africa\" by Chris De Burgh.",
+      "recordRef": "work/song/105876/sampled-by/763278"
+    },
+    {
+      "id": "genius:work/song/105876/sampled-by/6631732",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Toto-africa-lyrics",
+      "title": "Africa — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"Africa\" by Toto is sampled in \"Anything\" by Tynisha Keli.",
+      "recordRef": "work/song/105876/sampled-by/6631732"
+    },
+    {
+      "id": "genius:work/song/105876/sampled-by/6369418",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Toto-africa-lyrics",
+      "title": "Africa — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"Africa\" by Toto is sampled in \"ryuuseigun mashup\" by jan Misali.",
+      "recordRef": "work/song/105876/sampled-by/6369418"
+    },
+    {
+      "id": "genius:work/song/105876/sampled-by/6221272",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Toto-africa-lyrics",
+      "title": "Africa — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"Africa\" by Toto is sampled in \"4 Chords Live At 2009 Melbourne International Comedy Festival\" by The Axis of Awesome.",
+      "recordRef": "work/song/105876/sampled-by/6221272"
+    },
+    {
+      "id": "genius:work/song/105876/sampled-by/6189879",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Toto-africa-lyrics",
+      "title": "Africa — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"Africa\" by Toto is sampled in \"Dedication\" by New Dreams Ltd..",
+      "recordRef": "work/song/105876/sampled-by/6189879"
+    },
+    {
+      "id": "genius:work/song/105876/sampled-by/4610966",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Toto-africa-lyrics",
+      "title": "Africa — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"Africa\" by Toto is sampled in \"File Select Fusion 3½\" by TheGuy.",
+      "recordRef": "work/song/105876/sampled-by/4610966"
+    },
+    {
+      "id": "genius:work/song/105876/sampled-by/1229599",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Toto-africa-lyrics",
+      "title": "Africa — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"Africa\" by Toto is sampled in \"Know Your Name\" by Dwele.",
+      "recordRef": "work/song/105876/sampled-by/1229599"
+    },
+    {
+      "id": "genius:work/song/105876/sampled-by/4174299",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Toto-africa-lyrics",
+      "title": "Africa — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"Africa\" by Toto is sampled in \"Anything (2018)\" by JoJo.",
+      "recordRef": "work/song/105876/sampled-by/4174299"
+    },
+    {
+      "id": "genius:work/song/105876/sampled-by/2419339",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Toto-africa-lyrics",
+      "title": "Africa — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"Africa\" by Toto is sampled in \"Combinaison gagnante\" by Freeze Corleone.",
+      "recordRef": "work/song/105876/sampled-by/2419339"
+    },
+    {
+      "id": "genius:work/song/105876/sampled-by/4800677",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Toto-africa-lyrics",
+      "title": "Africa — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"Africa\" by Toto is sampled in \"Extreme Meme Music Megamashup 3\" by DaymanOurSavior.",
+      "recordRef": "work/song/105876/sampled-by/4800677"
+    },
+    {
+      "id": "genius:work/song/105876/sampled-by/4437852",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Toto-africa-lyrics",
+      "title": "Africa — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"Africa\" by Toto is sampled in \"Połówka na rozgrzewkę\" by Eripe & Mario Kontrargument.",
+      "recordRef": "work/song/105876/sampled-by/4437852"
+    },
+    {
+      "id": "genius:work/song/105876/sampled-by/4260352",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Toto-africa-lyrics",
+      "title": "Africa — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"Africa\" by Toto is sampled in \"Selfish\" by Dimitri Vegas & Like Mike & Era Istrefi.",
+      "recordRef": "work/song/105876/sampled-by/4260352"
+    },
+    {
+      "id": "genius:work/song/105876/sampled-by/4269813",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Toto-africa-lyrics",
+      "title": "Africa — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"Africa\" by Toto is sampled in \"SpongeBob\" by JoeyVFX.",
+      "recordRef": "work/song/105876/sampled-by/4269813"
+    },
+    {
+      "id": "genius:work/song/105876/sampled-by/4153380",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Toto-africa-lyrics",
+      "title": "Africa — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"Africa\" by Toto is sampled in \"Ocean To Ocean\" by Pitbull (Ft. Rhea).",
+      "recordRef": "work/song/105876/sampled-by/4153380"
+    },
+    {
+      "id": "genius:work/song/105876/sampled-by/4002834",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Toto-africa-lyrics",
+      "title": "Africa — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"Africa\" by Toto is sampled in \"Mr. KayeKs Rain Down in Africa\" by MediExcalibur2012.",
+      "recordRef": "work/song/105876/sampled-by/4002834"
+    },
+    {
+      "id": "genius:work/song/105876/sampled-by/51512",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Toto-africa-lyrics",
+      "title": "Africa — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"Africa\" by Toto is sampled in \"How I Feel [2011]\" by Lil B.",
+      "recordRef": "work/song/105876/sampled-by/51512"
+    },
+    {
+      "id": "genius:work/song/105876/sampled-by/3566056",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Toto-africa-lyrics",
+      "title": "Africa — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"Africa\" by Toto is sampled in \"♫ Number 15 Burger King Foot Lettuce ♫\" by grandayy.",
+      "recordRef": "work/song/105876/sampled-by/3566056"
+    },
+    {
+      "id": "genius:work/song/105876/sampled-by/1003083",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Toto-africa-lyrics",
+      "title": "Africa — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"Africa\" by Toto is sampled in \"Tempo Critico\" by Sacre Scuole.",
+      "recordRef": "work/song/105876/sampled-by/1003083"
+    },
+    {
+      "id": "genius:work/song/105876/sampled-by/3286602",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Toto-africa-lyrics",
+      "title": "Africa — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"Africa\" by Toto is sampled in \"Keep Ballin\" by Red Cafe.",
+      "recordRef": "work/song/105876/sampled-by/3286602"
+    },
+    {
+      "id": "genius:work/song/105876/sampled-by/3481923",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Toto-africa-lyrics",
+      "title": "Africa — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"Africa\" by Toto is sampled in \"A1 (Africa)\" by Oneohtrix Point Never.",
+      "recordRef": "work/song/105876/sampled-by/3481923"
+    },
+    {
+      "id": "genius:work/song/105876/sampled-by/1216782",
+      "source": "genius",
+      "sourceTier": "primary-record",
+      "url": "https://genius.com/Toto-africa-lyrics",
+      "title": "Africa — Genius song relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "Genius: the song \"Africa\" by Toto is sampled in \"Africa (Top 40 No Rap Radio Edit)\" by Karl Wolf.",
+      "recordRef": "work/song/105876/sampled-by/1216782"
+    },
+    {
+      "id": "tavily:https://www.whosampled.com/Toto",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.whosampled.com/Toto",
+      "title": "Toto - Samples, Covers and Remixes",
+      "retrievedAt": "[time]",
+      "excerpt": "Toto's Africa Africa (1982) was sampled in Huey Newton by Wiz Khalifa feat. Curren$y (2010) New World by Nas (1999) Murder Reigns by Ja Rule (2002)",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.whosampled.com/Toto/sampled",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.whosampled.com/Toto/sampled",
+      "title": "Songs that Sampled Toto",
+      "retrievedAt": "[time]",
+      "excerpt": "Toto's Africa Africa (1982) was sampled in Huey Newton by Wiz Khalifa feat. Curren$y (2010) New World by Nas (1999) Murder Reigns by Ja Rule (2002) see 112 more",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.whosampled.com/album/Toto/Toto-Iv",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.whosampled.com/album/Toto/Toto-Iv",
+      "title": "Toto IV (1982) - Album Samples, Covers and Remixes",
+      "retrievedAt": "[time]",
+      "excerpt": "Africa was sampled in Huey Newton by Wiz Khalifa feat. Curren$y (2010) New World by Nas (1999) Murder Reigns by Ja Rule (2002) see 224",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.whosampled.com/Toto/Africa",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.whosampled.com/Toto/Africa",
+      "title": "Africa by Toto - Samples, Covers and Remixes",
+      "retrievedAt": "[time]",
+      "excerpt": "Sampled in 115 songs Wiz Khalifa feat. Curren$y's Huey Newton. Covered in 115 songs Ninja Sex Party's Africa. Pop Avant's Africa. Vocals: Bobby Kimball",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.whosampled.com/Fat-Joe/Africa",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.whosampled.com/Fat-Joe/Africa",
+      "title": "Africa by Fat Joe and DJ Drama feat. Lil Yachty and French ...",
+      "retrievedAt": "[time]",
+      "excerpt": "Which songs were sampled in \"Africa\" by Fat Joe and DJ Drama feat. Lil Yachty and French Montana? \"Africa\" contains samples of \"Africa\" by Toto.Read more",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.youtube.com/watch?v=0SGtkmhBCGk",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.youtube.com/watch?v=0SGtkmhBCGk",
+      "title": "How Toto wrote Africa",
+      "retrievedAt": "[time]",
+      "excerpt": "[1:00] This two bar loop of drums and percussion is where the recording of Africa began. Everything else was built on top of this. So, it lay the [1:07] foundation of the groove. To get exactly the groove they were looking for, Toto drummer Jeff Picaro and percussionist Lenny Castro set up in the studio facing [1:15] each other and played through the groove for 5 minutes straight with no click, just singing the baseline in their head to keep themselves in the right sort of [...] [2:15] tape loo…",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://en.wikipedia.org/wiki/Africa_(song)",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://en.wikipedia.org/wiki/Africa_(song)",
+      "title": "Africa (song) - Wikipedia",
+      "retrievedAt": "[time]",
+      "excerpt": "\"Africa\" is a song by American rock band Toto \"Toto (band)\"), the tenth and final track on their fourth studio album, Toto IV (1982). It was the second single from the album released in Europe (in the United Kingdom), in June 1982 on CBS Records, and the third in the United States, in October 1982 through Columbia Records. The song was written by band members David Paich and Jeff Porcaro, produced by the band, and mixed by engineer Greg Ladanyi. [...] During an appearance on the radio station K…",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://ig.ft.com/life-of-a-song/africa.html",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://ig.ft.com/life-of-a-song/africa.html",
+      "title": "The strange appeal of Toto’s Africa — and why it's cover-proof — FT.com",
+      "retrievedAt": "[time]",
+      "excerpt": "“Africa” was written by Toto’s drummer, Jeff Porcaro, and keyboard player, David Paich. Paich’s lyric tried to describe his feelings about a continent he had never been to in words filled with false nostalgia and riddled with errors — you can’t see Kilimanjaro from the Serengeti, for example — yet it felt romantic and yearning. Paich had been obsessed with Africa as a child, when he had attended a Catholic school at which several of the teachers were former missionaries who had worked in [...] …",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.songfacts.com/facts/toto/africa",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.songfacts.com/facts/toto/africa",
+      "title": "Africa by Toto - Songfacts",
+      "retrievedAt": "[time]",
+      "excerpt": "This is probably Toto's most famous song, but their guitarist Steve Lukather would like you to know there is much more to the band: Toto were top studio musicians before forming the group, and known as some of the best in the business. Lukather told Rock's Backpages: \"A lot of people categorize us as 'that 'Africa' or 'Rosanna' band,' and I hate that s--t. We have a lot more substance than that. Don't get me wrong - those songs have been great to us, but you really don't understand the depth [.…",
+      "recordRef": null
+    },
+    {
+      "id": "musicbrainz:recording/99a4681a-9503-4d19-9980-b16249e84762",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/99a4681a-9503-4d19-9980-b16249e84762",
+      "title": "[untitled] — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"[untitled]\" by Chuck Person, first released 2010-08.",
+      "recordRef": "recording/99a4681a-9503-4d19-9980-b16249e84762"
+    },
+    {
+      "id": "musicbrainz:recording/44e2147f-f9dd-4347-8da3-85f2fef40847",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/44e2147f-f9dd-4347-8da3-85f2fef40847",
+      "title": "Anything — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Anything\" by JoJo, first released 2006-10-17.",
+      "recordRef": "recording/44e2147f-f9dd-4347-8da3-85f2fef40847"
+    },
+    {
+      "id": "musicbrainz:recording/4001a083-5e7d-4796-9ae7-0765a56382c5",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/4001a083-5e7d-4796-9ae7-0765a56382c5",
+      "title": "Murder Reigns — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Murder Reigns\" by Ja Rule, first released 2002-11-19.",
+      "recordRef": "recording/4001a083-5e7d-4796-9ae7-0765a56382c5"
+    },
+    {
+      "id": "musicbrainz:recording/f3f89500-658d-423d-a56b-8ae7cde3c8e9",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/f3f89500-658d-423d-a56b-8ae7cde3c8e9",
+      "title": "New World — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"New World\" by Nas, first released 1999-11-23.",
+      "recordRef": "recording/f3f89500-658d-423d-a56b-8ae7cde3c8e9"
+    },
+    {
+      "id": "musicbrainz:recording/70311386-802a-43e5-b3f9-ce44c7146fc7",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/70311386-802a-43e5-b3f9-ce44c7146fc7",
+      "title": "PSR41 — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"PSR41\" by New Dreams Ltd., first released 2011-08-02.",
+      "recordRef": "recording/70311386-802a-43e5-b3f9-ce44c7146fc7"
+    }
+  ],
+  "segments": [
+    {
+      "label": "Intro",
+      "start": 0,
+      "end": 8
+    },
+    {
+      "label": "Verse 1",
+      "start": 8,
+      "end": 25
+    },
+    {
+      "label": "Chorus",
+      "start": 25,
+      "end": 42
+    },
+    {
+      "label": "Verse 2",
+      "start": 42,
+      "end": 58
+    },
+    {
+      "label": "Bridge",
+      "start": 58,
+      "end": 75
+    },
+    {
+      "label": "Chorus",
+      "start": 75,
+      "end": 92
+    },
+    {
+      "label": "Outro",
+      "start": 92,
+      "end": 100
+    }
+  ],
+  "segmentsSource": "template",
+  "samples": [],
+  "factoids": [
+    {
+      "id": "<id 15>",
+      "title": "A groove built from a loop",
+      "content": "A production account describes the recording as beginning with a two-bar drum-and-percussion loop. Jeff Porcaro and percussionist Lenny Castro played the groove together without a click before it was looped for the rest of the track to build on.",
+      "type": "production",
+      "entities": [
+        {
+          "id": "<id 16>",
+          "text": "Jeff Porcaro",
+          "type": "artist",
+          "searchQuery": "Jeff Porcaro"
+        },
+        {
+          "id": "<id 17>",
+          "text": "Lenny Castro",
+          "type": "artist",
+          "searchQuery": "Lenny Castro"
+        }
+      ],
+      "claimId": "<id 4>"
+    },
+    {
+      "id": "<id 18>",
+      "title": "A song with many versions",
+      "content": "The song “Africa” has been covered by artists including Weezer and Straight No Chaser, according to MusicBrainz.",
+      "type": "connection",
+      "entities": [
+        {
+          "id": "<id 19>",
+          "text": "Weezer",
+          "type": "artist",
+          "searchQuery": "Weezer"
+        },
+        {
+          "id": "<id 20>",
+          "text": "Straight No Chaser",
+          "type": "artist",
+          "searchQuery": "Straight No Chaser"
+        }
+      ],
+      "claimId": "<id 5>"
+    }
+  ],
+  "genealogy": {
+    "nodes": [
+      {
+        "id": "current",
+        "group": 1,
+        "label": "Africa",
+        "size": 40,
+        "trackTitle": "Africa",
+        "trackArtist": "TOTO",
+        "mbid": "55dc4892-b5ae-4bd7-9e98-2a0d4dd53cbc",
+        "year": 1982
+      },
+      {
+        "id": "mb-99a4681a-9503-4d19-9980-b16249e84762",
+        "group": 3,
+        "label": "[untitled] - Chuck Person",
+        "size": 22,
+        "trackTitle": "[untitled]",
+        "trackArtist": "Chuck Person",
+        "year": 2010,
+        "mbid": "99a4681a-9503-4d19-9980-b16249e84762"
+      },
+      {
+        "id": "mb-44e2147f-f9dd-4347-8da3-85f2fef40847",
+        "group": 3,
+        "label": "Anything - JoJo",
+        "size": 22,
+        "trackTitle": "Anything",
+        "trackArtist": "JoJo",
+        "year": 2006,
+        "mbid": "44e2147f-f9dd-4347-8da3-85f2fef40847",
+        "spotifyId": "7JeoQuH5iZRE0Kor7a1FUa"
+      },
+      {
+        "id": "mb-4001a083-5e7d-4796-9ae7-0765a56382c5",
+        "group": 3,
+        "label": "Murder Reigns - Ja Rule",
+        "size": 22,
+        "trackTitle": "Murder Reigns",
+        "trackArtist": "Ja Rule",
+        "year": 2002,
+        "mbid": "4001a083-5e7d-4796-9ae7-0765a56382c5",
+        "spotifyId": "0BjSPbhaZW0PzLxRqEiMgk"
+      },
+      {
+        "id": "mb-f3f89500-658d-423d-a56b-8ae7cde3c8e9",
+        "group": 3,
+        "label": "New World - Nas",
+        "size": 22,
+        "trackTitle": "New World",
+        "trackArtist": "Nas",
+        "year": 1999,
+        "mbid": "f3f89500-658d-423d-a56b-8ae7cde3c8e9"
+      }
+    ],
+    "links": [
+      {
+        "source": "current",
+        "target": "mb-99a4681a-9503-4d19-9980-b16249e84762",
+        "value": 3,
+        "type": "sample",
+        "kind": "sourced",
+        "origin": "code",
+        "claimId": "<id 6>",
+        "evidenceIds": [
+          "musicbrainz:track/recording/55dc4892-b5ae-4bd7-9e98-2a0d4dd53cbc/sampled-by/recording/99a4681a-9503-4d19-9980-b16249e84762"
+        ]
+      },
+      {
+        "source": "current",
+        "target": "mb-44e2147f-f9dd-4347-8da3-85f2fef40847",
+        "value": 3,
+        "type": "sample",
+        "kind": "sourced",
+        "origin": "code",
+        "claimId": "<id 7>",
+        "evidenceIds": [
+          "musicbrainz:track/recording/55dc4892-b5ae-4bd7-9e98-2a0d4dd53cbc/sampled-by/recording/44e2147f-f9dd-4347-8da3-85f2fef40847"
+        ]
+      },
+      {
+        "source": "current",
+        "target": "mb-4001a083-5e7d-4796-9ae7-0765a56382c5",
+        "value": 3,
+        "type": "sample",
+        "kind": "sourced",
+        "origin": "code",
+        "claimId": "<id 8>",
+        "evidenceIds": [
+          "musicbrainz:track/recording/55dc4892-b5ae-4bd7-9e98-2a0d4dd53cbc/sampled-by/recording/4001a083-5e7d-4796-9ae7-0765a56382c5"
+        ]
+      },
+      {
+        "source": "current",
+        "target": "mb-f3f89500-658d-423d-a56b-8ae7cde3c8e9",
+        "value": 3,
+        "type": "sample",
+        "kind": "sourced",
+        "origin": "code",
+        "claimId": "<id 9>",
+        "evidenceIds": [
+          "musicbrainz:track/recording/55dc4892-b5ae-4bd7-9e98-2a0d4dd53cbc/sampled-by/recording/f3f89500-658d-423d-a56b-8ae7cde3c8e9"
+        ]
+      }
+    ]
+  },
+  "claims": [
+    {
+      "id": "<id 2>",
+      "text": "MusicBrainz lists this Toto recording of “Africa” as first released on April 8, 1982, with a duration of 4:57.",
+      "about": "track",
+      "evidenceIds": [
+        "musicbrainz:track/recording/55dc4892-b5ae-4bd7-9e98-2a0d4dd53cbc"
+      ],
+      "scope": "recording",
+      "kind": "sourced",
+      "origin": "model",
+      "verdict": "supported",
+      "verdictReason": "The MusicBrainz recording excerpt gives Toto, 4:57, and first release on 1982-04-08.",
+      "numericCheck": "n/a",
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 3>",
+      "text": "David Paich and Jeff Porcaro wrote the song “Africa.”",
+      "about": "credit",
+      "evidenceIds": [],
+      "scope": "work",
+      "kind": "inferred",
+      "origin": "model",
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 4>",
+      "text": "A production account describes the recording as beginning with a two-bar drum-and-percussion loop. Jeff Porcaro and percussionist Lenny Castro played the groove together without a click before it was looped for the rest of the track to build on.",
+      "about": "production",
+      "evidenceIds": [],
+      "scope": "recording",
+      "kind": "inferred",
+      "origin": "model",
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "factoid": {
+        "title": "A groove built from a loop",
+        "type": "production",
+        "entities": [
+          {
+            "text": "Jeff Porcaro",
+            "type": "artist"
+          },
+          {
+            "text": "Lenny Castro",
+            "type": "artist"
+          }
+        ]
+      },
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 5>",
+      "text": "The song “Africa” has been covered by artists including Weezer and Straight No Chaser, according to MusicBrainz.",
+      "about": "connection",
+      "evidenceIds": [
+        "musicbrainz:work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4/covered-by/recording/49b9c5d5-0fac-4876-a991-d445325ffacd",
+        "musicbrainz:work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4/covered-by/recording/4167c635-4022-455f-b69a-756f86aff61a"
+      ],
+      "scope": "work",
+      "kind": "sourced",
+      "origin": "model",
+      "verdict": "supported",
+      "verdictReason": "The two MusicBrainz work excerpts name covers by Weezer and Straight No Chaser.",
+      "numericCheck": "n/a",
+      "factoid": {
+        "title": "A song with many versions",
+        "type": "connection",
+        "entities": [
+          {
+            "text": "Weezer",
+            "type": "artist"
+          },
+          {
+            "text": "Straight No Chaser",
+            "type": "artist"
+          }
+        ]
+      },
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 6>",
+      "text": "\"Africa\" by Toto is sampled in \"[untitled]\" by Chuck Person.",
+      "about": "sample",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:track/recording/55dc4892-b5ae-4bd7-9e98-2a0d4dd53cbc/sampled-by/recording/99a4681a-9503-4d19-9980-b16249e84762"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "recording"
+    },
+    {
+      "id": "<id 7>",
+      "text": "\"Africa\" by Toto is sampled in \"Anything\" by JoJo.",
+      "about": "sample",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:track/recording/55dc4892-b5ae-4bd7-9e98-2a0d4dd53cbc/sampled-by/recording/44e2147f-f9dd-4347-8da3-85f2fef40847"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "recording"
+    },
+    {
+      "id": "<id 8>",
+      "text": "\"Africa\" by Toto is sampled in \"Murder Reigns\" by Ja Rule.",
+      "about": "sample",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:track/recording/55dc4892-b5ae-4bd7-9e98-2a0d4dd53cbc/sampled-by/recording/4001a083-5e7d-4796-9ae7-0765a56382c5"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "recording"
+    },
+    {
+      "id": "<id 9>",
+      "text": "\"Africa\" by Toto is sampled in \"New World\" by Nas.",
+      "about": "sample",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:track/recording/55dc4892-b5ae-4bd7-9e98-2a0d4dd53cbc/sampled-by/recording/f3f89500-658d-423d-a56b-8ae7cde3c8e9"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "recording"
+    },
+    {
+      "id": "<id 10>",
+      "text": "The work \"Africa\" is covered by \"Africa\" by Straight No Chaser.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4/covered-by/recording/4167c635-4022-455f-b69a-756f86aff61a"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 11>",
+      "text": "The work \"Africa\" is covered by \"Africa\" by Karumanta.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4/covered-by/recording/9a7bfee6-6532-4eaf-add4-b2f3ba40bdf9"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 12>",
+      "text": "The work \"Africa\" is covered by \"Africa\" by The Countdown Singers.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4/covered-by/recording/04e72afc-c9fb-4eb5-ba24-090be8321d8d"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 13>",
+      "text": "The work \"Africa\" is covered by \"Africa\" by SubAudible Hum.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/c2ad63c7-0bbd-3e03-9d13-6c9b882d07a4/covered-by/recording/9f0be6f6-bc8e-47cc-bad9-3f3d78129616"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 14>",
+      "text": "\"Africa\" by Toto appears on the official album \"Toto IV\" (1982-04-08).",
+      "about": "track",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:release/26ba5ca9-3dea-452a-bdbf-7f14ab54a279"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "release"
+    }
+  ],
+  "run": {
+    "id": "<id 1>",
+    "analyzerVersion": "2.3.6+essentia.models-5c5c0c7f",
+    "fallback": false,
+    "usage": {
+      "llmCalls": 4,
+      "inputTokens": 17632,
+      "outputTokens": 1639,
+      "reasoningTokens": 328
+    },
+    "verifier": {
+      "judged": 4,
+      "unjudged": 0,
+      "restated": 2
+    },
+    "sourceErrors": [
+      {
+        "source": "discogs",
+        "code": "not_configured",
+        "message": "DISCOGS_TOKEN is not set"
+      },
+      {
+        "source": "secondhandsongs",
+        "code": "unavailable",
+        "message": "secondhandsongs: HTTP 403 (the source refused the request)"
+      }
+    ]
+  },
+  "audio": {
+    "version": 2,
+    "analyzerVersion": "2.3.6+essentia.models-5c5c0c7f",
+    "window": {
+      "kind": "preview-30s",
+      "durationSeconds": 29.986
+    },
+    "gate": {
+      "passed": true,
+      "reason": null
+    },
+    "tempo": {
+      "bpm": 92.74,
+      "confidence": 0.782,
+      "rawConfidence": {
+        "value": 4.16,
+        "range": [
+          0,
+          5.32
+        ]
+      },
+      "method": "essentia.RhythmExtractor2013+beat-regression",
+      "basis": "signal"
+    },
+    "key": null,
+    "loudness": {
+      "rmsMean": 0.063828,
+      "method": "mean frame RMS, 2048-sample frames at 22050 Hz, DC removed",
+      "basis": "signal"
+    },
+    "beats": {
+      "times": [
+        0.685,
+        1.335,
+        1.985,
+        2.624,
+        3.274,
+        3.924,
+        4.574,
+        5.224,
+        5.863,
+        6.513,
+        7.163,
+        7.814,
+        8.452,
+        9.102,
+        9.752,
+        10.403,
+        11.041,
+        11.691,
+        12.341,
+        12.98,
+        13.619,
+        14.28,
+        14.93,
+        15.569,
+        16.208,
+        16.858,
+        17.508,
+        18.158,
+        18.808,
+        19.447,
+        20.097,
+        20.747,
+        21.397,
+        22.036,
+        22.686,
+        23.336,
+        23.986,
+        24.625,
+        25.275,
+        25.925,
+        26.575,
+        27.214,
+        27.864,
+        28.502,
+        29.153,
+        29.803
+      ],
+      "method": "essentia.RhythmExtractor2013",
+      "basis": "signal"
+    },
+    "energyContour": {
+      "hopSeconds": 0.09288,
+      "values": [
+        0.067707,
+        0.076261,
+        0.045067,
+        0.035813,
+        0.033034,
+        0.045731,
+        0.074674,
+        0.107044,
+        0.073294,
+        0.05997,
+        0.044186,
+        0.038566,
+        0.025593,
+        0.010708,
+        0.103863,
+        0.05653,
+        0.058985,
+        0.038338,
+        0.032566,
+        0.060723,
+        0.066562,
+        0.112574,
+        0.054626,
+        0.046315,
+        0.046863,
+        0.036754,
+        0.032782,
+        0.01239,
+        0.111932,
+        0.056133,
+        0.066712,
+        0.059624,
+        0.038732,
+        0.064449,
+        0.065249,
+        0.108013,
+        0.067089,
+        0.055366,
+        0.04669,
+        0.021806,
+        0.023145,
+        0.022479,
+        0.113337,
+        0.069441,
+        0.060566,
+        0.041385,
+        0.038483,
+        0.069272,
+        0.063788,
+        0.124418,
+        0.041502,
+        0.062203,
+        0.065741,
+        0.037493,
+        0.032224,
+        0.024332,
+        0.100342,
+        0.048198,
+        0.039558,
+        0.042621,
+        0.072634,
+        0.059826,
+        0.025114,
+        0.11289,
+        0.068084,
+        0.062727,
+        0.058112,
+        0.048857,
+        0.042013,
+        0.032945,
+        0.11217,
+        0.046277,
+        0.043754,
+        0.040128,
+        0.047879,
+        0.066859,
+        0.048555,
+        0.112679,
+        0.06827,
+        0.035871,
+        0.03967,
+        0.072231,
+        0.075299,
+        0.070731,
+        0.115515,
+        0.052544,
+        0.059062,
+        0.055958,
+        0.0614,
+        0.073351,
+        0.067034,
+        0.120315,
+        0.073407,
+        0.063538,
+        0.063662,
+        0.044676,
+        0.071992,
+        0.073673,
+        0.122733,
+        0.073844,
+        0.070201,
+        0.044705,
+        0.02101,
+        0.068288,
+        0.050164,
+        0.107656,
+        0.050206,
+        0.050283,
+        0.041395,
+        0.019677,
+        0.017942,
+        0.064358,
+        0.10855,
+        0.060287,
+        0.054949,
+        0.042888,
+        0.026023,
+        0.073744,
+        0.078199,
+        0.104146,
+        0.062031,
+        0.05409,
+        0.046964,
+        0.038025,
+        0.055368,
+        0.081197,
+        0.098251,
+        0.064822,
+        0.04108,
+        0.036522,
+        0.026241,
+        0.084687,
+        0.088887,
+        0.111549,
+        0.054108,
+        0.051841,
+        0.058224,
+        0.051902,
+        0.047596,
+        0.095359,
+        0.069663,
+        0.049334,
+        0.037012,
+        0.020424,
+        0.019527,
+        0.073847,
+        0.082905,
+        0.089701,
+        0.077157,
+        0.052519,
+        0.038641,
+        0.032819,
+        0.020494,
+        0.090891,
+        0.096828,
+        0.082699,
+        0.082969,
+        0.057541,
+        0.058073,
+        0.090937,
+        0.104221,
+        0.098438,
+        0.070733,
+        0.066036,
+        0.039389,
+        0.043424,
+        0.028997,
+        0.096371,
+        0.067319,
+        0.056679,
+        0.035995,
+        0.044561,
+        0.051884,
+        0.073856,
+        0.099176,
+        0.04722,
+        0.035789,
+        0.059953,
+        0.039046,
+        0.026922,
+        0.043997,
+        0.100158,
+        0.040554,
+        0.03332,
+        0.023379,
+        0.040412,
+        0.049055,
+        0.05017,
+        0.090843,
+        0.079322,
+        0.068131,
+        0.053034,
+        0.041391,
+        0.03163,
+        0.030087,
+        0.104353,
+        0.04637,
+        0.046732,
+        0.038262,
+        0.051475,
+        0.056912,
+        0.073232,
+        0.11029,
+        0.064204,
+        0.045516,
+        0.072713,
+        0.051122,
+        0.042037,
+        0.055161,
+        0.115642,
+        0.068407,
+        0.073061,
+        0.084269,
+        0.054468,
+        0.068304,
+        0.080189,
+        0.126073,
+        0.058301,
+        0.049712,
+        0.081664,
+        0.049027,
+        0.046503,
+        0.069151,
+        0.123611,
+        0.107842,
+        0.086701,
+        0.069933,
+        0.036317,
+        0.052999,
+        0.050506,
+        0.102223,
+        0.048102,
+        0.042284,
+        0.0328,
+        0.016114,
+        0.01615,
+        0.017482,
+        0.129266,
+        0.095377,
+        0.103198,
+        0.081104,
+        0.048354,
+        0.10077,
+        0.135912,
+        0.13612,
+        0.094584,
+        0.0684,
+        0.061474,
+        0.078436,
+        0.033933,
+        0.030913,
+        0.139463,
+        0.116239,
+        0.110423,
+        0.091434,
+        0.068564,
+        0.078034,
+        0.119386,
+        0.116045,
+        0.037295,
+        0.064737,
+        0.088344,
+        0.084364,
+        0.073303,
+        0.101009,
+        0.133164,
+        0.082284,
+        0.070575,
+        0.057861,
+        0.091383,
+        0.100527,
+        0.065979,
+        0.11406,
+        0.059983,
+        0.059498,
+        0.044203,
+        0.035518,
+        0.038305,
+        0.035637,
+        0.114071,
+        0.050515,
+        0.041988,
+        0.033309,
+        0.030601,
+        0.110416,
+        0.056967,
+        0.102207,
+        0.041813,
+        0.039772,
+        0.035955,
+        0.031128,
+        0.057506,
+        0.050789,
+        0.106036,
+        0.033694,
+        0.035028,
+        0.100918,
+        0.068262,
+        0.066286,
+        0.043209,
+        0.129277,
+        0.068612,
+        0.041093,
+        0.053653,
+        0.048569,
+        0.044921,
+        0.058674,
+        0.121519,
+        0.06762,
+        0.049239,
+        0.039939,
+        0.067007,
+        0.078848,
+        0.063511,
+        0.120061,
+        0.071313,
+        0.041632,
+        0.047458,
+        0.060794,
+        0.060741,
+        0.080103,
+        0.100872
+      ],
+      "method": "frame RMS, 2048-sample frames at 22050 Hz, DC removed",
+      "basis": "signal"
+    },
+    "sections": {
+      "segments": [
+        {
+          "label": "A",
+          "start": 0,
+          "end": 29.986
+        }
+      ],
+      "method": "novelty-on-beat-chroma",
+      "basis": "signal"
+    },
+    "keyMoments": [
+      {
+        "time": 0.09,
+        "type": "onset",
+        "intensity": 1,
+        "description": "Onset"
+      },
+      {
+        "time": 2.64,
+        "type": "energy_peak",
+        "intensity": 0.803,
+        "description": "Energy peak"
+      },
+      {
+        "time": 5.24,
+        "type": "onset",
+        "intensity": 0.547,
+        "description": "Onset"
+      },
+      {
+        "time": 5.89,
+        "type": "onset",
+        "intensity": 0.465,
+        "description": "Onset"
+      },
+      {
+        "time": 6.5,
+        "type": "harmonic_change",
+        "intensity": 0.319,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 9.14,
+        "type": "energy_peak",
+        "intensity": 0.88,
+        "description": "Energy peak"
+      },
+      {
+        "time": 9.77,
+        "type": "onset",
+        "intensity": 0.478,
+        "description": "Onset"
+      },
+      {
+        "time": 12.39,
+        "type": "energy_peak",
+        "intensity": 0.8,
+        "description": "Energy peak"
+      },
+      {
+        "time": 14.9,
+        "type": "energy_peak",
+        "intensity": 0.747,
+        "description": "Energy peak"
+      },
+      {
+        "time": 17.53,
+        "type": "onset",
+        "intensity": 0.427,
+        "description": "Onset"
+      },
+      {
+        "time": 18.15,
+        "type": "harmonic_change",
+        "intensity": 0.329,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 20.1,
+        "type": "energy_peak",
+        "intensity": 0.904,
+        "description": "Energy peak"
+      },
+      {
+        "time": 20.73,
+        "type": "harmonic_change",
+        "intensity": 0.294,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 22.05,
+        "type": "onset",
+        "intensity": 0.442,
+        "description": "Onset"
+      },
+      {
+        "time": 22.7,
+        "type": "energy_peak",
+        "intensity": 0.976,
+        "description": "Energy peak"
+      },
+      {
+        "time": 27.56,
+        "type": "onset",
+        "intensity": 0.418,
+        "description": "Onset"
+      }
+    ],
+    "fingerprint": {
+      "styles": {
+        "model": {
+          "id": "discogs-effnet-bs64-1",
+          "licence": "CC BY-NC-SA 4.0"
+        },
+        "top": [
+          {
+            "label": "Rock---Pop Rock",
+            "score": 0.3226
+          },
+          {
+            "label": "Rock---Soft Rock",
+            "score": 0.2172
+          },
+          {
+            "label": "Rock---AOR",
+            "score": 0.1302
+          },
+          {
+            "label": "Rock---Classic Rock",
+            "score": 0.11
+          },
+          {
+            "label": "Pop---Vocal",
+            "score": 0.0799
+          },
+          {
+            "label": "Funk / Soul---Soul",
+            "score": 0.0665
+          },
+          {
+            "label": "Reggae---Reggae-Pop",
+            "score": 0.0591
+          },
+          {
+            "label": "Rock---Prog Rock",
+            "score": 0.0538
+          },
+          {
+            "label": "Pop---Ballad",
+            "score": 0.053
+          },
+          {
+            "label": "Rock---Arena Rock",
+            "score": 0.0484
+          }
+        ],
+        "basis": "model"
+      },
+      "tags": {
+        "model": {
+          "id": "msd-musicnn-1",
+          "licence": "CC BY-NC-SA 4.0"
+        },
+        "scores": [
+          {
+            "label": "soul",
+            "score": 0.2116
+          },
+          {
+            "label": "rock",
+            "score": 0.1748
+          },
+          {
+            "label": "pop",
+            "score": 0.1655
+          },
+          {
+            "label": "70s",
+            "score": 0.1107
+          },
+          {
+            "label": "jazz",
+            "score": 0.1035
+          },
+          {
+            "label": "80s",
+            "score": 0.0994
+          },
+          {
+            "label": "classic rock",
+            "score": 0.0936
+          },
+          {
+            "label": "female vocalists",
+            "score": 0.0661
+          },
+          {
+            "label": "folk",
+            "score": 0.06
+          },
+          {
+            "label": "oldies",
+            "score": 0.0544
+          },
+          {
+            "label": "blues",
+            "score": 0.0533
+          },
+          {
+            "label": "country",
+            "score": 0.0474
+          },
+          {
+            "label": "Progressive rock",
+            "score": 0.0435
+          },
+          {
+            "label": "funk",
+            "score": 0.0389
+          },
+          {
+            "label": "60s",
+            "score": 0.0377
+          },
+          {
+            "label": "easy listening",
+            "score": 0.0287
+          },
+          {
+            "label": "alternative",
+            "score": 0.0264
+          },
+          {
+            "label": "male vocalists",
+            "score": 0.0245
+          },
+          {
+            "label": "rnb",
+            "score": 0.0222
+          },
+          {
+            "label": "guitar",
+            "score": 0.0201
+          },
+          {
+            "label": "acoustic",
+            "score": 0.0185
+          },
+          {
+            "label": "Mellow",
+            "score": 0.0183
+          },
+          {
+            "label": "indie",
+            "score": 0.0182
+          },
+          {
+            "label": "instrumental",
+            "score": 0.0179
+          },
+          {
+            "label": "90s",
+            "score": 0.0179
+          },
+          {
+            "label": "chillout",
+            "score": 0.0154
+          },
+          {
+            "label": "electronic",
+            "score": 0.0123
+          },
+          {
+            "label": "beautiful",
+            "score": 0.0121
+          },
+          {
+            "label": "hard rock",
+            "score": 0.0111
+          },
+          {
+            "label": "chill",
+            "score": 0.0109
+          },
+          {
+            "label": "female vocalist",
+            "score": 0.009
+          },
+          {
+            "label": "dance",
+            "score": 0.0089
+          },
+          {
+            "label": "alternative rock",
+            "score": 0.0088
+          },
+          {
+            "label": "ambient",
+            "score": 0.0075
+          },
+          {
+            "label": "experimental",
+            "score": 0.0066
+          },
+          {
+            "label": "sad",
+            "score": 0.0064
+          },
+          {
+            "label": "punk",
+            "score": 0.0052
+          },
+          {
+            "label": "sexy",
+            "score": 0.0049
+          },
+          {
+            "label": "catchy",
+            "score": 0.0046
+          },
+          {
+            "label": "Hip-Hop",
+            "score": 0.0043
+          },
+          {
+            "label": "00s",
+            "score": 0.0042
+          },
+          {
+            "label": "electronica",
+            "score": 0.0041
+          },
+          {
+            "label": "indie rock",
+            "score": 0.0039
+          },
+          {
+            "label": "indie pop",
+            "score": 0.0038
+          },
+          {
+            "label": "happy",
+            "score": 0.0031
+          },
+          {
+            "label": "heavy metal",
+            "score": 0.0029
+          },
+          {
+            "label": "metal",
+            "score": 0.0029
+          },
+          {
+            "label": "party",
+            "score": 0.0025
+          },
+          {
+            "label": "House",
+            "score": 0.0019
+          },
+          {
+            "label": "electro",
+            "score": 0.0012
+          }
+        ],
+        "basis": "model"
+      },
+      "moods": {
+        "danceability": {
+          "value": 0.2785,
+          "range": [
+            0,
+            1
+          ],
+          "model": {
+            "id": "danceability-msd-musicnn-1",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "acoustic": {
+          "value": 0.5704,
+          "range": [
+            0,
+            1
+          ],
+          "model": {
+            "id": "mood_acoustic-discogs-effnet-1",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "instrumental": {
+          "value": 0.0436,
+          "range": [
+            0,
+            1
+          ],
+          "model": {
+            "id": "voice_instrumental-msd-musicnn-1",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "valence": {
+          "value": 5.0713,
+          "range": [
+            1,
+            9
+          ],
+          "model": {
+            "id": "deam-msd-musicnn-2",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "arousal": {
+          "value": 4.2047,
+          "range": [
+            1,
+            9
+          ],
+          "model": {
+            "id": "deam-msd-musicnn-2",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        }
+      }
+    },
+    "withheld": {
+      "key": {
+        "code": "no_sustained_pitch",
+        "reason": "no sustained pitch"
+      }
+    }
+  },
+  "bpm": 93,
+  "key": null,
+  "energy": 0.175,
+  "valence": 0.509,
+  "danceability": 0.279,
+  "acousticness": 0.57,
+  "keyMoments": [
+    {
+      "time": 0.09,
+      "type": "onset",
+      "intensity": 1,
+      "description": "Onset"
+    },
+    {
+      "time": 2.64,
+      "type": "energy_peak",
+      "intensity": 0.803,
+      "description": "Energy peak"
+    },
+    {
+      "time": 5.24,
+      "type": "onset",
+      "intensity": 0.547,
+      "description": "Onset"
+    },
+    {
+      "time": 5.89,
+      "type": "onset",
+      "intensity": 0.465,
+      "description": "Onset"
+    },
+    {
+      "time": 6.5,
+      "type": "harmonic_change",
+      "intensity": 0.319,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 9.14,
+      "type": "energy_peak",
+      "intensity": 0.88,
+      "description": "Energy peak"
+    },
+    {
+      "time": 9.77,
+      "type": "onset",
+      "intensity": 0.478,
+      "description": "Onset"
+    },
+    {
+      "time": 12.39,
+      "type": "energy_peak",
+      "intensity": 0.8,
+      "description": "Energy peak"
+    },
+    {
+      "time": 14.9,
+      "type": "energy_peak",
+      "intensity": 0.747,
+      "description": "Energy peak"
+    },
+    {
+      "time": 17.53,
+      "type": "onset",
+      "intensity": 0.427,
+      "description": "Onset"
+    },
+    {
+      "time": 18.15,
+      "type": "harmonic_change",
+      "intensity": 0.329,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 20.1,
+      "type": "energy_peak",
+      "intensity": 0.904,
+      "description": "Energy peak"
+    },
+    {
+      "time": 20.73,
+      "type": "harmonic_change",
+      "intensity": 0.294,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 22.05,
+      "type": "onset",
+      "intensity": 0.442,
+      "description": "Onset"
+    },
+    {
+      "time": 22.7,
+      "type": "energy_peak",
+      "intensity": 0.976,
+      "description": "Energy peak"
+    },
+    {
+      "time": 27.56,
+      "type": "onset",
+      "intensity": 0.418,
+      "description": "Onset"
+    }
+  ],
+  "audioSource": "unavailable",
+  "audioConfidence": "low",
+  "audioUnavailableReason": "not_detected"
+}

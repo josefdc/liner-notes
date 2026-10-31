@@ -1,0 +1,1966 @@
+{
+  "id": "32Rf95ZT8gxisQMK6xAhba",
+  "title": "Amen Brother",
+  "artist": "The Winstons",
+  "album": "Color Him Father",
+  "coverUrl": "[link]",
+  "spotifyUrl": "https://open.spotify.com/track/32Rf95ZT8gxisQMK6xAhba",
+  "releaseYear": "1969",
+  "explicit": false,
+  "durationSeconds": 157,
+  "isrc": "QM4TX1779716",
+  "preview": {
+    "provider": "deezer",
+    "method": "isrc",
+    "score": null
+  },
+  "queryMatch": "exact",
+  "evidence": [
+    {
+      "id": "musicbrainz:track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de",
+      "title": "Amen, Brother — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Amen, Brother\" by The Winstons (2:35), ISRC QM4TX1779716, first released 1969.",
+      "recordRef": "track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de"
+    },
+    {
+      "id": "musicbrainz:track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de/sampled-by/recording/65495653-95e8-47db-8d3e-929c37a5c227",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de",
+      "title": "Amen, Brother — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Amen, Brother\" by The Winstons is sampled in \"Aaron 2\" by Venetian Snares.",
+      "recordRef": "track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de/sampled-by/recording/65495653-95e8-47db-8d3e-929c37a5c227"
+    },
+    {
+      "id": "musicbrainz:track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de/sampled-by/recording/d0c4f427-0c42-4f58-a14a-671adc59eaf0",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de",
+      "title": "Amen, Brother — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Amen, Brother\" by The Winstons is sampled in \"acid\" by smn and C418.",
+      "recordRef": "track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de/sampled-by/recording/d0c4f427-0c42-4f58-a14a-671adc59eaf0"
+    },
+    {
+      "id": "musicbrainz:track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de/sampled-by/recording/883ba941-bbf7-48fa-94a2-d240746ffa97",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de",
+      "title": "Amen, Brother — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Amen, Brother\" by The Winstons is sampled in \"Amen, Brother Morricone\" by Kevin McCraney.",
+      "recordRef": "track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de/sampled-by/recording/883ba941-bbf7-48fa-94a2-d240746ffa97"
+    },
+    {
+      "id": "musicbrainz:track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de/sampled-by/recording/9c258bba-a004-47ac-ae68-ca66e49839b8",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de",
+      "title": "Amen, Brother — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Amen, Brother\" by The Winstons is sampled in \"Beverly Hills Cock\" by TCY FORCE.",
+      "recordRef": "track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de/sampled-by/recording/9c258bba-a004-47ac-ae68-ca66e49839b8"
+    },
+    {
+      "id": "musicbrainz:track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de/sampled-by/recording/bccaafb3-83a7-406e-aaf7-a03408122e3c",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de",
+      "title": "Amen, Brother — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Amen, Brother\" by The Winstons is sampled in \"Blow My Speakers Up\" by duuzu.",
+      "recordRef": "track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de/sampled-by/recording/bccaafb3-83a7-406e-aaf7-a03408122e3c"
+    },
+    {
+      "id": "musicbrainz:track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de/sampled-by/recording/b5fc0d64-c430-4251-8788-b64fb633f430",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de",
+      "title": "Amen, Brother — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Amen, Brother\" by The Winstons is sampled in \"Bomber Barbara\" by Hideki Naganuma.",
+      "recordRef": "track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de/sampled-by/recording/b5fc0d64-c430-4251-8788-b64fb633f430"
+    },
+    {
+      "id": "musicbrainz:track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de/sampled-by/recording/e795fb90-3ef3-4c23-9216-6bd7d68aaccf",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de",
+      "title": "Amen, Brother — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Amen, Brother\" by The Winstons is sampled in \"Bomber Barbara (Part 2)\" by Hideki Naganuma.",
+      "recordRef": "track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de/sampled-by/recording/e795fb90-3ef3-4c23-9216-6bd7d68aaccf"
+    },
+    {
+      "id": "musicbrainz:track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de/sampled-by/recording/a7320878-e947-4057-b64f-bbcd7ffb50ac",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de",
+      "title": "Amen, Brother — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Amen, Brother\" by The Winstons is sampled in \"Bust That Groove\" by Stetsasonic.",
+      "recordRef": "track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de/sampled-by/recording/a7320878-e947-4057-b64f-bbcd7ffb50ac"
+    },
+    {
+      "id": "musicbrainz:track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de/sampled-by/recording/80980d6f-31cd-484c-8a9d-3d3310f1587f",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de",
+      "title": "Amen, Brother — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Amen, Brother\" by The Winstons is sampled in \"Come on My Selector\" by Squarepusher.",
+      "recordRef": "track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de/sampled-by/recording/80980d6f-31cd-484c-8a9d-3d3310f1587f"
+    },
+    {
+      "id": "musicbrainz:track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de/sampled-by/recording/9fcad27d-8de9-425b-8e81-43f5ca2421c3",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de",
+      "title": "Amen, Brother — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Amen, Brother\" by The Winstons is sampled in \"crowdpleaser\" by smn and C418.",
+      "recordRef": "track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de/sampled-by/recording/9fcad27d-8de9-425b-8e81-43f5ca2421c3"
+    },
+    {
+      "id": "musicbrainz:track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de/sampled-by/recording/4758cff5-adb8-4eab-a9e2-677f8d95787f",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de",
+      "title": "Amen, Brother — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Amen, Brother\" by The Winstons is sampled in \"DAMN\" by JOYRYDE feat. Freddie Gibbs.",
+      "recordRef": "track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de/sampled-by/recording/4758cff5-adb8-4eab-a9e2-677f8d95787f"
+    },
+    {
+      "id": "musicbrainz:track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de/sampled-by/recording/9904324b-52ca-45ff-8886-9f8d18eb857d",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de",
+      "title": "Amen, Brother — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Amen, Brother\" by The Winstons is sampled in \"Demon’s Theme\" by LTJ Bukem.",
+      "recordRef": "track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de/sampled-by/recording/9904324b-52ca-45ff-8886-9f8d18eb857d"
+    },
+    {
+      "id": "musicbrainz:track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de/sampled-by/recording/98df0623-1a80-4797-b173-00600eb7d52d",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de",
+      "title": "Amen, Brother — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Amen, Brother\" by The Winstons is sampled in \"DIGITAL CIRCUIT\" by Jun Senoue.",
+      "recordRef": "track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de/sampled-by/recording/98df0623-1a80-4797-b173-00600eb7d52d"
+    },
+    {
+      "id": "musicbrainz:track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de/sampled-by/recording/b0ef329c-0c90-4233-ad61-8d8253a75c97",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de",
+      "title": "Amen, Brother — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Amen, Brother\" by The Winstons is sampled in \"dont think too hard\" by Fangs + Crane + Sparkbat.",
+      "recordRef": "track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de/sampled-by/recording/b0ef329c-0c90-4233-ad61-8d8253a75c97"
+    },
+    {
+      "id": "musicbrainz:track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de/sampled-by/recording/a6f09747-1e67-482b-b363-06f12d738161",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de",
+      "title": "Amen, Brother — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Amen, Brother\" by The Winstons is sampled in \"Ether (Eprom old school deconstruction)\" by Zeds Dead × Deathpact.",
+      "recordRef": "track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de/sampled-by/recording/a6f09747-1e67-482b-b363-06f12d738161"
+    },
+    {
+      "id": "musicbrainz:track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de/sampled-by/recording/a1a33adb-82cb-4a17-825b-0350ea1964b7",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de",
+      "title": "Amen, Brother — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Amen, Brother\" by The Winstons is sampled in \"Futurama Original Series Theme (TV version)\" by Christopher Tyng.",
+      "recordRef": "track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de/sampled-by/recording/a1a33adb-82cb-4a17-825b-0350ea1964b7"
+    },
+    {
+      "id": "musicbrainz:track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de/sampled-by/recording/84d3bb09-972d-463b-bbb5-6b5739932376",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de",
+      "title": "Amen, Brother — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Amen, Brother\" by The Winstons is sampled in \"Geddup\" by Smeedge.",
+      "recordRef": "track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de/sampled-by/recording/84d3bb09-972d-463b-bbb5-6b5739932376"
+    },
+    {
+      "id": "musicbrainz:track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de/sampled-by/recording/3436598b-3b75-4d3d-a7db-c8d949cd57ce",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de",
+      "title": "Amen, Brother — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Amen, Brother\" by The Winstons is sampled in \"Gimme Sheldon\" by Bran Van 3000.",
+      "recordRef": "track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de/sampled-by/recording/3436598b-3b75-4d3d-a7db-c8d949cd57ce"
+    },
+    {
+      "id": "musicbrainz:track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de/sampled-by/recording/5752fd56-31f2-47ed-9d4b-4148bbd2d12e",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de",
+      "title": "Amen, Brother — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Amen, Brother\" by The Winstons is sampled in \"Hot Fuck No Love\" by clipping. feat. Cakes da Killa & Maxi Wild.",
+      "recordRef": "track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de/sampled-by/recording/5752fd56-31f2-47ed-9d4b-4148bbd2d12e"
+    },
+    {
+      "id": "musicbrainz:track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de/sampled-by/recording/68bf9cfc-da9c-4e0d-87ee-d170d8e2576d",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de",
+      "title": "Amen, Brother — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Amen, Brother\" by The Winstons is sampled in \"I Desire\" by Salt‐N‐Pepa.",
+      "recordRef": "track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de/sampled-by/recording/68bf9cfc-da9c-4e0d-87ee-d170d8e2576d"
+    },
+    {
+      "id": "musicbrainz:track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de/sampled-by/recording/659e4c07-8225-4930-8c52-aea25128fead",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de",
+      "title": "Amen, Brother — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Amen, Brother\" by The Winstons is sampled in \"If you don't know what to do just steal the amen break\" by C418.",
+      "recordRef": "track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de/sampled-by/recording/659e4c07-8225-4930-8c52-aea25128fead"
+    },
+    {
+      "id": "musicbrainz:track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de/sampled-by/recording/8b90bc97-5270-478a-b369-7bbed1b33bb3",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de",
+      "title": "Amen, Brother — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Amen, Brother\" by The Winstons is sampled in \"INSURRECTION OF THE MIND\" by GNB CHILI.",
+      "recordRef": "track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de/sampled-by/recording/8b90bc97-5270-478a-b369-7bbed1b33bb3"
+    },
+    {
+      "id": "musicbrainz:track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de/sampled-by/recording/f0202fa1-3d06-4f95-9e3c-b44b533ccb62",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de",
+      "title": "Amen, Brother — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Amen, Brother\" by The Winstons is sampled in \"IS MASHCORE A GOOD WAY TO GET LAID???\" by DJKIRARA.",
+      "recordRef": "track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de/sampled-by/recording/f0202fa1-3d06-4f95-9e3c-b44b533ccb62"
+    },
+    {
+      "id": "musicbrainz:track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de/sampled-by/recording/39fdc76f-a323-4b0e-a3a8-de3869369a2e",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de",
+      "title": "Amen, Brother — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Amen, Brother\" by The Winstons is sampled in \"Meatcraft (remix)\" by C418.",
+      "recordRef": "track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de/sampled-by/recording/39fdc76f-a323-4b0e-a3a8-de3869369a2e"
+    },
+    {
+      "id": "musicbrainz:track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de/sampled-by/recording/1caca73b-fa25-46f7-a8d6-0c305af9ad9c",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de",
+      "title": "Amen, Brother — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Amen, Brother\" by The Winstons is sampled in \"Neptune\" by Known To Be Lethal.",
+      "recordRef": "track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de/sampled-by/recording/1caca73b-fa25-46f7-a8d6-0c305af9ad9c"
+    },
+    {
+      "id": "musicbrainz:release/79c5945d-283f-4f13-b35e-a3f917cf2c80",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/release/79c5945d-283f-4f13-b35e-a3f917cf2c80",
+      "title": "Color Him Father — MusicBrainz release",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Amen, Brother\" by The Winstons appears on the official album \"Color Him Father\" (1969).",
+      "recordRef": "release/79c5945d-283f-4f13-b35e-a3f917cf2c80"
+    },
+    {
+      "id": "tavily:https://www.bbc.com/news/entertainment-arts-34785551",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.bbc.com/news/entertainment-arts-34785551",
+      "title": "Amen Break musician finally gets paid - BBC News",
+      "retrievedAt": "[time]",
+      "excerpt": "# Amen Break musician finally gets paid ## To play this video you need to enable JavaScript in your browser. This video can not be played The musician behind one of the most-sampled pieces of music in history has finally been rewarded for his work. The Amen Break - a six-second drum solo in The Winstons' 1969 track Amen, Brother - has been sampled by artists including The Prodigy, Oasis and NWA. But its writers never received any royalties from those recordings. [...] \"The young man who played …",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.whosampled.com/The-Winstons",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.whosampled.com/The-Winstons",
+      "title": "The Winstons - Samples, Covers and Remixes",
+      "retrievedAt": "[time]",
+      "excerpt": "Brother Amen, Brother (1969) was sampled in Straight Outta Compton by N.W.A (1988) Pigs by Tyler, The Creator (2013) Scary Monsters and Nice Sprites (The",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.whosampled.com/The-Winstons/Amen,-Brother",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.whosampled.com/The-Winstons/Amen,-Brother",
+      "title": "Amen, Brother by The Winstons - Samples, Covers and ...",
+      "retrievedAt": "[time]",
+      "excerpt": "\"Amen, Brother\" contains samples of \"Theme From Lillies of the Field (Amen)\" by The Impressions and \"We're a Winner\" by The Impressions. Who produced \"Amen,",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.youtube.com/watch?v=n2K54S0Z10U",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.youtube.com/watch?v=n2K54S0Z10U",
+      "title": "Who Sampled? THE WINSTONS – AMEN, BROTHER ...",
+      "retrievedAt": "[time]",
+      "excerpt": "sample the famous 'Amen Break' from the song recorded by The Winstons called Amen Brother Who's Iconic drum break performed by Richrd Spencer",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://en.wikipedia.org/wiki/Amen_break",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://en.wikipedia.org/wiki/Amen_break",
+      "title": "Amen break - Wikipedia",
+      "retrievedAt": "[time]",
+      "excerpt": "The Winstons received no royalties for the sample. The bandleader, Richard Lewis Spencer, was not aware of its use until 1996, after the statute of limitations for copyright infringement had passed. He condemned its use as plagiarism, but later said it was flattering. He said it was unlikely that Coleman, who died homeless and destitute in 2006, realized the impact he had made on music. In 2026, \"Amen, Brother\" was selected by the US Library of Congress for preservation in the National [...] Th…",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.bbc.com/news/magazine-32087287",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.bbc.com/news/magazine-32087287",
+      "title": "Six seconds that shaped 1,500 songs - BBC News",
+      "retrievedAt": "[time]",
+      "excerpt": "# Six seconds that shaped 1,500 songs The Winstons in the recording studio, 1969 Amen, Brother was a little-known B-side released in 1969. Barely noticed at the time, its drum solo has been hugely influential, appearing in different forms in more than 1,500 other songs - but the band behind it never made any money from it. \"It felt like plagiarism and I felt ripped off and raped,\" says Richard L Spencer, lead singer of The Winstons - the band that recorded the original track. [...] The Winstons…",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://alijamieson.co.uk/2021/12/31/can-i-get-amen-winstons-classic-break-examined",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://alijamieson.co.uk/2021/12/31/can-i-get-amen-winstons-classic-break-examined",
+      "title": "Can I get an Amen? The Winstons’ Classic Break Examined - Ali Jamieson",
+      "retrievedAt": "[time]",
+      "excerpt": "> Amen, Brother was recorded to an Ampex 440 1/2 inch 4track tape recorder. Bass & Drums were on 1 track, Horns were overdubbed to a separate track, instruments (Guitar, Organ) were on a separate tracks. I’m pretty sure I would have used all 4 tracks. Tape machine was set to 15ips [inches per second] speed. Mixing would have gone to an Ampex Mono machine for radio and an Ampex stereo machine for single sales to the public. The producer was Don Carroll, who was a record promotion man for major […",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.youtube.com/watch?v=GxZuq57_bYM",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.youtube.com/watch?v=GxZuq57_bYM",
+      "title": "The Winstons - Amen Brother",
+      "retrievedAt": "[time]",
+      "excerpt": "\"The Winstons were a 1960s funk and soul music group, based in Washington, D.C.. They are known for their 1969 recording of an EP featuring a song entitled \"Color Him Father\" on the A-side, and a song entitled \"Amen, Brother\" on the B-side. Half-way into \"Amen, Brother\", there is a drum solo (performed by G.C. Coleman) which would cause The Winston's EP to become one of the most widely-sampled records in the history of electronic music. Sampled audio clips of the drum solo became known as the […",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.beatportal.com/articles/376104-celebrating-50-years-of-the-amen-break",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.beatportal.com/articles/376104-celebrating-50-years-of-the-amen-break",
+      "title": "Celebrating 50 Years of the Amen Break",
+      "retrievedAt": "[time]",
+      "excerpt": "In 1969, soul group The Winstons recorded a 7-inch record titled “Color Him Father” in Atlanta, Georgia, that would go on to win the group a Grammy Award for Best R&B Song in 1970. What the group never could have guessed was that the record’s B-side, an instrumental titled “Amen, Brother,” carried a four-bar drum break that would alter the history of contemporary music for decades to come. [...] The Winstons’ drummer GC Coleman’s sprightly, organic six-second drum solo has made “Amen, Brother” …",
+      "recordRef": null
+    },
+    {
+      "id": "musicbrainz:recording/65495653-95e8-47db-8d3e-929c37a5c227",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/65495653-95e8-47db-8d3e-929c37a5c227",
+      "title": "Aaron 2 — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Aaron 2\" by Venetian Snares, first released 2010-08-23.",
+      "recordRef": "recording/65495653-95e8-47db-8d3e-929c37a5c227"
+    },
+    {
+      "id": "musicbrainz:recording/d0c4f427-0c42-4f58-a14a-671adc59eaf0",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/d0c4f427-0c42-4f58-a14a-671adc59eaf0",
+      "title": "acid — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"acid\" by smn and C418, first released 2010-01-05.",
+      "recordRef": "recording/d0c4f427-0c42-4f58-a14a-671adc59eaf0"
+    },
+    {
+      "id": "musicbrainz:recording/883ba941-bbf7-48fa-94a2-d240746ffa97",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/883ba941-bbf7-48fa-94a2-d240746ffa97",
+      "title": "Amen, Brother Morricone — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Amen, Brother Morricone\" by Kevin McCraney, first released 2008-10-25.",
+      "recordRef": "recording/883ba941-bbf7-48fa-94a2-d240746ffa97"
+    },
+    {
+      "id": "musicbrainz:recording/9c258bba-a004-47ac-ae68-ca66e49839b8",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/9c258bba-a004-47ac-ae68-ca66e49839b8",
+      "title": "Beverly Hills Cock — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Beverly Hills Cock\" by TCY FORCE, first released 2010-12-29.",
+      "recordRef": "recording/9c258bba-a004-47ac-ae68-ca66e49839b8"
+    },
+    {
+      "id": "musicbrainz:recording/bccaafb3-83a7-406e-aaf7-a03408122e3c",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/bccaafb3-83a7-406e-aaf7-a03408122e3c",
+      "title": "Blow My Speakers Up — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Blow My Speakers Up\" by duuzu, first released 2019-12-28.",
+      "recordRef": "recording/bccaafb3-83a7-406e-aaf7-a03408122e3c"
+    },
+    {
+      "id": "musicbrainz:recording/b5fc0d64-c430-4251-8788-b64fb633f430",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/b5fc0d64-c430-4251-8788-b64fb633f430",
+      "title": "Bomber Barbara — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Bomber Barbara\" by Hideki Naganuma, first released 2005-11-23.",
+      "recordRef": "recording/b5fc0d64-c430-4251-8788-b64fb633f430"
+    },
+    {
+      "id": "musicbrainz:recording/e795fb90-3ef3-4c23-9216-6bd7d68aaccf",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/e795fb90-3ef3-4c23-9216-6bd7d68aaccf",
+      "title": "Bomber Barbara (Part 2) — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Bomber Barbara (Part 2)\" by Hideki Naganuma, first released 2005-11-23.",
+      "recordRef": "recording/e795fb90-3ef3-4c23-9216-6bd7d68aaccf"
+    },
+    {
+      "id": "musicbrainz:recording/a7320878-e947-4057-b64f-bbcd7ffb50ac",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/a7320878-e947-4057-b64f-bbcd7ffb50ac",
+      "title": "Bust That Groove — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Bust That Groove\" by Stetsasonic, first released 1986.",
+      "recordRef": "recording/a7320878-e947-4057-b64f-bbcd7ffb50ac"
+    },
+    {
+      "id": "musicbrainz:recording/80980d6f-31cd-484c-8a9d-3d3310f1587f",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/80980d6f-31cd-484c-8a9d-3d3310f1587f",
+      "title": "Come on My Selector — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Come on My Selector\" by Squarepusher, first released 1997-07-21.",
+      "recordRef": "recording/80980d6f-31cd-484c-8a9d-3d3310f1587f"
+    },
+    {
+      "id": "musicbrainz:recording/9fcad27d-8de9-425b-8e81-43f5ca2421c3",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/9fcad27d-8de9-425b-8e81-43f5ca2421c3",
+      "title": "crowdpleaser — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"crowdpleaser\" by smn and C418, first released 2010-01-05.",
+      "recordRef": "recording/9fcad27d-8de9-425b-8e81-43f5ca2421c3"
+    },
+    {
+      "id": "musicbrainz:recording/4758cff5-adb8-4eab-a9e2-677f8d95787f",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/4758cff5-adb8-4eab-a9e2-677f8d95787f",
+      "title": "DAMN — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"DAMN\" by JOYRYDE feat. Freddie Gibbs, first released 2016-12-06.",
+      "recordRef": "recording/4758cff5-adb8-4eab-a9e2-677f8d95787f"
+    },
+    {
+      "id": "musicbrainz:recording/9904324b-52ca-45ff-8886-9f8d18eb857d",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/9904324b-52ca-45ff-8886-9f8d18eb857d",
+      "title": "Demon’s Theme — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Demon’s Theme\" by LTJ Bukem, first released 1992.",
+      "recordRef": "recording/9904324b-52ca-45ff-8886-9f8d18eb857d"
+    },
+    {
+      "id": "musicbrainz:recording/98df0623-1a80-4797-b173-00600eb7d52d",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/98df0623-1a80-4797-b173-00600eb7d52d",
+      "title": "DIGITAL CIRCUIT — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"DIGITAL CIRCUIT\" by Jun Senoue, first released 2006-02-22.",
+      "recordRef": "recording/98df0623-1a80-4797-b173-00600eb7d52d"
+    },
+    {
+      "id": "musicbrainz:recording/b0ef329c-0c90-4233-ad61-8d8253a75c97",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/b0ef329c-0c90-4233-ad61-8d8253a75c97",
+      "title": "dont think too hard — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"dont think too hard\" by Fangs + Crane + Sparkbat, first released 2022-01-14.",
+      "recordRef": "recording/b0ef329c-0c90-4233-ad61-8d8253a75c97"
+    },
+    {
+      "id": "musicbrainz:recording/a6f09747-1e67-482b-b363-06f12d738161",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/a6f09747-1e67-482b-b363-06f12d738161",
+      "title": "Ether (Eprom old school deconstruction) — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Ether (Eprom old school deconstruction)\" by Zeds Dead × Deathpact, first released 2020-07-20.",
+      "recordRef": "recording/a6f09747-1e67-482b-b363-06f12d738161"
+    },
+    {
+      "id": "musicbrainz:recording/a1a33adb-82cb-4a17-825b-0350ea1964b7",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/a1a33adb-82cb-4a17-825b-0350ea1964b7",
+      "title": "Futurama Original Series Theme (TV version) — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Futurama Original Series Theme (TV version)\" by Christopher Tyng, first released 1999-05-07.",
+      "recordRef": "recording/a1a33adb-82cb-4a17-825b-0350ea1964b7"
+    },
+    {
+      "id": "musicbrainz:recording/84d3bb09-972d-463b-bbb5-6b5739932376",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/84d3bb09-972d-463b-bbb5-6b5739932376",
+      "title": "Geddup — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Geddup\" by Smeedge, first released 2023-07-26.",
+      "recordRef": "recording/84d3bb09-972d-463b-bbb5-6b5739932376"
+    },
+    {
+      "id": "musicbrainz:recording/3436598b-3b75-4d3d-a7db-c8d949cd57ce",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/3436598b-3b75-4d3d-a7db-c8d949cd57ce",
+      "title": "Gimme Sheldon — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Gimme Sheldon\" by Bran Van 3000, first released 1997-04-01.",
+      "recordRef": "recording/3436598b-3b75-4d3d-a7db-c8d949cd57ce"
+    },
+    {
+      "id": "musicbrainz:recording/5752fd56-31f2-47ed-9d4b-4148bbd2d12e",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/5752fd56-31f2-47ed-9d4b-4148bbd2d12e",
+      "title": "Hot Fuck No Love — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Hot Fuck No Love\" by clipping. feat. Cakes da Killa & Maxi Wild, first released 2016-06-14.",
+      "recordRef": "recording/5752fd56-31f2-47ed-9d4b-4148bbd2d12e"
+    },
+    {
+      "id": "musicbrainz:recording/68bf9cfc-da9c-4e0d-87ee-d170d8e2576d",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/68bf9cfc-da9c-4e0d-87ee-d170d8e2576d",
+      "title": "I Desire — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"I Desire\" by Salt‐N‐Pepa, first released 1986.",
+      "recordRef": "recording/68bf9cfc-da9c-4e0d-87ee-d170d8e2576d"
+    },
+    {
+      "id": "musicbrainz:recording/659e4c07-8225-4930-8c52-aea25128fead",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/659e4c07-8225-4930-8c52-aea25128fead",
+      "title": "If you don't know what to do just steal the amen break — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"If you don't know what to do just steal the amen break\" by C418, first released 2010-08-12.",
+      "recordRef": "recording/659e4c07-8225-4930-8c52-aea25128fead"
+    },
+    {
+      "id": "musicbrainz:recording/8b90bc97-5270-478a-b369-7bbed1b33bb3",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/8b90bc97-5270-478a-b369-7bbed1b33bb3",
+      "title": "INSURRECTION OF THE MIND — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"INSURRECTION OF THE MIND\" by GNB CHILI, first released 2021-11-08.",
+      "recordRef": "recording/8b90bc97-5270-478a-b369-7bbed1b33bb3"
+    },
+    {
+      "id": "musicbrainz:recording/f0202fa1-3d06-4f95-9e3c-b44b533ccb62",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/f0202fa1-3d06-4f95-9e3c-b44b533ccb62",
+      "title": "IS MASHCORE A GOOD WAY TO GET LAID??? — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"IS MASHCORE A GOOD WAY TO GET LAID???\" by DJKIRARA, first released 2024-04-05.",
+      "recordRef": "recording/f0202fa1-3d06-4f95-9e3c-b44b533ccb62"
+    },
+    {
+      "id": "musicbrainz:recording/39fdc76f-a323-4b0e-a3a8-de3869369a2e",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/39fdc76f-a323-4b0e-a3a8-de3869369a2e",
+      "title": "Meatcraft (remix) — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Meatcraft (remix)\" by C418, first released 2010-10-27.",
+      "recordRef": "recording/39fdc76f-a323-4b0e-a3a8-de3869369a2e"
+    },
+    {
+      "id": "musicbrainz:recording/1caca73b-fa25-46f7-a8d6-0c305af9ad9c",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/1caca73b-fa25-46f7-a8d6-0c305af9ad9c",
+      "title": "Neptune — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Neptune\" by Known To Be Lethal, first released 2012-03-02.",
+      "recordRef": "recording/1caca73b-fa25-46f7-a8d6-0c305af9ad9c"
+    }
+  ],
+  "segments": [
+    {
+      "label": "Intro",
+      "start": 0,
+      "end": 8
+    },
+    {
+      "label": "Verse 1",
+      "start": 8,
+      "end": 25
+    },
+    {
+      "label": "Chorus",
+      "start": 25,
+      "end": 42
+    },
+    {
+      "label": "Verse 2",
+      "start": 42,
+      "end": 58
+    },
+    {
+      "label": "Bridge",
+      "start": 58,
+      "end": 75
+    },
+    {
+      "label": "Chorus",
+      "start": 75,
+      "end": 92
+    },
+    {
+      "label": "Outro",
+      "start": 92,
+      "end": 100
+    }
+  ],
+  "segmentsSource": "template",
+  "samples": [],
+  "factoids": [
+    {
+      "id": "<id 11>",
+      "title": "A break that traveled",
+      "content": "The BBC describes the Amen Break as a six-second drum solo from this 1969 recording, later sampled by artists including The Prodigy, Oasis and N.W.A.",
+      "type": "trivia",
+      "entities": [
+        {
+          "id": "<id 12>",
+          "text": "Amen Break",
+          "type": "technique",
+          "searchQuery": "Amen Break"
+        },
+        {
+          "id": "<id 13>",
+          "text": "The Prodigy",
+          "type": "artist",
+          "searchQuery": "The Prodigy"
+        },
+        {
+          "id": "<id 14>",
+          "text": "Oasis",
+          "type": "artist",
+          "searchQuery": "Oasis"
+        },
+        {
+          "id": "<id 15>",
+          "text": "N.W.A.",
+          "type": "artist",
+          "searchQuery": "N.W.A."
+        }
+      ],
+      "claimId": "<id 4>"
+    }
+  ],
+  "genealogy": {
+    "nodes": [
+      {
+        "id": "current",
+        "group": 1,
+        "label": "Amen Brother",
+        "size": 40,
+        "trackTitle": "Amen Brother",
+        "trackArtist": "The Winstons",
+        "mbid": "61ef31c0-d65b-4d76-b9bb-80eec6e107de",
+        "year": 1969
+      },
+      {
+        "id": "straightouttacompton",
+        "group": 4,
+        "label": "Straight Outta Compton - N.W.A. (1988)",
+        "size": 22,
+        "trackTitle": "Straight Outta Compton",
+        "trackArtist": "N.W.A.",
+        "spotifyId": "6KIKRz9eSTXdNsGUnomdtW"
+      },
+      {
+        "id": "mb-65495653-95e8-47db-8d3e-929c37a5c227",
+        "group": 3,
+        "label": "Aaron 2 - Venetian Snares",
+        "size": 22,
+        "trackTitle": "Aaron 2",
+        "trackArtist": "Venetian Snares",
+        "year": 2010,
+        "mbid": "65495653-95e8-47db-8d3e-929c37a5c227"
+      },
+      {
+        "id": "mb-d0c4f427-0c42-4f58-a14a-671adc59eaf0",
+        "group": 3,
+        "label": "acid - smn and C418",
+        "size": 22,
+        "trackTitle": "acid",
+        "trackArtist": "smn and C418",
+        "year": 2010,
+        "mbid": "d0c4f427-0c42-4f58-a14a-671adc59eaf0"
+      },
+      {
+        "id": "mb-883ba941-bbf7-48fa-94a2-d240746ffa97",
+        "group": 3,
+        "label": "Amen, Brother Morricone - Kevin McCraney",
+        "size": 22,
+        "trackTitle": "Amen, Brother Morricone",
+        "trackArtist": "Kevin McCraney",
+        "year": 2008,
+        "mbid": "883ba941-bbf7-48fa-94a2-d240746ffa97"
+      },
+      {
+        "id": "mb-9c258bba-a004-47ac-ae68-ca66e49839b8",
+        "group": 3,
+        "label": "Beverly Hills Cock - TCY FORCE",
+        "size": 22,
+        "trackTitle": "Beverly Hills Cock",
+        "trackArtist": "TCY FORCE",
+        "year": 2010,
+        "mbid": "9c258bba-a004-47ac-ae68-ca66e49839b8"
+      }
+    ],
+    "links": [
+      {
+        "source": "current",
+        "target": "straightouttacompton",
+        "value": 1,
+        "type": "sample",
+        "kind": "inferred",
+        "origin": "model",
+        "claimId": "<id 5>",
+        "evidenceIds": []
+      },
+      {
+        "source": "current",
+        "target": "mb-65495653-95e8-47db-8d3e-929c37a5c227",
+        "value": 3,
+        "type": "sample",
+        "kind": "sourced",
+        "origin": "code",
+        "claimId": "<id 6>",
+        "evidenceIds": [
+          "musicbrainz:track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de/sampled-by/recording/65495653-95e8-47db-8d3e-929c37a5c227"
+        ]
+      },
+      {
+        "source": "current",
+        "target": "mb-d0c4f427-0c42-4f58-a14a-671adc59eaf0",
+        "value": 3,
+        "type": "sample",
+        "kind": "sourced",
+        "origin": "code",
+        "claimId": "<id 7>",
+        "evidenceIds": [
+          "musicbrainz:track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de/sampled-by/recording/d0c4f427-0c42-4f58-a14a-671adc59eaf0"
+        ]
+      },
+      {
+        "source": "current",
+        "target": "mb-883ba941-bbf7-48fa-94a2-d240746ffa97",
+        "value": 3,
+        "type": "sample",
+        "kind": "sourced",
+        "origin": "code",
+        "claimId": "<id 8>",
+        "evidenceIds": [
+          "musicbrainz:track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de/sampled-by/recording/883ba941-bbf7-48fa-94a2-d240746ffa97"
+        ]
+      },
+      {
+        "source": "current",
+        "target": "mb-9c258bba-a004-47ac-ae68-ca66e49839b8",
+        "value": 3,
+        "type": "sample",
+        "kind": "sourced",
+        "origin": "code",
+        "claimId": "<id 9>",
+        "evidenceIds": [
+          "musicbrainz:track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de/sampled-by/recording/9c258bba-a004-47ac-ae68-ca66e49839b8"
+        ]
+      }
+    ]
+  },
+  "claims": [
+    {
+      "id": "<id 2>",
+      "text": "MusicBrainz lists “Amen, Brother” by The Winstons as first released in 1969.",
+      "about": "track",
+      "evidenceIds": [
+        "musicbrainz:track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de"
+      ],
+      "scope": "recording",
+      "kind": "sourced",
+      "origin": "model",
+      "verdict": "supported",
+      "verdictReason": "The MusicBrainz recording excerpt lists The Winstons’ recording as first released in 1969.",
+      "numericCheck": "n/a",
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 3>",
+      "text": "The six-second drum solo in “Amen, Brother” became known as the Amen Break.",
+      "about": "history",
+      "evidenceIds": [
+        "tavily:https://www.bbc.com/news/entertainment-arts-34785551"
+      ],
+      "scope": "recording",
+      "kind": "sourced",
+      "origin": "model",
+      "verdict": "supported",
+      "verdictReason": "The BBC excerpt identifies the Amen Break as a six-second drum solo in the track.",
+      "numericCheck": "n/a",
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 4>",
+      "text": "The BBC describes the Amen Break as a six-second drum solo from this 1969 recording, later sampled by artists including The Prodigy, Oasis and N.W.A.",
+      "about": "trivia",
+      "evidenceIds": [
+        "tavily:https://www.bbc.com/news/entertainment-arts-34785551"
+      ],
+      "scope": "recording",
+      "kind": "sourced",
+      "origin": "model",
+      "verdict": "partial",
+      "verdictReason": "The BBC excerpt mentions sampling but does not name The Prodigy, Oasis or N.W.A.",
+      "numericCheck": "n/a",
+      "factoid": {
+        "title": "A break that traveled",
+        "type": "trivia",
+        "entities": [
+          {
+            "text": "Amen Break",
+            "type": "technique"
+          },
+          {
+            "text": "The Prodigy",
+            "type": "artist"
+          },
+          {
+            "text": "Oasis",
+            "type": "artist"
+          },
+          {
+            "text": "N.W.A.",
+            "type": "artist"
+          }
+        ]
+      },
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 5>",
+      "text": "\"Straight Outta Compton - N.W.A. (1988)\" samples \"Amen Brother - The Winstons\".",
+      "about": "sample",
+      "evidenceIds": [],
+      "scope": "recording",
+      "kind": "inferred",
+      "origin": "model",
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a"
+    },
+    {
+      "id": "<id 6>",
+      "text": "\"Amen, Brother\" by The Winstons is sampled in \"Aaron 2\" by Venetian Snares.",
+      "about": "sample",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de/sampled-by/recording/65495653-95e8-47db-8d3e-929c37a5c227"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "recording"
+    },
+    {
+      "id": "<id 7>",
+      "text": "\"Amen, Brother\" by The Winstons is sampled in \"acid\" by smn and C418.",
+      "about": "sample",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de/sampled-by/recording/d0c4f427-0c42-4f58-a14a-671adc59eaf0"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "recording"
+    },
+    {
+      "id": "<id 8>",
+      "text": "\"Amen, Brother\" by The Winstons is sampled in \"Amen, Brother Morricone\" by Kevin McCraney.",
+      "about": "sample",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de/sampled-by/recording/883ba941-bbf7-48fa-94a2-d240746ffa97"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "recording"
+    },
+    {
+      "id": "<id 9>",
+      "text": "\"Amen, Brother\" by The Winstons is sampled in \"Beverly Hills Cock\" by TCY FORCE.",
+      "about": "sample",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:track/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de/sampled-by/recording/9c258bba-a004-47ac-ae68-ca66e49839b8"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "recording"
+    },
+    {
+      "id": "<id 10>",
+      "text": "\"Amen, Brother\" by The Winstons appears on the official album \"Color Him Father\" (1969).",
+      "about": "track",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:release/79c5945d-283f-4f13-b35e-a3f917cf2c80"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "release"
+    }
+  ],
+  "run": {
+    "id": "<id 1>",
+    "analyzerVersion": "2.3.6+essentia.models-5c5c0c7f",
+    "fallback": false,
+    "usage": {
+      "llmCalls": 4,
+      "inputTokens": 15939,
+      "outputTokens": 1262,
+      "reasoningTokens": 228
+    },
+    "verifier": {
+      "judged": 5,
+      "unjudged": 0,
+      "restated": 2
+    },
+    "sourceErrors": [
+      {
+        "source": "discogs",
+        "code": "not_configured",
+        "message": "DISCOGS_TOKEN is not set"
+      }
+    ]
+  },
+  "audio": {
+    "version": 2,
+    "analyzerVersion": "2.3.6+essentia.models-5c5c0c7f",
+    "window": {
+      "kind": "preview-30s",
+      "durationSeconds": 29.986
+    },
+    "gate": {
+      "passed": true,
+      "reason": null
+    },
+    "tempo": null,
+    "key": null,
+    "loudness": {
+      "rmsMean": 0.197234,
+      "method": "mean frame RMS, 2048-sample frames at 22050 Hz, DC removed",
+      "basis": "signal"
+    },
+    "beats": {
+      "times": [
+        2.496,
+        2.984,
+        3.46,
+        3.913,
+        4.365,
+        4.818,
+        5.271,
+        5.724,
+        6.177,
+        6.629,
+        7.094,
+        7.546,
+        7.999,
+        8.452,
+        8.905,
+        9.358,
+        9.822,
+        10.275,
+        10.728,
+        11.18,
+        11.645,
+        12.098,
+        12.562,
+        13.015,
+        13.479,
+        13.944,
+        14.408,
+        14.872,
+        15.337,
+        15.801,
+        16.277,
+        16.742,
+        17.206,
+        17.67,
+        18.123,
+        18.576,
+        19.04,
+        19.493,
+        19.934,
+        20.387,
+        20.84,
+        21.293,
+        21.734,
+        22.198,
+        22.651,
+        23.104,
+        23.557,
+        24.009,
+        24.474,
+        24.927,
+        25.379,
+        25.832,
+        26.285,
+        26.738,
+        27.191,
+        27.643,
+        28.096,
+        28.549,
+        29.013,
+        29.466
+      ],
+      "method": "essentia.RhythmExtractor2013",
+      "basis": "signal"
+    },
+    "energyContour": {
+      "hopSeconds": 0.09288,
+      "values": [
+        0.095417,
+        0.224288,
+        0.242149,
+        0.238446,
+        0.204411,
+        0.261367,
+        0.251753,
+        0.238675,
+        0.230022,
+        0.245113,
+        0.226113,
+        0.221022,
+        0.242596,
+        0.235091,
+        0.202851,
+        0.21314,
+        0.176579,
+        0.223361,
+        0.237174,
+        0.232734,
+        0.224208,
+        0.189844,
+        0.247699,
+        0.182676,
+        0.169335,
+        0.170191,
+        0.211317,
+        0.153733,
+        0.183809,
+        0.212337,
+        0.243656,
+        0.200193,
+        0.246611,
+        0.199538,
+        0.193686,
+        0.200173,
+        0.160097,
+        0.254988,
+        0.229351,
+        0.203052,
+        0.177902,
+        0.162253,
+        0.198551,
+        0.1499,
+        0.139764,
+        0.147169,
+        0.119855,
+        0.086661,
+        0.201786,
+        0.183052,
+        0.157373,
+        0.206039,
+        0.177563,
+        0.161293,
+        0.166489,
+        0.173719,
+        0.19457,
+        0.208972,
+        0.208173,
+        0.219124,
+        0.202266,
+        0.231976,
+        0.201971,
+        0.174611,
+        0.175349,
+        0.198162,
+        0.14618,
+        0.185073,
+        0.1866,
+        0.237286,
+        0.222785,
+        0.243769,
+        0.217241,
+        0.199939,
+        0.21902,
+        0.204219,
+        0.255167,
+        0.23527,
+        0.234557,
+        0.208111,
+        0.152653,
+        0.230884,
+        0.159549,
+        0.175551,
+        0.138006,
+        0.137513,
+        0.09261,
+        0.162325,
+        0.212565,
+        0.238389,
+        0.209043,
+        0.23158,
+        0.172521,
+        0.184824,
+        0.187064,
+        0.201221,
+        0.225154,
+        0.215785,
+        0.25603,
+        0.21959,
+        0.231997,
+        0.19399,
+        0.174705,
+        0.189784,
+        0.229185,
+        0.16054,
+        0.168565,
+        0.184368,
+        0.230853,
+        0.248711,
+        0.268097,
+        0.220622,
+        0.188613,
+        0.226641,
+        0.179571,
+        0.222553,
+        0.240648,
+        0.220727,
+        0.20474,
+        0.155138,
+        0.240388,
+        0.172391,
+        0.09936,
+        0.12689,
+        0.142925,
+        0.216231,
+        0.220244,
+        0.200369,
+        0.231273,
+        0.213367,
+        0.252559,
+        0.210938,
+        0.185805,
+        0.168078,
+        0.185803,
+        0.221229,
+        0.222955,
+        0.203596,
+        0.229341,
+        0.217167,
+        0.265039,
+        0.235274,
+        0.183179,
+        0.181673,
+        0.183423,
+        0.238996,
+        0.220507,
+        0.223021,
+        0.246068,
+        0.205711,
+        0.231244,
+        0.175409,
+        0.064297,
+        0.085262,
+        0.140978,
+        0.271049,
+        0.196338,
+        0.225687,
+        0.230873,
+        0.233226,
+        0.223622,
+        0.189561,
+        0.16058,
+        0.146746,
+        0.144233,
+        0.237322,
+        0.13601,
+        0.201239,
+        0.237011,
+        0.248302,
+        0.259507,
+        0.23307,
+        0.210166,
+        0.137767,
+        0.165389,
+        0.244246,
+        0.21983,
+        0.205198,
+        0.204114,
+        0.213048,
+        0.235811,
+        0.218961,
+        0.20262,
+        0.193198,
+        0.188597,
+        0.156961,
+        0.170062,
+        0.16959,
+        0.207443,
+        0.198587,
+        0.188244,
+        0.154946,
+        0.265983,
+        0.273007,
+        0.212542,
+        0.193727,
+        0.18395,
+        0.189383,
+        0.185575,
+        0.204243,
+        0.201539,
+        0.189215,
+        0.185496,
+        0.190224,
+        0.172319,
+        0.131859,
+        0.15283,
+        0.207698,
+        0.225626,
+        0.170315,
+        0.173598,
+        0.171271,
+        0.271154,
+        0.262811,
+        0.193597,
+        0.192832,
+        0.194672,
+        0.164039,
+        0.173047,
+        0.213637,
+        0.202965,
+        0.191789,
+        0.174209,
+        0.177152,
+        0.158946,
+        0.151974,
+        0.173447,
+        0.205593,
+        0.178652,
+        0.168191,
+        0.154943,
+        0.221965,
+        0.268436,
+        0.227019,
+        0.204962,
+        0.184377,
+        0.190281,
+        0.171126,
+        0.198565,
+        0.222146,
+        0.217286,
+        0.204787,
+        0.18002,
+        0.210984,
+        0.150259,
+        0.173199,
+        0.210826,
+        0.234358,
+        0.193939,
+        0.192361,
+        0.186153,
+        0.215336,
+        0.178552,
+        0.23136,
+        0.238459,
+        0.215179,
+        0.233129,
+        0.221442,
+        0.248599,
+        0.2049,
+        0.144288,
+        0.177846,
+        0.171633,
+        0.141368,
+        0.177122,
+        0.211107,
+        0.251506,
+        0.237641,
+        0.246681,
+        0.186228,
+        0.179952,
+        0.211241,
+        0.181668,
+        0.256444,
+        0.211711,
+        0.195694,
+        0.171422,
+        0.152554,
+        0.213545,
+        0.163851,
+        0.155281,
+        0.162149,
+        0.14133,
+        0.08889,
+        0.132357,
+        0.150668,
+        0.169517,
+        0.21556,
+        0.200214,
+        0.155759,
+        0.194916,
+        0.195443,
+        0.198299,
+        0.232297,
+        0.20716,
+        0.22579,
+        0.192499,
+        0.231059,
+        0.187444,
+        0.149695,
+        0.177922,
+        0.172636,
+        0.137027,
+        0.189555,
+        0.213767,
+        0.168974,
+        0.233167,
+        0.262686,
+        0.210373,
+        0.192671,
+        0.221134,
+        0.187862,
+        0.224785,
+        0.226519,
+        0.230973,
+        0.180748,
+        0.15942,
+        0.222894,
+        0.132682,
+        0.142599,
+        0.125524,
+        0.129789
+      ],
+      "method": "frame RMS, 2048-sample frames at 22050 Hz, DC removed",
+      "basis": "signal"
+    },
+    "sections": {
+      "segments": [
+        {
+          "label": "A",
+          "start": 0,
+          "end": 29.986
+        }
+      ],
+      "method": "novelty-on-beat-chroma",
+      "basis": "signal"
+    },
+    "keyMoments": [
+      {
+        "time": 0.06,
+        "type": "onset",
+        "intensity": 0.454,
+        "description": "Onset"
+      },
+      {
+        "time": 0.51,
+        "type": "energy_peak",
+        "intensity": 0.957,
+        "description": "Energy peak"
+      },
+      {
+        "time": 3.92,
+        "type": "onset",
+        "intensity": 0.282,
+        "description": "Onset"
+      },
+      {
+        "time": 4.82,
+        "type": "onset",
+        "intensity": 0.28,
+        "description": "Onset"
+      },
+      {
+        "time": 7.1,
+        "type": "energy_peak",
+        "intensity": 0.935,
+        "description": "Energy peak"
+      },
+      {
+        "time": 7.56,
+        "type": "onset",
+        "intensity": 0.247,
+        "description": "Onset"
+      },
+      {
+        "time": 9.38,
+        "type": "onset",
+        "intensity": 0.258,
+        "description": "Onset"
+      },
+      {
+        "time": 13.95,
+        "type": "onset",
+        "intensity": 0.226,
+        "description": "Onset"
+      },
+      {
+        "time": 15.32,
+        "type": "harmonic_change",
+        "intensity": 0.201,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 19.71,
+        "type": "onset",
+        "intensity": 0.34,
+        "description": "Onset"
+      },
+      {
+        "time": 21.52,
+        "type": "onset",
+        "intensity": 0.332,
+        "description": "Onset"
+      },
+      {
+        "time": 22.22,
+        "type": "onset",
+        "intensity": 0.305,
+        "description": "Onset"
+      },
+      {
+        "time": 24.93,
+        "type": "onset",
+        "intensity": 0.248,
+        "description": "Onset"
+      },
+      {
+        "time": 25.84,
+        "type": "onset",
+        "intensity": 0.253,
+        "description": "Onset"
+      },
+      {
+        "time": 26.74,
+        "type": "onset",
+        "intensity": 0.278,
+        "description": "Onset"
+      },
+      {
+        "time": 28.56,
+        "type": "energy_peak",
+        "intensity": 0.962,
+        "description": "Energy peak"
+      }
+    ],
+    "fingerprint": {
+      "styles": {
+        "model": {
+          "id": "discogs-effnet-bs64-1",
+          "licence": "CC BY-NC-SA 4.0"
+        },
+        "top": [
+          {
+            "label": "Funk / Soul---Funk",
+            "score": 0.2491
+          },
+          {
+            "label": "Jazz---Jazz-Funk",
+            "score": 0.1055
+          },
+          {
+            "label": "Funk / Soul---Soul",
+            "score": 0.1021
+          },
+          {
+            "label": "Jazz---Easy Listening",
+            "score": 0.0996
+          },
+          {
+            "label": "Jazz---Soul-Jazz",
+            "score": 0.0992
+          },
+          {
+            "label": "Jazz---Latin Jazz",
+            "score": 0.0818
+          },
+          {
+            "label": "Jazz---Bossa Nova",
+            "score": 0.0794
+          },
+          {
+            "label": "Jazz---Big Band",
+            "score": 0.0747
+          },
+          {
+            "label": "Electronic---Acid Jazz",
+            "score": 0.0746
+          },
+          {
+            "label": "Funk / Soul---Psychedelic",
+            "score": 0.0639
+          }
+        ],
+        "basis": "model"
+      },
+      "tags": {
+        "model": {
+          "id": "msd-musicnn-1",
+          "licence": "CC BY-NC-SA 4.0"
+        },
+        "scores": [
+          {
+            "label": "electronic",
+            "score": 0.1583
+          },
+          {
+            "label": "funk",
+            "score": 0.1298
+          },
+          {
+            "label": "rock",
+            "score": 0.0914
+          },
+          {
+            "label": "instrumental",
+            "score": 0.0899
+          },
+          {
+            "label": "soul",
+            "score": 0.0899
+          },
+          {
+            "label": "jazz",
+            "score": 0.0841
+          },
+          {
+            "label": "60s",
+            "score": 0.0735
+          },
+          {
+            "label": "dance",
+            "score": 0.07
+          },
+          {
+            "label": "oldies",
+            "score": 0.0545
+          },
+          {
+            "label": "blues",
+            "score": 0.0541
+          },
+          {
+            "label": "pop",
+            "score": 0.0519
+          },
+          {
+            "label": "electronica",
+            "score": 0.0463
+          },
+          {
+            "label": "indie",
+            "score": 0.0452
+          },
+          {
+            "label": "classic rock",
+            "score": 0.0451
+          },
+          {
+            "label": "chillout",
+            "score": 0.0382
+          },
+          {
+            "label": "experimental",
+            "score": 0.0379
+          },
+          {
+            "label": "Progressive rock",
+            "score": 0.029
+          },
+          {
+            "label": "female vocalists",
+            "score": 0.0274
+          },
+          {
+            "label": "70s",
+            "score": 0.0266
+          },
+          {
+            "label": "alternative",
+            "score": 0.0262
+          },
+          {
+            "label": "electro",
+            "score": 0.0219
+          },
+          {
+            "label": "House",
+            "score": 0.0219
+          },
+          {
+            "label": "Hip-Hop",
+            "score": 0.018
+          },
+          {
+            "label": "ambient",
+            "score": 0.0167
+          },
+          {
+            "label": "indie rock",
+            "score": 0.0162
+          },
+          {
+            "label": "90s",
+            "score": 0.0153
+          },
+          {
+            "label": "80s",
+            "score": 0.014
+          },
+          {
+            "label": "indie pop",
+            "score": 0.0117
+          },
+          {
+            "label": "00s",
+            "score": 0.0106
+          },
+          {
+            "label": "guitar",
+            "score": 0.0106
+          },
+          {
+            "label": "folk",
+            "score": 0.0103
+          },
+          {
+            "label": "party",
+            "score": 0.0102
+          },
+          {
+            "label": "punk",
+            "score": 0.0101
+          },
+          {
+            "label": "chill",
+            "score": 0.0086
+          },
+          {
+            "label": "easy listening",
+            "score": 0.0083
+          },
+          {
+            "label": "alternative rock",
+            "score": 0.008
+          },
+          {
+            "label": "male vocalists",
+            "score": 0.007
+          },
+          {
+            "label": "catchy",
+            "score": 0.0068
+          },
+          {
+            "label": "hard rock",
+            "score": 0.0061
+          },
+          {
+            "label": "beautiful",
+            "score": 0.0059
+          },
+          {
+            "label": "happy",
+            "score": 0.0057
+          },
+          {
+            "label": "rnb",
+            "score": 0.0054
+          },
+          {
+            "label": "Mellow",
+            "score": 0.005
+          },
+          {
+            "label": "sexy",
+            "score": 0.0045
+          },
+          {
+            "label": "acoustic",
+            "score": 0.0037
+          },
+          {
+            "label": "metal",
+            "score": 0.0035
+          },
+          {
+            "label": "female vocalist",
+            "score": 0.0034
+          },
+          {
+            "label": "country",
+            "score": 0.0031
+          },
+          {
+            "label": "heavy metal",
+            "score": 0.0022
+          },
+          {
+            "label": "sad",
+            "score": 0.0019
+          }
+        ],
+        "basis": "model"
+      },
+      "moods": {
+        "danceability": {
+          "value": 0.9607,
+          "range": [
+            0,
+            1
+          ],
+          "model": {
+            "id": "danceability-msd-musicnn-1",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "acoustic": {
+          "value": 0.1937,
+          "range": [
+            0,
+            1
+          ],
+          "model": {
+            "id": "mood_acoustic-discogs-effnet-1",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "instrumental": {
+          "value": 0.6824,
+          "range": [
+            0,
+            1
+          ],
+          "model": {
+            "id": "voice_instrumental-msd-musicnn-1",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "valence": {
+          "value": 5.8652,
+          "range": [
+            1,
+            9
+          ],
+          "model": {
+            "id": "deam-msd-musicnn-2",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "arousal": {
+          "value": 5.8974,
+          "range": [
+            1,
+            9
+          ],
+          "model": {
+            "id": "deam-msd-musicnn-2",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        }
+      }
+    },
+    "withheld": {
+      "tempo": {
+        "code": "unsteady_tempo",
+        "reason": "the tempo does not hold over the window"
+      },
+      "key": {
+        "code": "no_sustained_pitch",
+        "reason": "no sustained pitch"
+      }
+    }
+  },
+  "bpm": null,
+  "key": null,
+  "energy": 0.709,
+  "valence": 0.608,
+  "danceability": 0.961,
+  "acousticness": 0.194,
+  "keyMoments": [
+    {
+      "time": 0.06,
+      "type": "onset",
+      "intensity": 0.454,
+      "description": "Onset"
+    },
+    {
+      "time": 0.51,
+      "type": "energy_peak",
+      "intensity": 0.957,
+      "description": "Energy peak"
+    },
+    {
+      "time": 3.92,
+      "type": "onset",
+      "intensity": 0.282,
+      "description": "Onset"
+    },
+    {
+      "time": 4.82,
+      "type": "onset",
+      "intensity": 0.28,
+      "description": "Onset"
+    },
+    {
+      "time": 7.1,
+      "type": "energy_peak",
+      "intensity": 0.935,
+      "description": "Energy peak"
+    },
+    {
+      "time": 7.56,
+      "type": "onset",
+      "intensity": 0.247,
+      "description": "Onset"
+    },
+    {
+      "time": 9.38,
+      "type": "onset",
+      "intensity": 0.258,
+      "description": "Onset"
+    },
+    {
+      "time": 13.95,
+      "type": "onset",
+      "intensity": 0.226,
+      "description": "Onset"
+    },
+    {
+      "time": 15.32,
+      "type": "harmonic_change",
+      "intensity": 0.201,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 19.71,
+      "type": "onset",
+      "intensity": 0.34,
+      "description": "Onset"
+    },
+    {
+      "time": 21.52,
+      "type": "onset",
+      "intensity": 0.332,
+      "description": "Onset"
+    },
+    {
+      "time": 22.22,
+      "type": "onset",
+      "intensity": 0.305,
+      "description": "Onset"
+    },
+    {
+      "time": 24.93,
+      "type": "onset",
+      "intensity": 0.248,
+      "description": "Onset"
+    },
+    {
+      "time": 25.84,
+      "type": "onset",
+      "intensity": 0.253,
+      "description": "Onset"
+    },
+    {
+      "time": 26.74,
+      "type": "onset",
+      "intensity": 0.278,
+      "description": "Onset"
+    },
+    {
+      "time": 28.56,
+      "type": "energy_peak",
+      "intensity": 0.962,
+      "description": "Energy peak"
+    }
+  ],
+  "audioSource": "unavailable",
+  "audioConfidence": "low",
+  "audioUnavailableReason": "not_detected"
+}

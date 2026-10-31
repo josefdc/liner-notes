@@ -107,7 +107,7 @@ test("--mode replay --score-only scores recorded runs on the subset, offline", (
     "evals/agent/testdata/runs",
   ]);
   assert.equal(out.status, 0, out.stderr);
-  assert.match(out.stdout, /over 6 tracks \(subset: ci\)/);
+  assert.match(out.stdout, /over 7 tracks \(subset: ci\)/);
   assert.deepEqual(out.attempts, [0]);
 });
 

@@ -258,3 +258,102 @@ export function differences(recorded, replayed) {
   const b = comparable(replayed);
   return Object.keys(a).filter((k) => JSON.stringify(a[k]) !== JSON.stringify(b[k]));
 }
+
+/** Where a run-record directory keeps each row's normalised result: <runs>/results/<ISRC>.json. */
+export const RESULTS_DIR = "results";
+
+/**
+ * What of a result a replay may change, and so what normalisedResult() masks. Nothing else is
+ * masked: every other field of the result (identity, the audio block and every audio feature,
+ * key moments, segments, factoids, the release year, every genealogy node and link, claims with
+ * their verdicts and evidence ids, evidence, sample list, source errors, the run's usage and
+ * verifier counts) must come back as recorded.
+ */
+export const RESULT_MASKS = [
+  {
+    what: "the run's id, and the ids of claims, factoids and factoid entities (and references)",
+    why: "new random ids each run; each becomes its order of first appearance",
+  },
+  {
+    what: "run.mode, run.replayed, run.recordedAt, run.commit and run.usage.usd: left out",
+    why: "how and when the run was made (live or replayed); a replay spends nothing",
+  },
+  {
+    what: "previewUrl, anywhere: left out",
+    why: "a signed link that expires; the cassettes keep no signed link, so a replay has none",
+  },
+  {
+    what: "coverUrl: kept as present or absent; genealogy node img: left out",
+    why: "CDN image links, kept out of the committed files; the cassettes keep no image of a related recording",
+  },
+  {
+    what: "evidence retrievedAt",
+    why: "the time the run read the source",
+  },
+];
+
+const DROPPED_KEYS = new Set(["previewUrl", "img"]);
+const LINK_KEYS = new Set(["coverUrl"]);
+const RUN_DROPPED = ["mode", "replayed", "recordedAt", "commit"];
+const TIME_KEYS = new Set(["retrievedAt"]);
+
+/**
+ * The `complete` result of an event stream with RESULT_MASKS applied, or null when the run gave
+ * none. Two runs that should agree give equal values (compare them with resultDifferences()).
+ */
+export function normalisedResult(events) {
+  const data = (events ?? []).find((e) => e.type === "complete")?.data;
+  if (!data) return null;
+  const ids = [
+    data.run?.id,
+    ...(data.claims ?? []).map((c) => c.id),
+    ...(data.factoids ?? []).flatMap((f) => [f.id, ...(f.entities ?? []).map((e) => e?.id)]),
+  ].filter((id) => typeof id === "string" && id);
+  const placeholder = new Map([...new Set(ids)].map((id, i) => [id, `<id ${i + 1}>`]));
+  const walk = (value) => {
+    if (Array.isArray(value)) return value.map(walk);
+    if (value && typeof value === "object") {
+      return Object.fromEntries(
+        Object.entries(value)
+          .filter(([k]) => !DROPPED_KEYS.has(k))
+          .map(([k, v]) => {
+            if (LINK_KEYS.has(k) && typeof v === "string") return [k, "[link]"];
+            if (TIME_KEYS.has(k) && typeof v === "string") return [k, "[time]"];
+            return [k, walk(v)];
+          }),
+      );
+    }
+    return typeof value === "string" && placeholder.has(value) ? placeholder.get(value) : value;
+  };
+  const out = walk(data);
+  if (out.run && typeof out.run === "object") {
+    for (const k of RUN_DROPPED) delete out.run[k];
+    if (out.run.usage && typeof out.run.usage === "object") delete out.run.usage.usd;
+  }
+  return out;
+}
+
+/** The paths where two normalised results differ, with both values, at most `limit` of them. */
+export function resultDifferences(recorded, replayed, limit = 10) {
+  const out = [];
+  const short = (v) => {
+    const s = v === undefined ? "(absent)" : JSON.stringify(v);
+    return s.length > 80 ? `${s.slice(0, 77)}...` : s;
+  };
+  const visit = (a, b, path) => {
+    if (out.length >= limit) return;
+    const container = (x) => x !== null && typeof x === "object";
+    if (container(a) && container(b) && Array.isArray(a) === Array.isArray(b)) {
+      const keys = Array.isArray(a)
+        ? [...Array(Math.max(a.length, b.length)).keys()]
+        : [...new Set([...Object.keys(a), ...Object.keys(b)])];
+      for (const k of keys) visit(a[k], b[k], Array.isArray(a) ? `${path}[${k}]` : `${path}.${k}`);
+      return;
+    }
+    if (JSON.stringify(a) !== JSON.stringify(b)) {
+      out.push(`${path || "(result)"}: recorded ${short(a)}, replayed ${short(b)}`);
+    }
+  };
+  visit(recorded, replayed, "");
+  return out;
+}

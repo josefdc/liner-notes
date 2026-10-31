@@ -1,0 +1,1687 @@
+{
+  "id": "2WfaOiMkCvy7F5fcp2zZ8L",
+  "title": "Take on Me",
+  "artist": "a-ha",
+  "album": "Hunting High and Low",
+  "coverUrl": "[link]",
+  "spotifyUrl": "https://open.spotify.com/track/2WfaOiMkCvy7F5fcp2zZ8L",
+  "releaseYear": "1985",
+  "explicit": false,
+  "durationSeconds": 225,
+  "isrc": "USWB19901214",
+  "preview": {
+    "provider": "deezer",
+    "method": "isrc",
+    "score": null
+  },
+  "queryMatch": "exact",
+  "evidence": [
+    {
+      "id": "musicbrainz:track/recording/a73fe6ab-7a3c-42ac-b15c-9725bf30d445",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/a73fe6ab-7a3c-42ac-b15c-9725bf30d445",
+      "title": "Take On Me — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Take On Me\" by a‐ha (3:45), ISRC USWB19901214, first released 2020.",
+      "recordRef": "track/recording/a73fe6ab-7a3c-42ac-b15c-9725bf30d445"
+    },
+    {
+      "id": "musicbrainz:work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2/covered-by/recording/6450fa18-5fa3-40b2-89fe-e756fe213a6c",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2",
+      "title": "Take On Me — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Take On Me\" is covered by \"Take On Me\" by MxPx.",
+      "recordRef": "work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2/covered-by/recording/6450fa18-5fa3-40b2-89fe-e756fe213a6c"
+    },
+    {
+      "id": "musicbrainz:work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2/covered-by/recording/ab59f47e-34cf-4d6f-a6af-d5a8955b2e9f",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2",
+      "title": "Take On Me — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Take On Me\" is covered by \"Take on Me\" by Ronald Reagan.",
+      "recordRef": "work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2/covered-by/recording/ab59f47e-34cf-4d6f-a6af-d5a8955b2e9f"
+    },
+    {
+      "id": "musicbrainz:work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2/covered-by/recording/4d270c91-c1bf-4d8a-b48e-b6beabe2f1cf",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2",
+      "title": "Take On Me — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Take On Me\" is covered by \"Take on me\" by Sambô.",
+      "recordRef": "work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2/covered-by/recording/4d270c91-c1bf-4d8a-b48e-b6beabe2f1cf"
+    },
+    {
+      "id": "musicbrainz:work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2/covered-by/recording/d451fcfb-6f53-4f49-91ed-c908b9b8a1f2",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2",
+      "title": "Take On Me — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Take On Me\" is covered by \"Take on Me\" by Shalosh.",
+      "recordRef": "work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2/covered-by/recording/d451fcfb-6f53-4f49-91ed-c908b9b8a1f2"
+    },
+    {
+      "id": "musicbrainz:work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2/covered-by/recording/5833ce55-9cc8-492b-8cc4-0421faa31ec7",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2",
+      "title": "Take On Me — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Take On Me\" is covered by \"Take On Me\" by Goose.",
+      "recordRef": "work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2/covered-by/recording/5833ce55-9cc8-492b-8cc4-0421faa31ec7"
+    },
+    {
+      "id": "musicbrainz:work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2/covered-by/recording/b078f8fd-ae48-483f-b4bf-9b0de8d9ce31",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2",
+      "title": "Take On Me — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Take On Me\" is covered by \"Take on Me\" by Goose.",
+      "recordRef": "work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2/covered-by/recording/b078f8fd-ae48-483f-b4bf-9b0de8d9ce31"
+    },
+    {
+      "id": "musicbrainz:work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2/covered-by/recording/20ad4d4d-0614-498e-8a67-6e82e2dc4b5e",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2",
+      "title": "Take On Me — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Take On Me\" is covered by \"Take On Me\" by Goose.",
+      "recordRef": "work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2/covered-by/recording/20ad4d4d-0614-498e-8a67-6e82e2dc4b5e"
+    },
+    {
+      "id": "musicbrainz:work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2/covered-by/recording/fff99772-3f32-4107-b163-96db71c179ba",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2",
+      "title": "Take On Me — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Take On Me\" is covered by \"Take On Me\" by Goose.",
+      "recordRef": "work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2/covered-by/recording/fff99772-3f32-4107-b163-96db71c179ba"
+    },
+    {
+      "id": "musicbrainz:work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2/covered-by/recording/b502fad3-2151-4490-8302-afecb2dbaf8d",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2",
+      "title": "Take On Me — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Take On Me\" is covered by \"Take On Me\" by Goose.",
+      "recordRef": "work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2/covered-by/recording/b502fad3-2151-4490-8302-afecb2dbaf8d"
+    },
+    {
+      "id": "musicbrainz:work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2/covered-by/recording/220e1043-4859-4382-a1f6-fea434754f31",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2",
+      "title": "Take On Me — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Take On Me\" is covered by \"Take On Me\" by Goose.",
+      "recordRef": "work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2/covered-by/recording/220e1043-4859-4382-a1f6-fea434754f31"
+    },
+    {
+      "id": "musicbrainz:work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2/covered-by/recording/10cf9d62-1f24-4f26-9320-74fa5ced5d1d",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2",
+      "title": "Take On Me — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Take On Me\" is covered by \"Take On Me\" by Wendy Wang feat. Inga Roberts.",
+      "recordRef": "work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2/covered-by/recording/10cf9d62-1f24-4f26-9320-74fa5ced5d1d"
+    },
+    {
+      "id": "musicbrainz:work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2/covered-by/recording/d4a76e37-ecce-46d0-b3b4-15119ffe5c57",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2",
+      "title": "Take On Me — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Take On Me\" is covered by \"Take On Me\" by Orebolo.",
+      "recordRef": "work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2/covered-by/recording/d4a76e37-ecce-46d0-b3b4-15119ffe5c57"
+    },
+    {
+      "id": "musicbrainz:work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2/covered-by/recording/7ed38e77-6798-4912-8d9d-2f309a3b724e",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2",
+      "title": "Take On Me — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Take On Me\" is covered by \"Take On Me\" by Goose.",
+      "recordRef": "work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2/covered-by/recording/7ed38e77-6798-4912-8d9d-2f309a3b724e"
+    },
+    {
+      "id": "musicbrainz:work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2/covered-by/recording/71926460-80bc-45e8-80e7-46a4cbb6a2ff",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2",
+      "title": "Take On Me — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Take On Me\" is covered by \"Take On Me\" by Goose.",
+      "recordRef": "work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2/covered-by/recording/71926460-80bc-45e8-80e7-46a4cbb6a2ff"
+    },
+    {
+      "id": "musicbrainz:work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2/covered-by/recording/911c7696-81f7-4649-939e-5fdda31cca8d",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2",
+      "title": "Take On Me — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Take On Me\" is covered by \"Take on Me\" by Goose.",
+      "recordRef": "work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2/covered-by/recording/911c7696-81f7-4649-939e-5fdda31cca8d"
+    },
+    {
+      "id": "musicbrainz:work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2/covered-by/recording/bb9dc26c-60db-4aec-9766-c9a131207f45",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2",
+      "title": "Take On Me — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Take On Me\" is covered by \"Take On Me\" by The Dreggs.",
+      "recordRef": "work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2/covered-by/recording/bb9dc26c-60db-4aec-9766-c9a131207f45"
+    },
+    {
+      "id": "musicbrainz:work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2/covered-by/recording/5c1dfd43-006d-4794-9988-97c0563ddd45",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2",
+      "title": "Take On Me — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Take On Me\" is covered by \"Take On Me (Musora session)\" by Leprous.",
+      "recordRef": "work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2/covered-by/recording/5c1dfd43-006d-4794-9988-97c0563ddd45"
+    },
+    {
+      "id": "musicbrainz:work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2/covered-by/recording/a9a6cdf1-885a-46b3-b67b-132ea55b38c2",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2",
+      "title": "Take On Me — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Take On Me\" is covered by \"Take on Me\" by Goose.",
+      "recordRef": "work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2/covered-by/recording/a9a6cdf1-885a-46b3-b67b-132ea55b38c2"
+    },
+    {
+      "id": "musicbrainz:work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2/covered-by/recording/4c7cd8c2-3981-44a2-bcfc-e4ab97c5369f",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2",
+      "title": "Take On Me — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Take On Me\" is covered by \"a-ha - Take On Me\" by WillRock.",
+      "recordRef": "work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2/covered-by/recording/4c7cd8c2-3981-44a2-bcfc-e4ab97c5369f"
+    },
+    {
+      "id": "musicbrainz:work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2/covered-by/recording/b01aa18f-31b7-46b9-ad5a-4107bf45287a",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2",
+      "title": "Take On Me — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Take On Me\" is covered by \"Aha ‘Take on Me’\" by Walt Ribeiro.",
+      "recordRef": "work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2/covered-by/recording/b01aa18f-31b7-46b9-ad5a-4107bf45287a"
+    },
+    {
+      "id": "musicbrainz:work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2/covered-by/recording/b72fe6a9-e614-4ebe-b89f-94e6ca6426dd",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2",
+      "title": "Take On Me — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Take On Me\" is covered by \"Feel This Moment\" by Pitbull feat. Christina Aguilera.",
+      "recordRef": "work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2/covered-by/recording/b72fe6a9-e614-4ebe-b89f-94e6ca6426dd"
+    },
+    {
+      "id": "musicbrainz:work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2/covered-by/recording/4ace42c8-b496-4fac-9511-2097162e9b8d",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2",
+      "title": "Take On Me — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Take On Me\" is covered by \"Honk on Me\" by aberrantkenosis.",
+      "recordRef": "work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2/covered-by/recording/4ace42c8-b496-4fac-9511-2097162e9b8d"
+    },
+    {
+      "id": "musicbrainz:work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2/covered-by/recording/25500b76-f0ab-4644-bb10-e9ccf485af03",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2",
+      "title": "Take On Me — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Take On Me\" is covered by \"Ich geb' Gas im Schnitzelwagen\" by Unicante.",
+      "recordRef": "work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2/covered-by/recording/25500b76-f0ab-4644-bb10-e9ccf485af03"
+    },
+    {
+      "id": "musicbrainz:work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2/covered-by/recording/e5933832-a11c-494d-82d0-3dedeb8564ad",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2",
+      "title": "Take On Me — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Take On Me\" is covered by \"Mn'chi\" by Zombie Eaters.",
+      "recordRef": "work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2/covered-by/recording/e5933832-a11c-494d-82d0-3dedeb8564ad"
+    },
+    {
+      "id": "musicbrainz:work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2/covered-by/recording/437fdb95-0a6f-4ab3-b7dd-73a8c694f140",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2",
+      "title": "Take On Me — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Take On Me\" is covered by \"Mystery Song #1\" by Nothing Painted Blue.",
+      "recordRef": "work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2/covered-by/recording/437fdb95-0a6f-4ab3-b7dd-73a8c694f140"
+    },
+    {
+      "id": "tavily:https://www.whosampled.com/A-ha",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.whosampled.com/A-ha",
+      "title": "A-ha - Samples, Covers and Remixes\n | WhoSampled",
+      "retrievedAt": "[time]",
+      "excerpt": "A-ha # A-ha Group Members: ## Morten Harket, Magne Furuholmen, Paul Waaktaar-Savoy 125 samples, 259 covers, 53 remixes A-ha's Take on Me ### Take on Me (1985) was sampled in Feel This Moment by Pitbull feat. Christina Aguilera (2012) Perfect by Lucas & Steve feat. Haris (2019) Bishbosh by Yolk (1992) see 259 more connections A-ha's The Sun Always Shines on T.V. ### The Sun Always Shines on T.V. (1985) was sampled in [...] was covered in Hunting High and Low by Coldplay (2002) Estrela Cadente by…",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.whosampled.com/A1/Take-on-Me",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.whosampled.com/A1/Take-on-Me",
+      "title": "Take on Me by A1 - Samples, Covers and Remixes",
+      "retrievedAt": "[time]",
+      "excerpt": "Take on Me by A1 - discover this song's samples, covers and remixes on WhoSampled. ... A-ha's Take on Me · Take on Me · A-ha, 1985, Rock / Pop. Questions &",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.whosampled.com/A-ha/Take-on-Me/sampled",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.whosampled.com/A-ha/Take-on-Me/sampled",
+      "title": "Songs that Sampled Take on Me by A-ha",
+      "retrievedAt": "[time]",
+      "excerpt": "Sampled in 85 songs. Pitbull feat. Christina Aguilera's Feel This Moment. Lucas & Steve feat. Haris's Perfect. Sickboy's Take Me On Take Me On",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.whosampled.com/A-ha/Take-on-Me",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.whosampled.com/A-ha/Take-on-Me",
+      "title": "Take on Me by A-ha - Samples, Covers and Remixes",
+      "retrievedAt": "[time]",
+      "excerpt": "Sampled in 85 songs Pitbull feat. Christina Aguilera's Feel This Moment. Lucas & Steve feat. Haris's Perfect",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://play.google.com/store/apps/details?id=com.whosampled",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://play.google.com/store/apps/details?id=com.whosampled",
+      "title": "WhoSampled - Apps on Google Play",
+      "retrievedAt": "[time]",
+      "excerpt": "Play Pass Play Points Gift cards Redeem Refund policy Parent Guide Family sharing Terms of Service Privacy About Google Play Developers Google Store [...] Icon image Icon image # WhoSampled Content rating Content rating Screenshot image Screenshot image Screenshot image Screenshot image ## About this app ## Data safety Icon image Icon image Icon image Icon image ## Ratings and reviews ## What’s new Content rating ## App support ## More by Spotify AB Thumbnail image Thumbnail image Thumbnail ima…",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://en.wikipedia.org/wiki/Take_On_Me",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://en.wikipedia.org/wiki/Take_On_Me",
+      "title": "Take On Me - Wikipedia",
+      "retrievedAt": "[time]",
+      "excerpt": "\"Take On Me\" is a song by the Norwegian synth-pop band a-ha. The original version, recorded in 1984 and released in October of that year, was produced by Tony Mansfield and remixed by John Ratcliff \"John Ratcliff (producer)\"). The 1985 international hit version was produced by Alan Tarney for the group's debut studio album, Hunting High and Low (1985). The recording combines synth-pop with a varied instrumentation, including acoustic guitars, keyboards, and drums. [...] The band moved into an a…",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.songfacts.com/facts/a-ha/take-on-me",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.songfacts.com/facts/a-ha/take-on-me",
+      "title": "Take On Me by a-ha - Songfacts",
+      "retrievedAt": "[time]",
+      "excerpt": "In early 1984, they re-wrote the song as \"Take On Me\" and recorded it with producer Tony Mansfield. Released as a single only in Europe, it went to #3 in their native Norway, but didn't chart anywhere else, flopping particularly hard in the UK. A video was made for this version that was remarkably undistinguished compared with the one that came after. [...] Patterson told us: \"We started on a-ha's 'Take on Me' - the project began with my animated film Commuter, which won the student academy awa…",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://parade.com/news/a-ha-take-on-me-40th-anniversary-no1-billboard-1985",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://parade.com/news/a-ha-take-on-me-40th-anniversary-no1-billboard-1985",
+      "title": "a-ha's 'Take On Me' Hit No. 1 40 Years Ago - Parade",
+      "retrievedAt": "[time]",
+      "excerpt": "Oct 9, 2025 — They re-recorded it with producer Alan Tarney, gave it a brighter, more radio-friendly sound and then teamed up with director Steve Barron to ...Read more",
+      "recordRef": null
+    }
+  ],
+  "segments": [
+    {
+      "label": "Intro",
+      "start": 0,
+      "end": 8
+    },
+    {
+      "label": "Verse 1",
+      "start": 8,
+      "end": 25
+    },
+    {
+      "label": "Chorus",
+      "start": 25,
+      "end": 42
+    },
+    {
+      "label": "Verse 2",
+      "start": 42,
+      "end": 58
+    },
+    {
+      "label": "Bridge",
+      "start": 58,
+      "end": 75
+    },
+    {
+      "label": "Chorus",
+      "start": 75,
+      "end": 92
+    },
+    {
+      "label": "Outro",
+      "start": 92,
+      "end": 100
+    }
+  ],
+  "segmentsSource": "template",
+  "samples": [],
+  "factoids": [
+    {
+      "id": "<id 12>",
+      "title": "A brighter second recording",
+      "content": "The 1985 international-hit version was produced by Alan Tarney, following an earlier version recorded with Tony Mansfield. The earlier recording and the hit version were distinct versions of the song.",
+      "type": "production",
+      "entities": [
+        {
+          "id": "<id 13>",
+          "text": "Alan Tarney",
+          "type": "producer",
+          "searchQuery": "Alan Tarney"
+        },
+        {
+          "id": "<id 14>",
+          "text": "Tony Mansfield",
+          "type": "producer",
+          "searchQuery": "Tony Mansfield"
+        }
+      ],
+      "claimId": "<id 5>"
+    },
+    {
+      "id": "<id 15>",
+      "title": "A later sample connection",
+      "content": "WhoSampled lists a-ha’s “Take On Me” as sampled in “Feel This Moment” by Pitbull featuring Christina Aguilera.",
+      "type": "sample",
+      "entities": [
+        {
+          "id": "<id 16>",
+          "text": "Pitbull",
+          "type": "artist",
+          "searchQuery": "Pitbull"
+        },
+        {
+          "id": "<id 17>",
+          "text": "Christina Aguilera",
+          "type": "artist",
+          "searchQuery": "Christina Aguilera"
+        },
+        {
+          "id": "<id 18>",
+          "text": "Feel This Moment",
+          "type": "artist",
+          "searchQuery": "Feel This Moment"
+        }
+      ],
+      "claimId": "<id 6>"
+    }
+  ],
+  "genealogy": {
+    "nodes": [
+      {
+        "id": "current",
+        "group": 1,
+        "label": "Take on Me",
+        "size": 40,
+        "trackTitle": "Take on Me",
+        "trackArtist": "a-ha",
+        "mbid": "a73fe6ab-7a3c-42ac-b15c-9725bf30d445"
+      },
+      {
+        "id": "feel-this-moment",
+        "group": 3,
+        "label": "Feel This Moment - Pitbull feat. Christina Aguilera (2012)",
+        "size": 22,
+        "trackTitle": "Feel This Moment",
+        "trackArtist": "Pitbull feat. Christina Aguilera",
+        "spotifyId": "0Hf4aIJpsN4Os2f0y0VqWl"
+      }
+    ],
+    "links": [
+      {
+        "source": "current",
+        "target": "feel-this-moment",
+        "value": 3,
+        "type": "sample",
+        "kind": "sourced",
+        "origin": "model",
+        "claimId": "<id 7>",
+        "evidenceIds": [
+          "tavily:https://www.whosampled.com/A-ha"
+        ]
+      }
+    ]
+  },
+  "claims": [
+    {
+      "id": "<id 2>",
+      "text": "MusicBrainz lists this recording of “Take On Me” by a-ha at 3:45, with a first-release date of 2020.",
+      "about": "track",
+      "evidenceIds": [
+        "musicbrainz:track/recording/a73fe6ab-7a3c-42ac-b15c-9725bf30d445"
+      ],
+      "scope": "recording",
+      "kind": "sourced",
+      "origin": "model",
+      "verdict": "partial",
+      "verdictReason": "The MusicBrainz recording excerpt gives those details but does not identify it as this 1985 track.",
+      "numericCheck": "n/a",
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 3>",
+      "text": "The 1985 international-hit version was produced by Alan Tarney for a-ha’s debut album, Hunting High and Low.",
+      "about": "production",
+      "evidenceIds": [],
+      "scope": "recording",
+      "kind": "inferred",
+      "origin": "model",
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 4>",
+      "text": "Pitbull and Christina Aguilera’s “Feel This Moment” samples a-ha’s “Take On Me.”",
+      "about": "sample",
+      "evidenceIds": [
+        "tavily:https://www.whosampled.com/A-ha"
+      ],
+      "scope": "work",
+      "kind": "sourced",
+      "origin": "model",
+      "verdict": "supported",
+      "verdictReason": "The WhoSampled excerpt says a-ha’s “Take on Me” was sampled in Pitbull’s “Feel This Moment.”",
+      "numericCheck": "n/a",
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 5>",
+      "text": "The 1985 international-hit version was produced by Alan Tarney, following an earlier version recorded with Tony Mansfield. The earlier recording and the hit version were distinct versions of the song.",
+      "about": "production",
+      "evidenceIds": [],
+      "scope": "work",
+      "kind": "inferred",
+      "origin": "model",
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "factoid": {
+        "title": "A brighter second recording",
+        "type": "production",
+        "entities": [
+          {
+            "text": "Alan Tarney",
+            "type": "producer"
+          },
+          {
+            "text": "Tony Mansfield",
+            "type": "producer"
+          }
+        ]
+      },
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 6>",
+      "text": "WhoSampled lists a-ha’s “Take On Me” as sampled in “Feel This Moment” by Pitbull featuring Christina Aguilera.",
+      "about": "sample",
+      "evidenceIds": [
+        "tavily:https://www.whosampled.com/A-ha"
+      ],
+      "scope": "work",
+      "kind": "sourced",
+      "origin": "model",
+      "verdict": "supported",
+      "verdictReason": "The WhoSampled excerpt lists “Feel This Moment” as sampling a-ha’s “Take on Me.”",
+      "numericCheck": "n/a",
+      "factoid": {
+        "title": "A later sample connection",
+        "type": "sample",
+        "entities": [
+          {
+            "text": "Pitbull",
+            "type": "artist"
+          },
+          {
+            "text": "Christina Aguilera",
+            "type": "artist"
+          },
+          {
+            "text": "Feel This Moment",
+            "type": "artist"
+          }
+        ]
+      },
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 7>",
+      "text": "\"Feel This Moment - Pitbull feat. Christina Aguilera (2012)\" samples \"Take on Me - a-ha\".",
+      "about": "sample",
+      "evidenceIds": [
+        "tavily:https://www.whosampled.com/A-ha"
+      ],
+      "scope": "recording",
+      "kind": "sourced",
+      "origin": "model",
+      "verdict": "supported",
+      "verdictReason": "The WhoSampled excerpt says a-ha’s 1985 “Take on Me” was sampled in “Feel This Moment.”",
+      "numericCheck": "n/a"
+    },
+    {
+      "id": "<id 8>",
+      "text": "The work \"Take On Me\" is covered by \"Take On Me\" by MxPx.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2/covered-by/recording/6450fa18-5fa3-40b2-89fe-e756fe213a6c"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 9>",
+      "text": "The work \"Take On Me\" is covered by \"Take on Me\" by Ronald Reagan.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2/covered-by/recording/ab59f47e-34cf-4d6f-a6af-d5a8955b2e9f"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 10>",
+      "text": "The work \"Take On Me\" is covered by \"Take on me\" by Sambô.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2/covered-by/recording/4d270c91-c1bf-4d8a-b48e-b6beabe2f1cf"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 11>",
+      "text": "The work \"Take On Me\" is covered by \"Take on Me\" by Shalosh.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/3ea9248d-d6dd-3dfa-b498-b9b2444bf3e2/covered-by/recording/d451fcfb-6f53-4f49-91ed-c908b9b8a1f2"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    }
+  ],
+  "run": {
+    "id": "<id 1>",
+    "analyzerVersion": "2.3.6+essentia.models-5c5c0c7f",
+    "fallback": false,
+    "usage": {
+      "llmCalls": 4,
+      "inputTokens": 13554,
+      "outputTokens": 2020,
+      "reasoningTokens": 794
+    },
+    "verifier": {
+      "judged": 7,
+      "unjudged": 0,
+      "restated": 3
+    },
+    "sourceErrors": [
+      {
+        "source": "discogs",
+        "code": "not_configured",
+        "message": "DISCOGS_TOKEN is not set"
+      },
+      {
+        "source": "secondhandsongs",
+        "code": "unavailable",
+        "message": "secondhandsongs: HTTP 403 (the source refused the request)"
+      }
+    ]
+  },
+  "audio": {
+    "version": 2,
+    "analyzerVersion": "2.3.6+essentia.models-5c5c0c7f",
+    "window": {
+      "kind": "preview-30s",
+      "durationSeconds": 29.986
+    },
+    "gate": {
+      "passed": true,
+      "reason": null
+    },
+    "tempo": {
+      "bpm": 168.91,
+      "confidence": 0.605,
+      "rawConfidence": {
+        "value": 3.22,
+        "range": [
+          0,
+          5.32
+        ]
+      },
+      "method": "essentia.RhythmExtractor2013+beat-regression",
+      "basis": "signal"
+    },
+    "key": null,
+    "loudness": {
+      "rmsMean": 0.219569,
+      "method": "mean frame RMS, 2048-sample frames at 22050 Hz, DC removed",
+      "basis": "signal"
+    },
+    "beats": {
+      "times": [
+        0.337,
+        0.685,
+        1.033,
+        1.393,
+        1.741,
+        2.101,
+        2.461,
+        2.81,
+        3.158,
+        3.518,
+        3.878,
+        4.226,
+        4.586,
+        4.946,
+        5.294,
+        5.654,
+        6.014,
+        6.362,
+        6.722,
+        7.07,
+        7.43,
+        7.779,
+        8.139,
+        8.499,
+        8.858,
+        9.207,
+        9.567,
+        9.915,
+        10.275,
+        10.623,
+        10.971,
+        11.331,
+        11.691,
+        12.051,
+        12.399,
+        12.759,
+        13.108,
+        13.468,
+        13.816,
+        14.176,
+        14.524,
+        14.884,
+        15.232,
+        15.592,
+        15.952,
+        16.3,
+        16.66,
+        17.009,
+        17.357,
+        17.717,
+        18.077,
+        18.425,
+        18.785,
+        19.145,
+        19.505,
+        19.865,
+        20.213,
+        20.573,
+        20.921,
+        21.281,
+        21.641,
+        21.989,
+        22.349,
+        22.698,
+        23.057,
+        23.406,
+        23.766,
+        24.126,
+        24.485,
+        24.834,
+        25.194,
+        25.542,
+        25.902,
+        26.262,
+        26.622,
+        26.97,
+        27.318,
+        27.678,
+        28.038,
+        28.386,
+        28.746,
+        29.106,
+        29.455,
+        29.814
+      ],
+      "method": "essentia.RhythmExtractor2013",
+      "basis": "signal"
+    },
+    "energyContour": {
+      "hopSeconds": 0.09288,
+      "values": [
+        0.143814,
+        0.250129,
+        0.242751,
+        0.276621,
+        0.217186,
+        0.273973,
+        0.19501,
+        0.266965,
+        0.194476,
+        0.208255,
+        0.199386,
+        0.203005,
+        0.19639,
+        0.188726,
+        0.215294,
+        0.199356,
+        0.250817,
+        0.255021,
+        0.223345,
+        0.19934,
+        0.253434,
+        0.258062,
+        0.196934,
+        0.151935,
+        0.261319,
+        0.215828,
+        0.26801,
+        0.201092,
+        0.214,
+        0.175355,
+        0.194508,
+        0.157644,
+        0.237379,
+        0.211444,
+        0.285077,
+        0.217071,
+        0.272913,
+        0.21933,
+        0.229948,
+        0.19198,
+        0.189627,
+        0.206297,
+        0.210728,
+        0.207979,
+        0.211469,
+        0.211175,
+        0.209803,
+        0.243251,
+        0.214446,
+        0.209728,
+        0.184202,
+        0.257551,
+        0.187311,
+        0.19792,
+        0.182912,
+        0.262402,
+        0.213369,
+        0.241147,
+        0.211925,
+        0.217004,
+        0.204408,
+        0.189937,
+        0.218306,
+        0.234283,
+        0.232228,
+        0.231462,
+        0.256641,
+        0.218004,
+        0.249365,
+        0.228782,
+        0.208435,
+        0.201102,
+        0.258986,
+        0.219727,
+        0.201915,
+        0.201707,
+        0.256885,
+        0.186478,
+        0.196455,
+        0.20916,
+        0.255833,
+        0.211613,
+        0.208709,
+        0.225335,
+        0.236979,
+        0.206733,
+        0.197628,
+        0.228049,
+        0.219249,
+        0.191949,
+        0.193999,
+        0.257924,
+        0.213631,
+        0.214129,
+        0.216545,
+        0.265133,
+        0.208049,
+        0.197957,
+        0.222922,
+        0.240948,
+        0.218611,
+        0.20045,
+        0.217706,
+        0.253082,
+        0.196432,
+        0.209011,
+        0.238008,
+        0.237965,
+        0.206255,
+        0.207219,
+        0.24098,
+        0.219702,
+        0.202147,
+        0.205374,
+        0.255842,
+        0.184353,
+        0.192211,
+        0.183186,
+        0.25722,
+        0.201751,
+        0.208225,
+        0.214754,
+        0.240736,
+        0.205356,
+        0.193155,
+        0.221179,
+        0.225137,
+        0.21573,
+        0.238229,
+        0.236732,
+        0.232327,
+        0.188595,
+        0.199989,
+        0.245006,
+        0.211257,
+        0.211649,
+        0.191997,
+        0.268607,
+        0.197993,
+        0.205189,
+        0.201156,
+        0.256526,
+        0.202916,
+        0.197877,
+        0.217737,
+        0.243796,
+        0.209342,
+        0.20305,
+        0.22701,
+        0.232559,
+        0.195018,
+        0.213678,
+        0.24963,
+        0.209733,
+        0.214095,
+        0.219374,
+        0.263525,
+        0.219074,
+        0.217129,
+        0.221944,
+        0.249504,
+        0.222942,
+        0.237036,
+        0.238983,
+        0.26867,
+        0.221489,
+        0.234455,
+        0.234831,
+        0.245906,
+        0.218012,
+        0.208054,
+        0.245063,
+        0.225059,
+        0.194627,
+        0.194066,
+        0.246338,
+        0.212664,
+        0.210264,
+        0.18824,
+        0.250762,
+        0.197003,
+        0.200932,
+        0.208243,
+        0.259241,
+        0.202959,
+        0.192322,
+        0.214852,
+        0.25089,
+        0.226867,
+        0.253349,
+        0.235308,
+        0.248958,
+        0.20431,
+        0.201984,
+        0.206968,
+        0.196821,
+        0.208877,
+        0.198382,
+        0.192143,
+        0.194987,
+        0.265114,
+        0.213489,
+        0.257827,
+        0.222872,
+        0.267983,
+        0.222789,
+        0.258948,
+        0.201748,
+        0.203385,
+        0.217588,
+        0.194137,
+        0.21244,
+        0.209709,
+        0.209156,
+        0.180324,
+        0.214607,
+        0.204666,
+        0.252755,
+        0.238234,
+        0.254923,
+        0.234242,
+        0.268828,
+        0.219645,
+        0.22892,
+        0.221527,
+        0.2073,
+        0.216388,
+        0.263758,
+        0.2161,
+        0.26219,
+        0.216702,
+        0.183201,
+        0.205297,
+        0.202199,
+        0.227814,
+        0.256448,
+        0.214307,
+        0.206801,
+        0.231546,
+        0.248016,
+        0.206993,
+        0.181215,
+        0.197171,
+        0.203026,
+        0.202038,
+        0.208787,
+        0.207322,
+        0.19407,
+        0.249125,
+        0.208206,
+        0.265722,
+        0.213071,
+        0.241879,
+        0.200269,
+        0.197553,
+        0.21394,
+        0.248859,
+        0.210084,
+        0.224244,
+        0.230188,
+        0.2408,
+        0.230792,
+        0.229257,
+        0.253021,
+        0.23926,
+        0.224994,
+        0.204673,
+        0.244425,
+        0.18898,
+        0.186219,
+        0.202784,
+        0.259049,
+        0.216419,
+        0.19881,
+        0.228658,
+        0.250041,
+        0.194683,
+        0.186959,
+        0.240205,
+        0.241455,
+        0.22144,
+        0.235701,
+        0.229219,
+        0.220037,
+        0.199347,
+        0.212838,
+        0.246485,
+        0.217837,
+        0.248468,
+        0.205288,
+        0.255362,
+        0.198137,
+        0.19213,
+        0.196375,
+        0.250845,
+        0.191426,
+        0.231565,
+        0.194933,
+        0.230335,
+        0.178751,
+        0.181099,
+        0.20322,
+        0.227586,
+        0.214171,
+        0.239711,
+        0.232068,
+        0.217703,
+        0.190917,
+        0.197663,
+        0.262917,
+        0.231021,
+        0.282672,
+        0.214427,
+        0.266304,
+        0.197594,
+        0.209984,
+        0.187555,
+        0.198992,
+        0.187193,
+        0.201059,
+        0.18537,
+        0.178554
+      ],
+      "method": "frame RMS, 2048-sample frames at 22050 Hz, DC removed",
+      "basis": "signal"
+    },
+    "sections": {
+      "segments": [
+        {
+          "label": "A",
+          "start": 0,
+          "end": 29.986
+        }
+      ],
+      "method": "novelty-on-beat-chroma",
+      "basis": "signal"
+    },
+    "keyMoments": [
+      {
+        "time": 0.06,
+        "type": "onset",
+        "intensity": 1,
+        "description": "Onset"
+      },
+      {
+        "time": 2.11,
+        "type": "onset",
+        "intensity": 0.197,
+        "description": "Onset"
+      },
+      {
+        "time": 2.83,
+        "type": "onset",
+        "intensity": 0.307,
+        "description": "Onset"
+      },
+      {
+        "time": 7.43,
+        "type": "harmonic_change",
+        "intensity": 0.194,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 8.52,
+        "type": "onset",
+        "intensity": 0.172,
+        "description": "Onset"
+      },
+      {
+        "time": 8.84,
+        "type": "harmonic_change",
+        "intensity": 0.193,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 13.09,
+        "type": "harmonic_change",
+        "intensity": 0.209,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 14.51,
+        "type": "harmonic_change",
+        "intensity": 0.289,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 15.6,
+        "type": "onset",
+        "intensity": 0.194,
+        "description": "Onset"
+      },
+      {
+        "time": 18.76,
+        "type": "harmonic_change",
+        "intensity": 0.157,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 20.2,
+        "type": "harmonic_change",
+        "intensity": 0.175,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 20.94,
+        "type": "onset",
+        "intensity": 0.174,
+        "description": "Onset"
+      },
+      {
+        "time": 21.47,
+        "type": "onset",
+        "intensity": 0.181,
+        "description": "Onset"
+      },
+      {
+        "time": 25.56,
+        "type": "onset",
+        "intensity": 0.161,
+        "description": "Onset"
+      },
+      {
+        "time": 29.11,
+        "type": "onset",
+        "intensity": 0.198,
+        "description": "Onset"
+      },
+      {
+        "time": 29.81,
+        "type": "onset",
+        "intensity": 0.182,
+        "description": "Onset"
+      }
+    ],
+    "fingerprint": {
+      "styles": {
+        "model": {
+          "id": "discogs-effnet-bs64-1",
+          "licence": "CC BY-NC-SA 4.0"
+        },
+        "top": [
+          {
+            "label": "Electronic---Synth-pop",
+            "score": 0.2207
+          },
+          {
+            "label": "Rock---Pop Rock",
+            "score": 0.129
+          },
+          {
+            "label": "Electronic---Synthwave",
+            "score": 0.1123
+          },
+          {
+            "label": "Electronic---Darkwave",
+            "score": 0.0839
+          },
+          {
+            "label": "Rock---Alternative Rock",
+            "score": 0.0777
+          },
+          {
+            "label": "Electronic---Electro",
+            "score": 0.0742
+          },
+          {
+            "label": "Electronic---Euro-Disco",
+            "score": 0.0607
+          },
+          {
+            "label": "Electronic---New Wave",
+            "score": 0.0557
+          },
+          {
+            "label": "Rock---New Wave",
+            "score": 0.053
+          },
+          {
+            "label": "Electronic---EBM",
+            "score": 0.0453
+          }
+        ],
+        "basis": "model"
+      },
+      "tags": {
+        "model": {
+          "id": "msd-musicnn-1",
+          "licence": "CC BY-NC-SA 4.0"
+        },
+        "scores": [
+          {
+            "label": "electronic",
+            "score": 0.3008
+          },
+          {
+            "label": "80s",
+            "score": 0.1566
+          },
+          {
+            "label": "rock",
+            "score": 0.1481
+          },
+          {
+            "label": "indie",
+            "score": 0.1328
+          },
+          {
+            "label": "pop",
+            "score": 0.128
+          },
+          {
+            "label": "dance",
+            "score": 0.1137
+          },
+          {
+            "label": "electro",
+            "score": 0.074
+          },
+          {
+            "label": "alternative",
+            "score": 0.0715
+          },
+          {
+            "label": "electronica",
+            "score": 0.065
+          },
+          {
+            "label": "female vocalists",
+            "score": 0.0541
+          },
+          {
+            "label": "indie rock",
+            "score": 0.044
+          },
+          {
+            "label": "experimental",
+            "score": 0.0363
+          },
+          {
+            "label": "punk",
+            "score": 0.0293
+          },
+          {
+            "label": "House",
+            "score": 0.0276
+          },
+          {
+            "label": "classic rock",
+            "score": 0.0259
+          },
+          {
+            "label": "indie pop",
+            "score": 0.0254
+          },
+          {
+            "label": "alternative rock",
+            "score": 0.0217
+          },
+          {
+            "label": "Progressive rock",
+            "score": 0.0211
+          },
+          {
+            "label": "90s",
+            "score": 0.0209
+          },
+          {
+            "label": "hard rock",
+            "score": 0.0191
+          },
+          {
+            "label": "70s",
+            "score": 0.0178
+          },
+          {
+            "label": "metal",
+            "score": 0.0175
+          },
+          {
+            "label": "00s",
+            "score": 0.0174
+          },
+          {
+            "label": "oldies",
+            "score": 0.0164
+          },
+          {
+            "label": "ambient",
+            "score": 0.0158
+          },
+          {
+            "label": "heavy metal",
+            "score": 0.0154
+          },
+          {
+            "label": "instrumental",
+            "score": 0.015
+          },
+          {
+            "label": "chillout",
+            "score": 0.0142
+          },
+          {
+            "label": "beautiful",
+            "score": 0.0128
+          },
+          {
+            "label": "party",
+            "score": 0.012
+          },
+          {
+            "label": "60s",
+            "score": 0.0107
+          },
+          {
+            "label": "soul",
+            "score": 0.0105
+          },
+          {
+            "label": "folk",
+            "score": 0.0105
+          },
+          {
+            "label": "catchy",
+            "score": 0.0084
+          },
+          {
+            "label": "male vocalists",
+            "score": 0.0079
+          },
+          {
+            "label": "Hip-Hop",
+            "score": 0.0078
+          },
+          {
+            "label": "sexy",
+            "score": 0.007
+          },
+          {
+            "label": "jazz",
+            "score": 0.0067
+          },
+          {
+            "label": "funk",
+            "score": 0.0064
+          },
+          {
+            "label": "female vocalist",
+            "score": 0.0064
+          },
+          {
+            "label": "Mellow",
+            "score": 0.0056
+          },
+          {
+            "label": "blues",
+            "score": 0.0055
+          },
+          {
+            "label": "chill",
+            "score": 0.004
+          },
+          {
+            "label": "happy",
+            "score": 0.0039
+          },
+          {
+            "label": "guitar",
+            "score": 0.0038
+          },
+          {
+            "label": "acoustic",
+            "score": 0.0037
+          },
+          {
+            "label": "rnb",
+            "score": 0.0037
+          },
+          {
+            "label": "easy listening",
+            "score": 0.0036
+          },
+          {
+            "label": "sad",
+            "score": 0.0029
+          },
+          {
+            "label": "country",
+            "score": 0.0024
+          }
+        ],
+        "basis": "model"
+      },
+      "moods": {
+        "danceability": {
+          "value": 0.9758,
+          "range": [
+            0,
+            1
+          ],
+          "model": {
+            "id": "danceability-msd-musicnn-1",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "acoustic": {
+          "value": 0.0194,
+          "range": [
+            0,
+            1
+          ],
+          "model": {
+            "id": "mood_acoustic-discogs-effnet-1",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "instrumental": {
+          "value": 0.1091,
+          "range": [
+            0,
+            1
+          ],
+          "model": {
+            "id": "voice_instrumental-msd-musicnn-1",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "valence": {
+          "value": 6.4871,
+          "range": [
+            1,
+            9
+          ],
+          "model": {
+            "id": "deam-msd-musicnn-2",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "arousal": {
+          "value": 5.656,
+          "range": [
+            1,
+            9
+          ],
+          "model": {
+            "id": "deam-msd-musicnn-2",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        }
+      }
+    },
+    "withheld": {
+      "key": {
+        "code": "no_sustained_pitch",
+        "reason": "no sustained pitch"
+      }
+    }
+  },
+  "bpm": 169,
+  "key": null,
+  "energy": 0.798,
+  "valence": 0.686,
+  "danceability": 0.976,
+  "acousticness": 0.019,
+  "keyMoments": [
+    {
+      "time": 0.06,
+      "type": "onset",
+      "intensity": 1,
+      "description": "Onset"
+    },
+    {
+      "time": 2.11,
+      "type": "onset",
+      "intensity": 0.197,
+      "description": "Onset"
+    },
+    {
+      "time": 2.83,
+      "type": "onset",
+      "intensity": 0.307,
+      "description": "Onset"
+    },
+    {
+      "time": 7.43,
+      "type": "harmonic_change",
+      "intensity": 0.194,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 8.52,
+      "type": "onset",
+      "intensity": 0.172,
+      "description": "Onset"
+    },
+    {
+      "time": 8.84,
+      "type": "harmonic_change",
+      "intensity": 0.193,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 13.09,
+      "type": "harmonic_change",
+      "intensity": 0.209,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 14.51,
+      "type": "harmonic_change",
+      "intensity": 0.289,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 15.6,
+      "type": "onset",
+      "intensity": 0.194,
+      "description": "Onset"
+    },
+    {
+      "time": 18.76,
+      "type": "harmonic_change",
+      "intensity": 0.157,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 20.2,
+      "type": "harmonic_change",
+      "intensity": 0.175,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 20.94,
+      "type": "onset",
+      "intensity": 0.174,
+      "description": "Onset"
+    },
+    {
+      "time": 21.47,
+      "type": "onset",
+      "intensity": 0.181,
+      "description": "Onset"
+    },
+    {
+      "time": 25.56,
+      "type": "onset",
+      "intensity": 0.161,
+      "description": "Onset"
+    },
+    {
+      "time": 29.11,
+      "type": "onset",
+      "intensity": 0.198,
+      "description": "Onset"
+    },
+    {
+      "time": 29.81,
+      "type": "onset",
+      "intensity": 0.182,
+      "description": "Onset"
+    }
+  ],
+  "audioSource": "unavailable",
+  "audioConfidence": "low",
+  "audioUnavailableReason": "not_detected"
+}

@@ -1,0 +1,1426 @@
+{
+  "id": "5UqCQaDshqbIk3pkhy4Pjg",
+  "title": "Levels - Radio Edit",
+  "artist": "Avicii",
+  "album": "Levels",
+  "coverUrl": "[link]",
+  "spotifyUrl": "https://open.spotify.com/track/5UqCQaDshqbIk3pkhy4Pjg",
+  "releaseYear": "2011",
+  "explicit": false,
+  "durationSeconds": 200,
+  "isrc": "SEUM71100962",
+  "preview": {
+    "provider": "deezer",
+    "method": "isrc",
+    "score": null
+  },
+  "queryMatch": "exact",
+  "evidence": [
+    {
+      "id": "tavily:https://en.wikipedia.org/wiki/Levels_(Avicii_song)",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://en.wikipedia.org/wiki/Levels_(Avicii_song)",
+      "title": "Levels (Avicii song) - Wikipedia",
+      "retrievedAt": "[time]",
+      "excerpt": "On the origins of \"Levels\", Bergling claimed in one interview that he wanted to use a vocal sample from Etta James's \"Something's Got a Hold on Me\" and was satisfied when combining it with the hook he would use for \"Levels\". According to a 2015 Quora answer by Bergling, he first discovered the sample in the Pretty Lights song \"Finally Moving\". Bergling chose to use the sample, he said in another interview, because of the \"timeless\" and \"raw\" nature of James' vocals. Following Bergling's death, …",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.whosampled.com/Avicii/Levels/covered",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.whosampled.com/Avicii/Levels/covered",
+      "title": "Covers of Levels by Avicii",
+      "retrievedAt": "[time]",
+      "excerpt": "Covered in 9 songs ; Angemi and Shiah Maisel's Levels · Levels · Angemi and Shiah Maisel ; Forever 80's Levels (Radio Edit), Levels (Radio Edit) · Forever 80",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.youtube.com/shorts/Lba_JU-5CzM",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.youtube.com/shorts/Lba_JU-5CzM",
+      "title": "Avicii, Flo Rida, & Christina Aguilera sampled this famous ...",
+      "retrievedAt": "[time]",
+      "excerpt": "Avicii, Flo Rida, & Christina Aguilera sampled this famous song from the 60's! Who did it best? Original Sound (Contains music from: Levels",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.whosampled.com/Avicii/remixed",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.whosampled.com/Avicii/remixed",
+      "title": "Remixes of Avicii Songs",
+      "retrievedAt": "[time]",
+      "excerpt": "Levels (Skrillex Remix) by Skrillex (2011) · Levels (Cazzette's NYC Mode Mix) by Cazzette (2011) · Levels (Andy Pitch Remix) by Andy Pitch (2013).",
+      "recordRef": null
+    }
+  ],
+  "segments": [
+    {
+      "label": "Intro",
+      "start": 0,
+      "end": 8
+    },
+    {
+      "label": "Verse 1",
+      "start": 8,
+      "end": 25
+    },
+    {
+      "label": "Chorus",
+      "start": 25,
+      "end": 42
+    },
+    {
+      "label": "Verse 2",
+      "start": 42,
+      "end": 58
+    },
+    {
+      "label": "Bridge",
+      "start": 58,
+      "end": 75
+    },
+    {
+      "label": "Chorus",
+      "start": 75,
+      "end": 92
+    },
+    {
+      "label": "Outro",
+      "start": 92,
+      "end": 100
+    }
+  ],
+  "segmentsSource": "template",
+  "samples": [],
+  "factoids": [
+    {
+      "id": "<id 10>",
+      "title": "A vocal sample at the heart of the song",
+      "content": "Avicii said he wanted to use a vocal sample from Etta James’s “Something’s Got a Hold on Me,” and was pleased when he combined it with the hook for “Levels.”",
+      "type": "sample",
+      "entities": [
+        {
+          "id": "<id 11>",
+          "text": "Etta James",
+          "type": "artist",
+          "searchQuery": "Etta James"
+        },
+        {
+          "id": "<id 12>",
+          "text": "Something’s Got a Hold on Me",
+          "type": "sample",
+          "searchQuery": "Something’s Got a Hold on Me"
+        },
+        {
+          "id": "<id 13>",
+          "text": "Avicii",
+          "type": "artist",
+          "searchQuery": "Avicii"
+        }
+      ],
+      "claimId": "<id 4>"
+    },
+    {
+      "id": "<id 14>",
+      "title": "A route to the source",
+      "content": "Avicii said he first discovered the Etta James sample in Pretty Lights’ “Finally Moving.”",
+      "type": "trivia",
+      "entities": [
+        {
+          "id": "<id 15>",
+          "text": "Avicii",
+          "type": "artist",
+          "searchQuery": "Avicii"
+        },
+        {
+          "id": "<id 16>",
+          "text": "Pretty Lights",
+          "type": "artist",
+          "searchQuery": "Pretty Lights"
+        },
+        {
+          "id": "<id 17>",
+          "text": "Finally Moving",
+          "type": "sample",
+          "searchQuery": "Finally Moving"
+        }
+      ],
+      "claimId": "<id 5>"
+    },
+    {
+      "id": "<id 18>",
+      "title": "Later reworkings",
+      "content": "The track was remixed as “Levels (Skrillex Remix)” and “Levels (Cazzette’s NYC Mode Mix)” in 2011.",
+      "type": "connection",
+      "entities": [
+        {
+          "id": "<id 19>",
+          "text": "Skrillex",
+          "type": "artist",
+          "searchQuery": "Skrillex"
+        },
+        {
+          "id": "<id 20>",
+          "text": "Cazzette",
+          "type": "artist",
+          "searchQuery": "Cazzette"
+        },
+        {
+          "id": "<id 21>",
+          "text": "2011",
+          "type": "year",
+          "searchQuery": "2011"
+        }
+      ],
+      "claimId": "<id 6>"
+    }
+  ],
+  "genealogy": {
+    "nodes": [
+      {
+        "id": "current",
+        "group": 1,
+        "label": "Levels - Radio Edit",
+        "size": 40,
+        "trackTitle": "Levels - Radio Edit",
+        "trackArtist": "Avicii"
+      },
+      {
+        "id": "etta",
+        "group": 4,
+        "label": "Something’s Got a Hold on Me - Etta James",
+        "size": 22,
+        "trackTitle": "Something’s Got a Hold on Me",
+        "trackArtist": "Etta James",
+        "spotifyId": "5QC07jdKdQrH1cW7Ag3OJ2"
+      },
+      {
+        "id": "skrillex",
+        "group": 4,
+        "label": "Levels (Skrillex Remix) - Skrillex (2011)",
+        "size": 22,
+        "trackTitle": "Levels (Skrillex Remix)",
+        "trackArtist": "Skrillex"
+      },
+      {
+        "id": "cazzette",
+        "group": 4,
+        "label": "Levels (Cazzette’s NYC Mode Mix) - Cazzette (2011)",
+        "size": 22,
+        "trackTitle": "Levels (Cazzette’s NYC Mode Mix)",
+        "trackArtist": "Cazzette"
+      }
+    ],
+    "links": [
+      {
+        "source": "etta",
+        "target": "current",
+        "value": 1,
+        "type": "sample",
+        "kind": "inferred",
+        "origin": "model",
+        "claimId": "<id 7>",
+        "evidenceIds": [
+          "tavily:https://en.wikipedia.org/wiki/Levels_(Avicii_song)"
+        ]
+      },
+      {
+        "source": "current",
+        "target": "skrillex",
+        "value": 1,
+        "type": "remix",
+        "kind": "inferred",
+        "origin": "model",
+        "claimId": "<id 8>",
+        "evidenceIds": [
+          "tavily:https://www.whosampled.com/Avicii/remixed"
+        ]
+      },
+      {
+        "source": "current",
+        "target": "cazzette",
+        "value": 1,
+        "type": "remix",
+        "kind": "inferred",
+        "origin": "model",
+        "claimId": "<id 9>",
+        "evidenceIds": [
+          "tavily:https://www.whosampled.com/Avicii/remixed"
+        ]
+      }
+    ]
+  },
+  "claims": [
+    {
+      "id": "<id 2>",
+      "text": "“Levels - Radio Edit” is a 2011 Avicii track listed on the release Levels.",
+      "about": "track",
+      "evidenceIds": [],
+      "scope": "recording",
+      "kind": "inferred",
+      "origin": "model",
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 3>",
+      "text": "The song uses a vocal sample from Etta James’s “Something’s Got a Hold on Me.”",
+      "about": "sample",
+      "evidenceIds": [
+        "tavily:https://en.wikipedia.org/wiki/Levels_(Avicii_song)"
+      ],
+      "scope": "work",
+      "kind": "sourced",
+      "origin": "model",
+      "verdict": "supported",
+      "verdictReason": "The Wikipedia excerpt says Bergling combined Etta James’s vocal sample with the hook for “Levels.”",
+      "numericCheck": "n/a",
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 4>",
+      "text": "Avicii said he wanted to use a vocal sample from Etta James’s “Something’s Got a Hold on Me,” and was pleased when he combined it with the hook for “Levels.”",
+      "about": "sample",
+      "evidenceIds": [
+        "tavily:https://en.wikipedia.org/wiki/Levels_(Avicii_song)"
+      ],
+      "scope": "work",
+      "kind": "sourced",
+      "origin": "model",
+      "verdict": "supported",
+      "verdictReason": "The Wikipedia excerpt states Bergling wanted the sample and was satisfied when combining it with the hook.",
+      "numericCheck": "n/a",
+      "factoid": {
+        "title": "A vocal sample at the heart of the song",
+        "type": "sample",
+        "entities": [
+          {
+            "text": "Etta James",
+            "type": "artist"
+          },
+          {
+            "text": "Something’s Got a Hold on Me",
+            "type": "sample"
+          },
+          {
+            "text": "Avicii",
+            "type": "artist"
+          }
+        ]
+      },
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 5>",
+      "text": "Avicii said he first discovered the Etta James sample in Pretty Lights’ “Finally Moving.”",
+      "about": "trivia",
+      "evidenceIds": [],
+      "scope": "work",
+      "kind": "inferred",
+      "origin": "model",
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "factoid": {
+        "title": "A route to the source",
+        "type": "trivia",
+        "entities": [
+          {
+            "text": "Avicii",
+            "type": "artist"
+          },
+          {
+            "text": "Pretty Lights",
+            "type": "artist"
+          },
+          {
+            "text": "Finally Moving",
+            "type": "sample"
+          }
+        ]
+      },
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 6>",
+      "text": "The track was remixed as “Levels (Skrillex Remix)” and “Levels (Cazzette’s NYC Mode Mix)” in 2011.",
+      "about": "connection",
+      "evidenceIds": [
+        "tavily:https://www.whosampled.com/Avicii/remixed"
+      ],
+      "scope": "recording",
+      "kind": "sourced",
+      "origin": "model",
+      "verdict": "partial",
+      "verdictReason": "The WhoSampled excerpt lists both 2011 remixes but does not identify the radio-edit recording as their source.",
+      "numericCheck": "n/a",
+      "factoid": {
+        "title": "Later reworkings",
+        "type": "connection",
+        "entities": [
+          {
+            "text": "Skrillex",
+            "type": "artist"
+          },
+          {
+            "text": "Cazzette",
+            "type": "artist"
+          },
+          {
+            "text": "2011",
+            "type": "year"
+          }
+        ]
+      },
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 7>",
+      "text": "\"Levels - Radio Edit - Avicii\" samples \"Something’s Got a Hold on Me - Etta James\".",
+      "about": "sample",
+      "evidenceIds": [
+        "tavily:https://en.wikipedia.org/wiki/Levels_(Avicii_song)"
+      ],
+      "scope": "recording",
+      "kind": "inferred",
+      "origin": "model",
+      "verdict": "unsupported",
+      "verdictReason": "The Wikipedia excerpt discusses the song’s origins, not whether this radio-edit recording samples Etta James.",
+      "numericCheck": "n/a"
+    },
+    {
+      "id": "<id 8>",
+      "text": "\"Levels (Skrillex Remix) - Skrillex (2011)\" is a remix of \"Levels - Radio Edit - Avicii\".",
+      "about": "sample",
+      "evidenceIds": [
+        "tavily:https://www.whosampled.com/Avicii/remixed"
+      ],
+      "scope": "recording",
+      "kind": "inferred",
+      "origin": "model",
+      "verdict": "partial",
+      "verdictReason": "The WhoSampled excerpt names Skrillex’s 2011 remix but not the radio edit as its source.",
+      "numericCheck": "n/a"
+    },
+    {
+      "id": "<id 9>",
+      "text": "\"Levels (Cazzette’s NYC Mode Mix) - Cazzette (2011)\" is a remix of \"Levels - Radio Edit - Avicii\".",
+      "about": "sample",
+      "evidenceIds": [
+        "tavily:https://www.whosampled.com/Avicii/remixed"
+      ],
+      "scope": "recording",
+      "kind": "inferred",
+      "origin": "model",
+      "verdict": "partial",
+      "verdictReason": "The WhoSampled excerpt names Cazzette’s 2011 remix but not the radio edit as its source.",
+      "numericCheck": "n/a"
+    }
+  ],
+  "run": {
+    "id": "<id 1>",
+    "analyzerVersion": "2.3.6+essentia.models-5c5c0c7f",
+    "fallback": false,
+    "usage": {
+      "llmCalls": 4,
+      "inputTokens": 7583,
+      "outputTokens": 2380,
+      "reasoningTokens": 899
+    },
+    "verifier": {
+      "judged": 6,
+      "unjudged": 0,
+      "restated": 0
+    },
+    "sourceErrors": [
+      {
+        "source": "discogs",
+        "code": "not_configured",
+        "message": "DISCOGS_TOKEN is not set"
+      }
+    ]
+  },
+  "audio": {
+    "version": 2,
+    "analyzerVersion": "2.3.6+essentia.models-5c5c0c7f",
+    "window": {
+      "kind": "preview-30s",
+      "durationSeconds": 29.986
+    },
+    "gate": {
+      "passed": true,
+      "reason": null
+    },
+    "tempo": {
+      "bpm": 126.05,
+      "confidence": 0.705,
+      "rawConfidence": {
+        "value": 3.753,
+        "range": [
+          0,
+          5.32
+        ]
+      },
+      "method": "essentia.RhythmExtractor2013+beat-regression",
+      "basis": "signal"
+    },
+    "key": null,
+    "loudness": {
+      "rmsMean": 0.259266,
+      "method": "mean frame RMS, 2048-sample frames at 22050 Hz, DC removed",
+      "basis": "signal"
+    },
+    "beats": {
+      "times": [
+        0.418,
+        0.882,
+        1.358,
+        1.834,
+        2.31,
+        2.786,
+        3.262,
+        3.738,
+        4.214,
+        4.69,
+        5.166,
+        5.642,
+        6.118,
+        6.594,
+        7.07,
+        7.546,
+        8.022,
+        8.499,
+        8.975,
+        9.451,
+        9.927,
+        10.403,
+        10.879,
+        11.355,
+        11.831,
+        12.307,
+        12.783,
+        13.259,
+        13.735,
+        14.211,
+        14.687,
+        15.163,
+        15.639,
+        16.115,
+        16.591,
+        17.067,
+        17.543,
+        18.019,
+        18.495,
+        18.971,
+        19.447,
+        19.923,
+        20.399,
+        20.875,
+        21.351,
+        21.827,
+        22.303,
+        22.779,
+        23.255,
+        23.731,
+        24.207,
+        24.683,
+        25.159,
+        25.635,
+        26.111,
+        26.587,
+        27.063,
+        27.539,
+        28.015,
+        28.491,
+        28.967,
+        29.455
+      ],
+      "method": "essentia.RhythmExtractor2013",
+      "basis": "signal"
+    },
+    "energyContour": {
+      "hopSeconds": 0.09288,
+      "values": [
+        0.110427,
+        0.161778,
+        0.133054,
+        0.12267,
+        0.250828,
+        0.163137,
+        0.123044,
+        0.075229,
+        0.08273,
+        0.226132,
+        0.195448,
+        0.155433,
+        0.112683,
+        0.101454,
+        0.216433,
+        0.17914,
+        0.178376,
+        0.173862,
+        0.132467,
+        0.207567,
+        0.205508,
+        0.198334,
+        0.183833,
+        0.169215,
+        0.123102,
+        0.100644,
+        0.084114,
+        0.147706,
+        0.148469,
+        0.165111,
+        0.216043,
+        0.190583,
+        0.143823,
+        0.111332,
+        0.155805,
+        0.229128,
+        0.202667,
+        0.159742,
+        0.139594,
+        0.15511,
+        0.216347,
+        0.184587,
+        0.177365,
+        0.150588,
+        0.134982,
+        0.217794,
+        0.177756,
+        0.142421,
+        0.104108,
+        0.103062,
+        0.215138,
+        0.207441,
+        0.173995,
+        0.154174,
+        0.138781,
+        0.223601,
+        0.208578,
+        0.24284,
+        0.439975,
+        0.370074,
+        0.280299,
+        0.275912,
+        0.285178,
+        0.427416,
+        0.333028,
+        0.26454,
+        0.137811,
+        0.117658,
+        0.45156,
+        0.35374,
+        0.298506,
+        0.257748,
+        0.283331,
+        0.430357,
+        0.354678,
+        0.332141,
+        0.280716,
+        0.285704,
+        0.402552,
+        0.377708,
+        0.325453,
+        0.267173,
+        0.301178,
+        0.347836,
+        0.387317,
+        0.358651,
+        0.301683,
+        0.28432,
+        0.388828,
+        0.384722,
+        0.422679,
+        0.269527,
+        0.292774,
+        0.326319,
+        0.412124,
+        0.392137,
+        0.29695,
+        0.298223,
+        0.299959,
+        0.434185,
+        0.367634,
+        0.302594,
+        0.297075,
+        0.305622,
+        0.446753,
+        0.362656,
+        0.292019,
+        0.112828,
+        0.080044,
+        0.459704,
+        0.359439,
+        0.322049,
+        0.289142,
+        0.267758,
+        0.448384,
+        0.375009,
+        0.343491,
+        0.292461,
+        0.310238,
+        0.274613,
+        0.130877,
+        0.159144,
+        0.289806,
+        0.309112,
+        0.228661,
+        0.157548,
+        0.135981,
+        0.293469,
+        0.317552,
+        0.267733,
+        0.087391,
+        0.106577,
+        0.27725,
+        0.304235,
+        0.265057,
+        0.129321,
+        0.144102,
+        0.25721,
+        0.305308,
+        0.298588,
+        0.399142,
+        0.353048,
+        0.284304,
+        0.278632,
+        0.257402,
+        0.443904,
+        0.34842,
+        0.294692,
+        0.183364,
+        0.182893,
+        0.433879,
+        0.360047,
+        0.296991,
+        0.272357,
+        0.290373,
+        0.407859,
+        0.36647,
+        0.323037,
+        0.298822,
+        0.314555,
+        0.403096,
+        0.362002,
+        0.309095,
+        0.266601,
+        0.278641,
+        0.353966,
+        0.395136,
+        0.343177,
+        0.296128,
+        0.292653,
+        0.374552,
+        0.400332,
+        0.435657,
+        0.297115,
+        0.301632,
+        0.319451,
+        0.409772,
+        0.373676,
+        0.282086,
+        0.305206,
+        0.292874,
+        0.446148,
+        0.373502,
+        0.306834,
+        0.312148,
+        0.272552,
+        0.446569,
+        0.36407,
+        0.298924,
+        0.193113,
+        0.193553,
+        0.441732,
+        0.379094,
+        0.32938,
+        0.27777,
+        0.289508,
+        0.42689,
+        0.390096,
+        0.338126,
+        0.314009,
+        0.293031,
+        0.358299,
+        0.375755,
+        0.335579,
+        0.292393,
+        0.291784,
+        0.359215,
+        0.398953,
+        0.353401,
+        0.276209,
+        0.287327,
+        0.390498,
+        0.405331,
+        0.429211,
+        0.273188,
+        0.291772,
+        0.318005,
+        0.403717,
+        0.37441,
+        0.286828,
+        0.30482,
+        0.269546,
+        0.246564,
+        0.248258,
+        0.262245,
+        0.270267,
+        0.258319,
+        0.234653,
+        0.253336,
+        0.273699,
+        0.256239,
+        0.256301,
+        0.226642,
+        0.23416,
+        0.265855,
+        0.267775,
+        0.255408,
+        0.240766,
+        0.254617,
+        0.198384,
+        0.263482,
+        0.234566,
+        0.185593,
+        0.179639,
+        0.188469,
+        0.245119,
+        0.249252,
+        0.223934,
+        0.183218,
+        0.209829,
+        0.303119,
+        0.26038,
+        0.18107,
+        0.124263,
+        0.122888,
+        0.22613,
+        0.236766,
+        0.233276,
+        0.146998,
+        0.163374,
+        0.227252,
+        0.235141,
+        0.200679,
+        0.187489,
+        0.192516,
+        0.232898,
+        0.230138,
+        0.226754,
+        0.207111,
+        0.184634,
+        0.208655,
+        0.193606,
+        0.210806,
+        0.194714,
+        0.176993,
+        0.216066,
+        0.236698,
+        0.217072,
+        0.221377,
+        0.218319,
+        0.185676,
+        0.234146,
+        0.214181,
+        0.187939,
+        0.15827,
+        0.183296,
+        0.257551,
+        0.222527,
+        0.214183,
+        0.200942,
+        0.194395,
+        0.237622,
+        0.198862,
+        0.197229,
+        0.152478,
+        0.166112,
+        0.233768,
+        0.233543,
+        0.235378,
+        0.189071,
+        0.218309,
+        0.253545,
+        0.244866,
+        0.219111,
+        0.238122,
+        0.237722,
+        0.252995,
+        0.247417,
+        0.242097,
+        0.237414,
+        0.246373,
+        0.233527,
+        0.243191,
+        0.220197,
+        0.242511,
+        0.237435,
+        0.240143,
+        0.241781,
+        0.227016,
+        0.235073,
+        0.23243,
+        0.152579
+      ],
+      "method": "frame RMS, 2048-sample frames at 22050 Hz, DC removed",
+      "basis": "signal"
+    },
+    "sections": {
+      "segments": [
+        {
+          "label": "A",
+          "start": 0,
+          "end": 29.986
+        }
+      ],
+      "method": "novelty-on-beat-chroma",
+      "basis": "signal"
+    },
+    "keyMoments": [
+      {
+        "time": 0.09,
+        "type": "onset",
+        "intensity": 1,
+        "description": "Onset"
+      },
+      {
+        "time": 2.29,
+        "type": "harmonic_change",
+        "intensity": 0.159,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 2.55,
+        "type": "onset",
+        "intensity": 0.337,
+        "description": "Onset"
+      },
+      {
+        "time": 4.2,
+        "type": "harmonic_change",
+        "intensity": 0.21,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 9.7,
+        "type": "energy_peak",
+        "intensity": 0.972,
+        "description": "Energy peak"
+      },
+      {
+        "time": 9.91,
+        "type": "harmonic_change",
+        "intensity": 0.176,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 10.17,
+        "type": "onset",
+        "intensity": 0.438,
+        "description": "Onset"
+      },
+      {
+        "time": 11.35,
+        "type": "harmonic_change",
+        "intensity": 0.216,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 12.3,
+        "type": "onset",
+        "intensity": 0.27,
+        "description": "Onset"
+      },
+      {
+        "time": 13.23,
+        "type": "harmonic_change",
+        "intensity": 0.195,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 16.02,
+        "type": "energy_peak",
+        "intensity": 0.948,
+        "description": "Energy peak"
+      },
+      {
+        "time": 17.78,
+        "type": "onset",
+        "intensity": 0.249,
+        "description": "Onset"
+      },
+      {
+        "time": 18.5,
+        "type": "onset",
+        "intensity": 0.229,
+        "description": "Onset"
+      },
+      {
+        "time": 19.94,
+        "type": "onset",
+        "intensity": 0.232,
+        "description": "Onset"
+      },
+      {
+        "time": 23.75,
+        "type": "onset",
+        "intensity": 0.221,
+        "description": "Onset"
+      },
+      {
+        "time": 25.65,
+        "type": "onset",
+        "intensity": 0.141,
+        "description": "Onset"
+      }
+    ],
+    "fingerprint": {
+      "styles": {
+        "model": {
+          "id": "discogs-effnet-bs64-1",
+          "licence": "CC BY-NC-SA 4.0"
+        },
+        "top": [
+          {
+            "label": "Electronic---House",
+            "score": 0.482
+          },
+          {
+            "label": "Electronic---Electro House",
+            "score": 0.2423
+          },
+          {
+            "label": "Electronic---Tropical House",
+            "score": 0.2098
+          },
+          {
+            "label": "Electronic---Progressive House",
+            "score": 0.1574
+          },
+          {
+            "label": "Electronic---Hands Up",
+            "score": 0.1402
+          },
+          {
+            "label": "Electronic---Deep House",
+            "score": 0.1279
+          },
+          {
+            "label": "Electronic---Trance",
+            "score": 0.1089
+          },
+          {
+            "label": "Electronic---Hard Trance",
+            "score": 0.0783
+          },
+          {
+            "label": "Electronic---Euro House",
+            "score": 0.0754
+          },
+          {
+            "label": "Electronic---Progressive Trance",
+            "score": 0.0644
+          }
+        ],
+        "basis": "model"
+      },
+      "tags": {
+        "model": {
+          "id": "msd-musicnn-1",
+          "licence": "CC BY-NC-SA 4.0"
+        },
+        "scores": [
+          {
+            "label": "electronic",
+            "score": 0.5564
+          },
+          {
+            "label": "dance",
+            "score": 0.4673
+          },
+          {
+            "label": "House",
+            "score": 0.2543
+          },
+          {
+            "label": "electro",
+            "score": 0.2442
+          },
+          {
+            "label": "electronica",
+            "score": 0.1199
+          },
+          {
+            "label": "pop",
+            "score": 0.037
+          },
+          {
+            "label": "party",
+            "score": 0.0293
+          },
+          {
+            "label": "indie",
+            "score": 0.0186
+          },
+          {
+            "label": "female vocalists",
+            "score": 0.0184
+          },
+          {
+            "label": "00s",
+            "score": 0.0133
+          },
+          {
+            "label": "chillout",
+            "score": 0.0131
+          },
+          {
+            "label": "ambient",
+            "score": 0.0117
+          },
+          {
+            "label": "experimental",
+            "score": 0.0112
+          },
+          {
+            "label": "rock",
+            "score": 0.011
+          },
+          {
+            "label": "alternative",
+            "score": 0.0109
+          },
+          {
+            "label": "instrumental",
+            "score": 0.0087
+          },
+          {
+            "label": "90s",
+            "score": 0.0071
+          },
+          {
+            "label": "sexy",
+            "score": 0.006
+          },
+          {
+            "label": "Hip-Hop",
+            "score": 0.005
+          },
+          {
+            "label": "catchy",
+            "score": 0.0043
+          },
+          {
+            "label": "beautiful",
+            "score": 0.0043
+          },
+          {
+            "label": "indie rock",
+            "score": 0.0043
+          },
+          {
+            "label": "funk",
+            "score": 0.004
+          },
+          {
+            "label": "rnb",
+            "score": 0.004
+          },
+          {
+            "label": "chill",
+            "score": 0.0036
+          },
+          {
+            "label": "male vocalists",
+            "score": 0.0035
+          },
+          {
+            "label": "soul",
+            "score": 0.0028
+          },
+          {
+            "label": "80s",
+            "score": 0.0026
+          },
+          {
+            "label": "indie pop",
+            "score": 0.0018
+          },
+          {
+            "label": "Mellow",
+            "score": 0.0018
+          },
+          {
+            "label": "jazz",
+            "score": 0.0018
+          },
+          {
+            "label": "Progressive rock",
+            "score": 0.0017
+          },
+          {
+            "label": "female vocalist",
+            "score": 0.0016
+          },
+          {
+            "label": "alternative rock",
+            "score": 0.0013
+          },
+          {
+            "label": "easy listening",
+            "score": 0.0011
+          },
+          {
+            "label": "classic rock",
+            "score": 0.0011
+          },
+          {
+            "label": "happy",
+            "score": 0.0009
+          },
+          {
+            "label": "guitar",
+            "score": 0.0007
+          },
+          {
+            "label": "oldies",
+            "score": 0.0007
+          },
+          {
+            "label": "blues",
+            "score": 0.0006
+          },
+          {
+            "label": "acoustic",
+            "score": 0.0006
+          },
+          {
+            "label": "60s",
+            "score": 0.0006
+          },
+          {
+            "label": "folk",
+            "score": 0.0006
+          },
+          {
+            "label": "hard rock",
+            "score": 0.0006
+          },
+          {
+            "label": "metal",
+            "score": 0.0005
+          },
+          {
+            "label": "70s",
+            "score": 0.0005
+          },
+          {
+            "label": "sad",
+            "score": 0.0005
+          },
+          {
+            "label": "punk",
+            "score": 0.0004
+          },
+          {
+            "label": "heavy metal",
+            "score": 0.0002
+          },
+          {
+            "label": "country",
+            "score": 0.0002
+          }
+        ],
+        "basis": "model"
+      },
+      "moods": {
+        "danceability": {
+          "value": 1,
+          "range": [
+            0,
+            1
+          ],
+          "model": {
+            "id": "danceability-msd-musicnn-1",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "acoustic": {
+          "value": 0.0102,
+          "range": [
+            0,
+            1
+          ],
+          "model": {
+            "id": "mood_acoustic-discogs-effnet-1",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "instrumental": {
+          "value": 0.3878,
+          "range": [
+            0,
+            1
+          ],
+          "model": {
+            "id": "voice_instrumental-msd-musicnn-1",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "valence": {
+          "value": 6.6903,
+          "range": [
+            1,
+            9
+          ],
+          "model": {
+            "id": "deam-msd-musicnn-2",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "arousal": {
+          "value": 6.119,
+          "range": [
+            1,
+            9
+          ],
+          "model": {
+            "id": "deam-msd-musicnn-2",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        }
+      }
+    },
+    "withheld": {
+      "key": {
+        "code": "no_sustained_pitch",
+        "reason": "no sustained pitch"
+      }
+    }
+  },
+  "bpm": 126,
+  "key": null,
+  "energy": 0.957,
+  "valence": 0.711,
+  "danceability": 1,
+  "acousticness": 0.01,
+  "keyMoments": [
+    {
+      "time": 0.09,
+      "type": "onset",
+      "intensity": 1,
+      "description": "Onset"
+    },
+    {
+      "time": 2.29,
+      "type": "harmonic_change",
+      "intensity": 0.159,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 2.55,
+      "type": "onset",
+      "intensity": 0.337,
+      "description": "Onset"
+    },
+    {
+      "time": 4.2,
+      "type": "harmonic_change",
+      "intensity": 0.21,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 9.7,
+      "type": "energy_peak",
+      "intensity": 0.972,
+      "description": "Energy peak"
+    },
+    {
+      "time": 9.91,
+      "type": "harmonic_change",
+      "intensity": 0.176,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 10.17,
+      "type": "onset",
+      "intensity": 0.438,
+      "description": "Onset"
+    },
+    {
+      "time": 11.35,
+      "type": "harmonic_change",
+      "intensity": 0.216,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 12.3,
+      "type": "onset",
+      "intensity": 0.27,
+      "description": "Onset"
+    },
+    {
+      "time": 13.23,
+      "type": "harmonic_change",
+      "intensity": 0.195,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 16.02,
+      "type": "energy_peak",
+      "intensity": 0.948,
+      "description": "Energy peak"
+    },
+    {
+      "time": 17.78,
+      "type": "onset",
+      "intensity": 0.249,
+      "description": "Onset"
+    },
+    {
+      "time": 18.5,
+      "type": "onset",
+      "intensity": 0.229,
+      "description": "Onset"
+    },
+    {
+      "time": 19.94,
+      "type": "onset",
+      "intensity": 0.232,
+      "description": "Onset"
+    },
+    {
+      "time": 23.75,
+      "type": "onset",
+      "intensity": 0.221,
+      "description": "Onset"
+    },
+    {
+      "time": 25.65,
+      "type": "onset",
+      "intensity": 0.141,
+      "description": "Onset"
+    }
+  ],
+  "audioSource": "unavailable",
+  "audioConfidence": "low",
+  "audioUnavailableReason": "not_detected"
+}

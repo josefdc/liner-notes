@@ -1,0 +1,2153 @@
+{
+  "id": "1PtQJZVZIdWIYdARpZRDFO",
+  "title": "Running Up That Hill (A Deal With God)",
+  "artist": "Kate Bush",
+  "album": "Hounds Of Love",
+  "coverUrl": "[link]",
+  "spotifyUrl": "https://open.spotify.com/track/1PtQJZVZIdWIYdARpZRDFO",
+  "releaseYear": "1985",
+  "explicit": false,
+  "durationSeconds": 299,
+  "isrc": "GBCNR8500002",
+  "preview": {
+    "provider": "deezer",
+    "method": "isrc",
+    "score": null
+  },
+  "queryMatch": "exact",
+  "evidence": [
+    {
+      "id": "musicbrainz:track/recording/6029d549-5858-4936-9156-b90770d2ae92",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/6029d549-5858-4936-9156-b90770d2ae92",
+      "title": "Running up That Hill (A Deal With God) — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Running up That Hill (A Deal With God)\" by Kate Bush (5:00), ISRC GBCNR8500002, first released 1985-07-30.",
+      "recordRef": "track/recording/6029d549-5858-4936-9156-b90770d2ae92"
+    },
+    {
+      "id": "musicbrainz:track/recording/6029d549-5858-4936-9156-b90770d2ae92/remixed-by/recording/7a0aecf5-0538-42d6-a468-78e0d3a9dead",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/6029d549-5858-4936-9156-b90770d2ae92",
+      "title": "Running up That Hill (A Deal With God) — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Running up That Hill (A Deal With God)\" by Kate Bush is remixed in \"Running up That Hill (A Deal With God) (2012 remix)\" by Kate Bush.",
+      "recordRef": "track/recording/6029d549-5858-4936-9156-b90770d2ae92/remixed-by/recording/7a0aecf5-0538-42d6-a468-78e0d3a9dead"
+    },
+    {
+      "id": "musicbrainz:track/recording/6029d549-5858-4936-9156-b90770d2ae92/remixed-by/recording/00a066ec-1f0b-46b8-87bd-ecd0632287e6",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/6029d549-5858-4936-9156-b90770d2ae92",
+      "title": "Running up That Hill (A Deal With God) — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Running up That Hill (A Deal With God)\" by Kate Bush is remixed in \"Running Up That Hill (club Bizarre edit)\" by Kate Bush remixed by Club Bizarre.",
+      "recordRef": "track/recording/6029d549-5858-4936-9156-b90770d2ae92/remixed-by/recording/00a066ec-1f0b-46b8-87bd-ecd0632287e6"
+    },
+    {
+      "id": "musicbrainz:track/recording/6029d549-5858-4936-9156-b90770d2ae92/remixed-by/recording/bcb55954-b5f7-4b19-b11b-a8ac9f45db21",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/6029d549-5858-4936-9156-b90770d2ae92",
+      "title": "Running up That Hill (A Deal With God) — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Running up That Hill (A Deal With God)\" by Kate Bush is remixed in \"Running Up That Hill (Daisy O'Dell version)\" by Kate Bush remixed by Daisy O’Dell.",
+      "recordRef": "track/recording/6029d549-5858-4936-9156-b90770d2ae92/remixed-by/recording/bcb55954-b5f7-4b19-b11b-a8ac9f45db21"
+    },
+    {
+      "id": "musicbrainz:track/recording/6029d549-5858-4936-9156-b90770d2ae92/remixed-by/recording/2c3711fb-478b-4405-8ddb-0b576a435be6",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/6029d549-5858-4936-9156-b90770d2ae92",
+      "title": "Running up That Hill (A Deal With God) — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Running up That Hill (A Deal With God)\" by Kate Bush is remixed in \"Running Up That Hill (Juelz remix)\" by Kate Bush.",
+      "recordRef": "track/recording/6029d549-5858-4936-9156-b90770d2ae92/remixed-by/recording/2c3711fb-478b-4405-8ddb-0b576a435be6"
+    },
+    {
+      "id": "musicbrainz:track/recording/6029d549-5858-4936-9156-b90770d2ae92/remixed-by/recording/3e5e0f7a-6662-4dd2-a6b4-31bc50baffbb",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/6029d549-5858-4936-9156-b90770d2ae92",
+      "title": "Running up That Hill (A Deal With God) — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Running up That Hill (A Deal With God)\" by Kate Bush is remixed in \"Running Up That Hill (Justin Fry remix)\" by Kate Bush remixed by Justin Fry.",
+      "recordRef": "track/recording/6029d549-5858-4936-9156-b90770d2ae92/remixed-by/recording/3e5e0f7a-6662-4dd2-a6b4-31bc50baffbb"
+    },
+    {
+      "id": "musicbrainz:track/recording/6029d549-5858-4936-9156-b90770d2ae92/remixed-by/recording/83372c4e-c0f8-43b5-a60a-a04574143348",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/6029d549-5858-4936-9156-b90770d2ae92",
+      "title": "Running up That Hill (A Deal With God) — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Running up That Hill (A Deal With God)\" by Kate Bush is remixed in \"Running Up That Hill (Kaldera remix)\" by Kate Bush remixed by Kaldera.",
+      "recordRef": "track/recording/6029d549-5858-4936-9156-b90770d2ae92/remixed-by/recording/83372c4e-c0f8-43b5-a60a-a04574143348"
+    },
+    {
+      "id": "musicbrainz:track/recording/6029d549-5858-4936-9156-b90770d2ae92/remixed-by/recording/d33295c9-408e-4657-926a-468073acb592",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/6029d549-5858-4936-9156-b90770d2ae92",
+      "title": "Running up That Hill (A Deal With God) — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Running up That Hill (A Deal With God)\" by Kate Bush is remixed in \"Running Up That Hill (Louis La Roche remix)\" by Kate Bush remixed by Louis La Roche.",
+      "recordRef": "track/recording/6029d549-5858-4936-9156-b90770d2ae92/remixed-by/recording/d33295c9-408e-4657-926a-468073acb592"
+    },
+    {
+      "id": "musicbrainz:track/recording/6029d549-5858-4936-9156-b90770d2ae92/remixed-by/recording/02607286-2727-4452-ad67-eea1134ea5ef",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/6029d549-5858-4936-9156-b90770d2ae92",
+      "title": "Running up That Hill (A Deal With God) — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Running up That Hill (A Deal With God)\" by Kate Bush is remixed in \"Running Up That Hill (Matt Heo remix)\" by Kate Bush remixed by HEO.",
+      "recordRef": "track/recording/6029d549-5858-4936-9156-b90770d2ae92/remixed-by/recording/02607286-2727-4452-ad67-eea1134ea5ef"
+    },
+    {
+      "id": "musicbrainz:track/recording/6029d549-5858-4936-9156-b90770d2ae92/remixed-by/recording/1c0ca10a-5311-413a-ba79-48c4ea6054e9",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/6029d549-5858-4936-9156-b90770d2ae92",
+      "title": "Running up That Hill (A Deal With God) — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Running up That Hill (A Deal With God)\" by Kate Bush is remixed in \"Running Up That Hill (Noraj Cue remix)\" by Kate Bush remixed by Noraj Cue.",
+      "recordRef": "track/recording/6029d549-5858-4936-9156-b90770d2ae92/remixed-by/recording/1c0ca10a-5311-413a-ba79-48c4ea6054e9"
+    },
+    {
+      "id": "musicbrainz:track/recording/6029d549-5858-4936-9156-b90770d2ae92/remixed-by/recording/ff07c232-6012-4239-885c-336f2d5adfbb",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/6029d549-5858-4936-9156-b90770d2ae92",
+      "title": "Running up That Hill (A Deal With God) — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Running up That Hill (A Deal With God)\" by Kate Bush is remixed in \"Running Up That Hill (Orkidea Pure Progressive mix)\" by Kate Bush remixed by Orkidea.",
+      "recordRef": "track/recording/6029d549-5858-4936-9156-b90770d2ae92/remixed-by/recording/ff07c232-6012-4239-885c-336f2d5adfbb"
+    },
+    {
+      "id": "musicbrainz:track/recording/6029d549-5858-4936-9156-b90770d2ae92/remixed-by/recording/39459502-cfb4-47fc-8017-f5231b8b4ab5",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/6029d549-5858-4936-9156-b90770d2ae92",
+      "title": "Running up That Hill (A Deal With God) — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Running up That Hill (A Deal With God)\" by Kate Bush is remixed in \"Running Up That Hill (Roy Van Doorn edit)\" by Kate Bush remixed by Sander van Doorn.",
+      "recordRef": "track/recording/6029d549-5858-4936-9156-b90770d2ae92/remixed-by/recording/39459502-cfb4-47fc-8017-f5231b8b4ab5"
+    },
+    {
+      "id": "musicbrainz:track/recording/6029d549-5858-4936-9156-b90770d2ae92/remixed-by/recording/cff9d305-8778-4b3a-8205-f5e8069471e0",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/6029d549-5858-4936-9156-b90770d2ae92",
+      "title": "Running up That Hill (A Deal With God) — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Running up That Hill (A Deal With God)\" by Kate Bush is remixed in \"Running Up That Hill (TOTEM Remix)\" by Kate Bush & Kyle Dixon & Michael Stein.",
+      "recordRef": "track/recording/6029d549-5858-4936-9156-b90770d2ae92/remixed-by/recording/cff9d305-8778-4b3a-8205-f5e8069471e0"
+    },
+    {
+      "id": "musicbrainz:track/recording/6029d549-5858-4936-9156-b90770d2ae92/remixed-by/recording/12e52bb2-6c29-403d-b2e3-82669c20ea53",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/6029d549-5858-4936-9156-b90770d2ae92",
+      "title": "Running up That Hill (A Deal With God) — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Running up That Hill (A Deal With God)\" by Kate Bush is remixed in \"Running Up That Hill (XY Me remix)\" by Kate Bush remixed by XY-Me.",
+      "recordRef": "track/recording/6029d549-5858-4936-9156-b90770d2ae92/remixed-by/recording/12e52bb2-6c29-403d-b2e3-82669c20ea53"
+    },
+    {
+      "id": "musicbrainz:track/recording/6029d549-5858-4936-9156-b90770d2ae92/sampled-by/recording/168e45c8-6d78-4c6a-9119-9e4a50315f98",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/6029d549-5858-4936-9156-b90770d2ae92",
+      "title": "Running up That Hill (A Deal With God) — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Running up That Hill (A Deal With God)\" by Kate Bush is sampled in \"Independence\" by Contopp nd #Sloppit#.",
+      "recordRef": "track/recording/6029d549-5858-4936-9156-b90770d2ae92/sampled-by/recording/168e45c8-6d78-4c6a-9119-9e4a50315f98"
+    },
+    {
+      "id": "musicbrainz:release/e4b5581f-4b95-4f44-8c26-b89eedda962a",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/release/e4b5581f-4b95-4f44-8c26-b89eedda962a",
+      "title": "Hounds of Love — MusicBrainz release",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Running up That Hill (A Deal With God)\" by Kate Bush appears on the official album \"Hounds of Love\" (1985-09-16).",
+      "recordRef": "release/e4b5581f-4b95-4f44-8c26-b89eedda962a"
+    },
+    {
+      "id": "musicbrainz:work/0dffe206-0a59-34e3-996e-665b8638ff76/covered-by/recording/9614ecb8-e005-497f-af5c-9526e5f88140",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/0dffe206-0a59-34e3-996e-665b8638ff76",
+      "title": "Running Up That Hill — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Running Up That Hill\" is covered by \"Running Up That Hill\" by Within Temptation.",
+      "recordRef": "work/0dffe206-0a59-34e3-996e-665b8638ff76/covered-by/recording/9614ecb8-e005-497f-af5c-9526e5f88140"
+    },
+    {
+      "id": "musicbrainz:work/0dffe206-0a59-34e3-996e-665b8638ff76/covered-by/recording/84147e86-3e0c-4f68-a171-874e99b46125",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/0dffe206-0a59-34e3-996e-665b8638ff76",
+      "title": "Running Up That Hill — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Running Up That Hill\" is covered by \"Running Up That Hill (live at The Edisons Amsterdam)\" by Within Temptation.",
+      "recordRef": "work/0dffe206-0a59-34e3-996e-665b8638ff76/covered-by/recording/84147e86-3e0c-4f68-a171-874e99b46125"
+    },
+    {
+      "id": "musicbrainz:work/0dffe206-0a59-34e3-996e-665b8638ff76/covered-by/recording/54eab6c2-901a-4164-84ba-fbdffc5974d3",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/0dffe206-0a59-34e3-996e-665b8638ff76",
+      "title": "Running Up That Hill — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Running Up That Hill\" is covered by \"God / Running Up That Hill\" by Tori Amos.",
+      "recordRef": "work/0dffe206-0a59-34e3-996e-665b8638ff76/covered-by/recording/54eab6c2-901a-4164-84ba-fbdffc5974d3"
+    },
+    {
+      "id": "musicbrainz:work/0dffe206-0a59-34e3-996e-665b8638ff76/covered-by/recording/b945d21e-7df0-45f0-8ef1-0b8d6db8004e",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/0dffe206-0a59-34e3-996e-665b8638ff76",
+      "title": "Running Up That Hill — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Running Up That Hill\" is covered by \"Running Up That Hill\" by Placebo.",
+      "recordRef": "work/0dffe206-0a59-34e3-996e-665b8638ff76/covered-by/recording/b945d21e-7df0-45f0-8ef1-0b8d6db8004e"
+    },
+    {
+      "id": "musicbrainz:work/0dffe206-0a59-34e3-996e-665b8638ff76/covered-by/recording/727c650c-f617-47f6-96af-bb56ec619867",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/0dffe206-0a59-34e3-996e-665b8638ff76",
+      "title": "Running Up That Hill — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Running Up That Hill\" is covered by \"Running Up That Hill\" by Placebo.",
+      "recordRef": "work/0dffe206-0a59-34e3-996e-665b8638ff76/covered-by/recording/727c650c-f617-47f6-96af-bb56ec619867"
+    },
+    {
+      "id": "musicbrainz:work/0dffe206-0a59-34e3-996e-665b8638ff76/covered-by/recording/fa7f2f3c-2fe5-4594-b7b9-39add1f50217",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/0dffe206-0a59-34e3-996e-665b8638ff76",
+      "title": "Running Up That Hill — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Running Up That Hill\" is covered by \"Running Up That Hill\" by Placebo.",
+      "recordRef": "work/0dffe206-0a59-34e3-996e-665b8638ff76/covered-by/recording/fa7f2f3c-2fe5-4594-b7b9-39add1f50217"
+    },
+    {
+      "id": "musicbrainz:work/0dffe206-0a59-34e3-996e-665b8638ff76/covered-by/recording/b0894a24-f19e-43c8-a7b5-f3175634ca41",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/0dffe206-0a59-34e3-996e-665b8638ff76",
+      "title": "Running Up That Hill — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Running Up That Hill\" is covered by \"Running Up That Hill\" by Nolwenn Leroy.",
+      "recordRef": "work/0dffe206-0a59-34e3-996e-665b8638ff76/covered-by/recording/b0894a24-f19e-43c8-a7b5-f3175634ca41"
+    },
+    {
+      "id": "musicbrainz:work/0dffe206-0a59-34e3-996e-665b8638ff76/covered-by/recording/45007fca-88dd-417e-a16e-b70e992dcab3",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/0dffe206-0a59-34e3-996e-665b8638ff76",
+      "title": "Running Up That Hill — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Running Up That Hill\" is covered by \"Running Up That Hill\" by Club for Five.",
+      "recordRef": "work/0dffe206-0a59-34e3-996e-665b8638ff76/covered-by/recording/45007fca-88dd-417e-a16e-b70e992dcab3"
+    },
+    {
+      "id": "musicbrainz:work/0dffe206-0a59-34e3-996e-665b8638ff76/covered-by/recording/3cd0afed-4cf7-415c-97c5-1a7b16055d6d",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/0dffe206-0a59-34e3-996e-665b8638ff76",
+      "title": "Running Up That Hill — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Running Up That Hill\" is covered by \"Running Up That Hill\" by Club for Five.",
+      "recordRef": "work/0dffe206-0a59-34e3-996e-665b8638ff76/covered-by/recording/3cd0afed-4cf7-415c-97c5-1a7b16055d6d"
+    },
+    {
+      "id": "musicbrainz:work/0dffe206-0a59-34e3-996e-665b8638ff76/covered-by/recording/225dd7c5-d822-45fa-8985-765f084b8a90",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/0dffe206-0a59-34e3-996e-665b8638ff76",
+      "title": "Running Up That Hill — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Running Up That Hill\" is covered by \"Running Up That Hill\" by Claudia Brücken & Andrew Poppy.",
+      "recordRef": "work/0dffe206-0a59-34e3-996e-665b8638ff76/covered-by/recording/225dd7c5-d822-45fa-8985-765f084b8a90"
+    },
+    {
+      "id": "musicbrainz:work/0dffe206-0a59-34e3-996e-665b8638ff76/covered-by/recording/26876667-b9ac-45b1-a6cf-fb375cca6293",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/0dffe206-0a59-34e3-996e-665b8638ff76",
+      "title": "Running Up That Hill — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Running Up That Hill\" is covered by \"Running Up That Hill\" by Will Young.",
+      "recordRef": "work/0dffe206-0a59-34e3-996e-665b8638ff76/covered-by/recording/26876667-b9ac-45b1-a6cf-fb375cca6293"
+    },
+    {
+      "id": "tavily:https://www.whosampled.com/Kate-Bush",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.whosampled.com/Kate-Bush",
+      "title": "Kate Bush - Samples, Covers and Remixes",
+      "retrievedAt": "[time]",
+      "excerpt": "Running Up That Hill (1985) was sampled in Deal With God by Infinity Frequencies (2012) 00:20 - Need You This Way by The Kleptones (2006)",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://fr.wikipedia.org/wiki/Reprises_des_chansons_de_Kate_Bush",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://fr.wikipedia.org/wiki/Reprises_des_chansons_de_Kate_Bush",
+      "title": "Reprises des chansons de Kate Bush",
+      "retrievedAt": "[time]",
+      "excerpt": "Running Up That Hill (A Deal With God) [22] 2006 Album « Scratching The Surface » - Sampler (Disc 2 - Electro-Voice). Running Up That Hill Sample Majella.",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.whosampled.com/Kate-Bush/Running-Up-That-Hill/sampled",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.whosampled.com/Kate-Bush/Running-Up-That-Hill/sampled",
+      "title": "Songs that Sampled Running Up That Hill by Kate Bush",
+      "retrievedAt": "[time]",
+      "excerpt": "Sampled in 27 songs ; Viper the Rapper's Running Up That Hill (Crack Dealin' Wit God), Running Up That Hill (Crack Dealin' Wit God) · Viper the Rapper ; Mega Ran",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.whosampled.com/Kate-Bush/Running-Up-That-Hill",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.whosampled.com/Kate-Bush/Running-Up-That-Hill",
+      "title": "Running Up That Hill by Kate Bush",
+      "retrievedAt": "[time]",
+      "excerpt": "Covers Dance Faith and the Muse's. Remixed in 1 song Kate Bush's Running Up That Hill (A Deal With God) (2012 Remix) the song was still called 'Deal With God.'",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.musicmusingsandsuch.com/musicmusingsandsuch/2025/12/11/feature-something-goodagain-the-idea-of-an-iconic-new-kate-bush-sample-or-remix",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.musicmusingsandsuch.com/musicmusingsandsuch/2025/12/11/feature-something-goodagain-the-idea-of-an-iconic-new-kate-bush-sample-or-remix",
+      "title": "The Idea of an Iconic New Kate Bush Sample or Remix ...",
+      "retrievedAt": "[time]",
+      "excerpt": "Regardless, as I have stated in previous features, you do not really get Kate Bush remixes or samples. ... Running Up That Hill (A Deal with God),",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://en.wikipedia.org/wiki/Running_Up_That_Hill",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://en.wikipedia.org/wiki/Running_Up_That_Hill",
+      "title": "Running Up That Hill - Wikipedia",
+      "retrievedAt": "[time]",
+      "excerpt": "\"Running Up That Hill\" (also titled \"Running Up That Hill (A Deal with God)\") is a song by the English singer-songwriter Kate Bush, released as the lead single from her fifth studio album, Hounds of Love, on 5 August 1985 by EMI Records. Bush wrote and produced it using a Fairlight CMI synthesiser and a LinnDrum drum machine. The lyrics imagine a man and a woman who make \"a deal with God\" to exchange places. [...] billion streams on Spotify and reached number 14 on the UK singles chart in Janua…",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://elpee.jp/single/Running%20Up%20That%20Hill/Kate%20Bush",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://elpee.jp/single/Running%20Up%20That%20Hill/Kate%20Bush",
+      "title": "\"Running Up That Hill\" by Kate Bush | Billboard Hot 100 Chart ...",
+      "retrievedAt": "[time]",
+      "excerpt": "Aug 15, 2026 — Written and produced entirely by Bush, the track was conceived in 1983 after she relocated from London to rural Sevenoaks and established a home ...Read more",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.bbc.co.uk/programmes/articles/4MmgcKBf0V13M0r8jNQPH18/8-things-you-might-not-know-about-kate-bushs-hounds-of-love-album",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.bbc.co.uk/programmes/articles/4MmgcKBf0V13M0r8jNQPH18/8-things-you-might-not-know-about-kate-bushs-hounds-of-love-album",
+      "title": "BBC - 8 things you might not know about Kate Bush's Hounds of Love album",
+      "retrievedAt": "[time]",
+      "excerpt": "## 6. Kate’s always regretted changing the name of Running Up That Hill Running Up That Hill was originally called A Deal With God, but Kate was told that if they kept that title it wouldn’t be played in any religious country. Despite changing the title at the time, Kate has always regretted doing so. [...] ## 4. The album explores gender roles, and sexism - but not only in Running Up That Hill Running Up That Hill opens the album with Kate exploring the roles of a man and a woman, wishing to s…",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://stevepafford.com/katebush60",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://stevepafford.com/katebush60",
+      "title": "Diamond Wow: 60 Unbelievable Facts for Kate’s Bush’s Birthday - Steve Pafford",
+      "retrievedAt": "[time]",
+      "excerpt": "18. Including promotional singles she has since released a total of forty-five 45s across the world, including twenty-five that made the British Top Forty, including the Top 10 hits The Man With The Child in His Eyes, Babooshka and King of the Mountain, as well as the live On Stage EP. Making that deal with God, Running Up That Hill was even a hit on more than one occasion, including the 1985 original and in a specially remixed version with newly recorded vocals for the London 2012 Olympics. [.…",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.grammy.com/news/2023-music-books-summer-reading-list-memoir-biography-genre-history",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.grammy.com/news/2023-music-books-summer-reading-list-memoir-biography-genre-history",
+      "title": "10 Music Books To Dig Into This Summer: A Kate Bush Bio, A First-Hand Account Of The Grunge Scene & Feminist Punk Histories | Grammy",
+      "retrievedAt": "[time]",
+      "excerpt": "Doyle’s book was first published in the UK last year, riding the wave of enthusiasm when Bush’s 1985 single \"Running Up That Hill (A Deal With God),\" became a surprise worldwide hit, due to its use in the Netflix series \"Stranger Things\" (swiftly followed up by her recent induction into the Rock and Roll Hall of Fame this year). The \"Visions\" are presented mostly chronologically, with expected stops at obvious life/career high points, such as the making of each of her albums. [...] Here’s a rou…",
+      "recordRef": null
+    },
+    {
+      "id": "musicbrainz:recording/7a0aecf5-0538-42d6-a468-78e0d3a9dead",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/7a0aecf5-0538-42d6-a468-78e0d3a9dead",
+      "title": "Running up That Hill (A Deal With God) (2012 remix) — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Running up That Hill (A Deal With God) (2012 remix)\" by Kate Bush, first released 2012-08-10.",
+      "recordRef": "recording/7a0aecf5-0538-42d6-a468-78e0d3a9dead"
+    },
+    {
+      "id": "musicbrainz:recording/00a066ec-1f0b-46b8-87bd-ecd0632287e6",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/00a066ec-1f0b-46b8-87bd-ecd0632287e6",
+      "title": "Running Up That Hill (club Bizarre edit) — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Running Up That Hill (club Bizarre edit)\" by Kate Bush remixed by Club Bizarre, first released 2012.",
+      "recordRef": "recording/00a066ec-1f0b-46b8-87bd-ecd0632287e6"
+    },
+    {
+      "id": "musicbrainz:recording/bcb55954-b5f7-4b19-b11b-a8ac9f45db21",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/bcb55954-b5f7-4b19-b11b-a8ac9f45db21",
+      "title": "Running Up That Hill (Daisy O'Dell version) — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Running Up That Hill (Daisy O'Dell version)\" by Kate Bush remixed by Daisy O’Dell, first released 2012.",
+      "recordRef": "recording/bcb55954-b5f7-4b19-b11b-a8ac9f45db21"
+    },
+    {
+      "id": "musicbrainz:recording/2c3711fb-478b-4405-8ddb-0b576a435be6",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/2c3711fb-478b-4405-8ddb-0b576a435be6",
+      "title": "Running Up That Hill (Juelz remix) — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Running Up That Hill (Juelz remix)\" by Kate Bush, first released 2022-12-31.",
+      "recordRef": "recording/2c3711fb-478b-4405-8ddb-0b576a435be6"
+    },
+    {
+      "id": "musicbrainz:recording/3e5e0f7a-6662-4dd2-a6b4-31bc50baffbb",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/3e5e0f7a-6662-4dd2-a6b4-31bc50baffbb",
+      "title": "Running Up That Hill (Justin Fry remix) — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Running Up That Hill (Justin Fry remix)\" by Kate Bush remixed by Justin Fry, first released 2012.",
+      "recordRef": "recording/3e5e0f7a-6662-4dd2-a6b4-31bc50baffbb"
+    },
+    {
+      "id": "musicbrainz:recording/83372c4e-c0f8-43b5-a60a-a04574143348",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/83372c4e-c0f8-43b5-a60a-a04574143348",
+      "title": "Running Up That Hill (Kaldera remix) — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Running Up That Hill (Kaldera remix)\" by Kate Bush remixed by Kaldera, first released 2012.",
+      "recordRef": "recording/83372c4e-c0f8-43b5-a60a-a04574143348"
+    },
+    {
+      "id": "musicbrainz:recording/d33295c9-408e-4657-926a-468073acb592",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/d33295c9-408e-4657-926a-468073acb592",
+      "title": "Running Up That Hill (Louis La Roche remix) — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Running Up That Hill (Louis La Roche remix)\" by Kate Bush remixed by Louis La Roche, first released 2012.",
+      "recordRef": "recording/d33295c9-408e-4657-926a-468073acb592"
+    },
+    {
+      "id": "musicbrainz:recording/02607286-2727-4452-ad67-eea1134ea5ef",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/02607286-2727-4452-ad67-eea1134ea5ef",
+      "title": "Running Up That Hill (Matt Heo remix) — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Running Up That Hill (Matt Heo remix)\" by Kate Bush remixed by HEO, first released 2012.",
+      "recordRef": "recording/02607286-2727-4452-ad67-eea1134ea5ef"
+    },
+    {
+      "id": "musicbrainz:recording/1c0ca10a-5311-413a-ba79-48c4ea6054e9",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/1c0ca10a-5311-413a-ba79-48c4ea6054e9",
+      "title": "Running Up That Hill (Noraj Cue remix) — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Running Up That Hill (Noraj Cue remix)\" by Kate Bush remixed by Noraj Cue, first released 2012.",
+      "recordRef": "recording/1c0ca10a-5311-413a-ba79-48c4ea6054e9"
+    },
+    {
+      "id": "musicbrainz:recording/ff07c232-6012-4239-885c-336f2d5adfbb",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/ff07c232-6012-4239-885c-336f2d5adfbb",
+      "title": "Running Up That Hill (Orkidea Pure Progressive mix) — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Running Up That Hill (Orkidea Pure Progressive mix)\" by Kate Bush remixed by Orkidea, first released 2012.",
+      "recordRef": "recording/ff07c232-6012-4239-885c-336f2d5adfbb"
+    },
+    {
+      "id": "musicbrainz:recording/39459502-cfb4-47fc-8017-f5231b8b4ab5",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/39459502-cfb4-47fc-8017-f5231b8b4ab5",
+      "title": "Running Up That Hill (Roy Van Doorn edit) — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Running Up That Hill (Roy Van Doorn edit)\" by Kate Bush remixed by Sander van Doorn, first released 2012.",
+      "recordRef": "recording/39459502-cfb4-47fc-8017-f5231b8b4ab5"
+    },
+    {
+      "id": "musicbrainz:recording/12e52bb2-6c29-403d-b2e3-82669c20ea53",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/12e52bb2-6c29-403d-b2e3-82669c20ea53",
+      "title": "Running Up That Hill (XY Me remix) — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Running Up That Hill (XY Me remix)\" by Kate Bush remixed by XY-Me, first released 2012.",
+      "recordRef": "recording/12e52bb2-6c29-403d-b2e3-82669c20ea53"
+    },
+    {
+      "id": "musicbrainz:recording/168e45c8-6d78-4c6a-9119-9e4a50315f98",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/168e45c8-6d78-4c6a-9119-9e4a50315f98",
+      "title": "Independence — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Independence\" by Contopp nd #Sloppit#, first released 2022-10-29.",
+      "recordRef": "recording/168e45c8-6d78-4c6a-9119-9e4a50315f98"
+    }
+  ],
+  "segments": [
+    {
+      "label": "Intro",
+      "start": 0,
+      "end": 8
+    },
+    {
+      "label": "Verse 1",
+      "start": 8,
+      "end": 25
+    },
+    {
+      "label": "Chorus",
+      "start": 25,
+      "end": 42
+    },
+    {
+      "label": "Verse 2",
+      "start": 42,
+      "end": 58
+    },
+    {
+      "label": "Bridge",
+      "start": 58,
+      "end": 75
+    },
+    {
+      "label": "Chorus",
+      "start": 75,
+      "end": 92
+    },
+    {
+      "label": "Outro",
+      "start": 92,
+      "end": 100
+    }
+  ],
+  "segmentsSource": "template",
+  "samples": [],
+  "factoids": [
+    {
+      "id": "<id 21>",
+      "title": "A title with two lives",
+      "content": "The song was originally titled “A Deal With God”; “Running Up That Hill” became its released title, while the subtitle preserves the original phrase.",
+      "type": "curiosity",
+      "entities": [
+        {
+          "id": "<id 22>",
+          "text": "Kate Bush",
+          "type": "artist",
+          "searchQuery": "Kate Bush"
+        },
+        {
+          "id": "<id 23>",
+          "text": "1985",
+          "type": "year",
+          "searchQuery": "1985"
+        }
+      ],
+      "claimId": "<id 4>"
+    },
+    {
+      "id": "<id 24>",
+      "title": "A song revisited in remixes",
+      "content": "MusicBrainz lists a 2012 remix of this recording, along with later remix versions credited to Club Bizarre, Daisy O’Dell, Juelz and others.",
+      "type": "production",
+      "entities": [
+        {
+          "id": "<id 25>",
+          "text": "Kate Bush",
+          "type": "artist",
+          "searchQuery": "Kate Bush"
+        },
+        {
+          "id": "<id 26>",
+          "text": "2012",
+          "type": "year",
+          "searchQuery": "2012"
+        },
+        {
+          "id": "<id 27>",
+          "text": "Club Bizarre",
+          "type": "producer",
+          "searchQuery": "Club Bizarre"
+        },
+        {
+          "id": "<id 28>",
+          "text": "Daisy O’Dell",
+          "type": "producer",
+          "searchQuery": "Daisy O’Dell"
+        }
+      ],
+      "claimId": "<id 5>"
+    },
+    {
+      "id": "<id 29>",
+      "title": "A sample in another track",
+      "content": "MusicBrainz identifies Kate Bush’s recording as sampled in “Independence” by Contopp nd #Sloppit#.",
+      "type": "sample",
+      "entities": [
+        {
+          "id": "<id 30>",
+          "text": "Independence",
+          "type": "sample",
+          "searchQuery": "Independence"
+        },
+        {
+          "id": "<id 31>",
+          "text": "Contopp nd #Sloppit#",
+          "type": "artist",
+          "searchQuery": "Contopp nd #Sloppit#"
+        }
+      ],
+      "claimId": "<id 6>"
+    },
+    {
+      "id": "<id 32>",
+      "title": "A song taken up by other artists",
+      "content": "MusicBrainz records covers of the song by artists including Within Temptation, Tori Amos and Placebo.",
+      "type": "connection",
+      "entities": [
+        {
+          "id": "<id 33>",
+          "text": "Within Temptation",
+          "type": "artist",
+          "searchQuery": "Within Temptation"
+        },
+        {
+          "id": "<id 34>",
+          "text": "Tori Amos",
+          "type": "artist",
+          "searchQuery": "Tori Amos"
+        },
+        {
+          "id": "<id 35>",
+          "text": "Placebo",
+          "type": "artist",
+          "searchQuery": "Placebo"
+        }
+      ],
+      "claimId": "<id 7>"
+    }
+  ],
+  "genealogy": {
+    "nodes": [
+      {
+        "id": "current",
+        "group": 1,
+        "label": "Running Up That Hill (A Deal With God)",
+        "size": 40,
+        "trackTitle": "Running Up That Hill (A Deal With God)",
+        "trackArtist": "Kate Bush",
+        "mbid": "6029d549-5858-4936-9156-b90770d2ae92",
+        "year": 1985
+      },
+      {
+        "id": "club-bizarre",
+        "group": 4,
+        "label": "Running Up That Hill (club Bizarre edit) - Kate Bush",
+        "size": 22,
+        "trackTitle": "Running Up That Hill (club Bizarre edit)",
+        "trackArtist": "Kate Bush"
+      },
+      {
+        "id": "mb-7a0aecf5-0538-42d6-a468-78e0d3a9dead",
+        "group": 4,
+        "label": "Running up That Hill (A Deal With God) (2012 remix) - Kate Bush",
+        "size": 22,
+        "trackTitle": "Running up That Hill (A Deal With God) (2012 remix)",
+        "trackArtist": "Kate Bush",
+        "year": 2012,
+        "mbid": "7a0aecf5-0538-42d6-a468-78e0d3a9dead"
+      },
+      {
+        "id": "mb-00a066ec-1f0b-46b8-87bd-ecd0632287e6",
+        "group": 4,
+        "label": "Running Up That Hill (club Bizarre edit) - Kate Bush remixed by Club Bizarre",
+        "size": 22,
+        "trackTitle": "Running Up That Hill (club Bizarre edit)",
+        "trackArtist": "Kate Bush remixed by Club Bizarre",
+        "year": 2012,
+        "mbid": "00a066ec-1f0b-46b8-87bd-ecd0632287e6"
+      },
+      {
+        "id": "mb-bcb55954-b5f7-4b19-b11b-a8ac9f45db21",
+        "group": 4,
+        "label": "Running Up That Hill (Daisy O'Dell version) - Kate Bush remixed by Daisy O’Dell",
+        "size": 22,
+        "trackTitle": "Running Up That Hill (Daisy O'Dell version)",
+        "trackArtist": "Kate Bush remixed by Daisy O’Dell",
+        "year": 2012,
+        "mbid": "bcb55954-b5f7-4b19-b11b-a8ac9f45db21"
+      },
+      {
+        "id": "mb-2c3711fb-478b-4405-8ddb-0b576a435be6",
+        "group": 4,
+        "label": "Running Up That Hill (Juelz remix) - Kate Bush",
+        "size": 22,
+        "trackTitle": "Running Up That Hill (Juelz remix)",
+        "trackArtist": "Kate Bush",
+        "year": 2022,
+        "mbid": "2c3711fb-478b-4405-8ddb-0b576a435be6"
+      },
+      {
+        "id": "mb-168e45c8-6d78-4c6a-9119-9e4a50315f98",
+        "group": 3,
+        "label": "Independence - Contopp nd #Sloppit#",
+        "size": 22,
+        "trackTitle": "Independence",
+        "trackArtist": "Contopp nd #Sloppit#",
+        "year": 2022,
+        "mbid": "168e45c8-6d78-4c6a-9119-9e4a50315f98"
+      }
+    ],
+    "links": [
+      {
+        "source": "current",
+        "target": "club-bizarre",
+        "value": 2,
+        "type": "remix",
+        "kind": "sourced",
+        "origin": "model",
+        "claimId": "<id 8>",
+        "evidenceIds": [
+          "musicbrainz:track/recording/6029d549-5858-4936-9156-b90770d2ae92/remixed-by/recording/00a066ec-1f0b-46b8-87bd-ecd0632287e6"
+        ]
+      },
+      {
+        "source": "current",
+        "target": "mb-7a0aecf5-0538-42d6-a468-78e0d3a9dead",
+        "value": 2,
+        "type": "remix",
+        "kind": "sourced",
+        "origin": "code",
+        "claimId": "<id 9>",
+        "evidenceIds": [
+          "musicbrainz:track/recording/6029d549-5858-4936-9156-b90770d2ae92/remixed-by/recording/7a0aecf5-0538-42d6-a468-78e0d3a9dead"
+        ]
+      },
+      {
+        "source": "current",
+        "target": "mb-00a066ec-1f0b-46b8-87bd-ecd0632287e6",
+        "value": 2,
+        "type": "remix",
+        "kind": "sourced",
+        "origin": "code",
+        "claimId": "<id 10>",
+        "evidenceIds": [
+          "musicbrainz:track/recording/6029d549-5858-4936-9156-b90770d2ae92/remixed-by/recording/00a066ec-1f0b-46b8-87bd-ecd0632287e6"
+        ]
+      },
+      {
+        "source": "current",
+        "target": "mb-bcb55954-b5f7-4b19-b11b-a8ac9f45db21",
+        "value": 2,
+        "type": "remix",
+        "kind": "sourced",
+        "origin": "code",
+        "claimId": "<id 11>",
+        "evidenceIds": [
+          "musicbrainz:track/recording/6029d549-5858-4936-9156-b90770d2ae92/remixed-by/recording/bcb55954-b5f7-4b19-b11b-a8ac9f45db21"
+        ]
+      },
+      {
+        "source": "current",
+        "target": "mb-2c3711fb-478b-4405-8ddb-0b576a435be6",
+        "value": 2,
+        "type": "remix",
+        "kind": "sourced",
+        "origin": "code",
+        "claimId": "<id 12>",
+        "evidenceIds": [
+          "musicbrainz:track/recording/6029d549-5858-4936-9156-b90770d2ae92/remixed-by/recording/2c3711fb-478b-4405-8ddb-0b576a435be6"
+        ]
+      },
+      {
+        "source": "current",
+        "target": "mb-168e45c8-6d78-4c6a-9119-9e4a50315f98",
+        "value": 3,
+        "type": "sample",
+        "kind": "sourced",
+        "origin": "code",
+        "claimId": "<id 13>",
+        "evidenceIds": [
+          "musicbrainz:track/recording/6029d549-5858-4936-9156-b90770d2ae92/sampled-by/recording/168e45c8-6d78-4c6a-9119-9e4a50315f98"
+        ]
+      }
+    ]
+  },
+  "claims": [
+    {
+      "id": "<id 2>",
+      "text": "Kate Bush's recording was first released on 30 July 1985.",
+      "about": "history",
+      "evidenceIds": [
+        "musicbrainz:track/recording/6029d549-5858-4936-9156-b90770d2ae92"
+      ],
+      "scope": "recording",
+      "kind": "sourced",
+      "origin": "model",
+      "verdict": "supported",
+      "verdictReason": "The MusicBrainz recording excerpt gives its first-release date as 1985-07-30.",
+      "numericCheck": "n/a",
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 3>",
+      "text": "The song was written and produced by Kate Bush, who used a Fairlight CMI synthesiser and a LinnDrum drum machine.",
+      "about": "production",
+      "evidenceIds": [
+        "tavily:https://en.wikipedia.org/wiki/Running_Up_That_Hill"
+      ],
+      "scope": "work",
+      "kind": "sourced",
+      "origin": "model",
+      "verdict": "supported",
+      "verdictReason": "The Wikipedia excerpt states Bush wrote and produced it using both named instruments.",
+      "numericCheck": "n/a",
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 4>",
+      "text": "The song was originally titled “A Deal With God”; “Running Up That Hill” became its released title, while the subtitle preserves the original phrase.",
+      "about": "trivia",
+      "evidenceIds": [
+        "tavily:https://www.bbc.co.uk/programmes/articles/4MmgcKBf0V13M0r8jNQPH18/8-things-you-might-not-know-about-kate-bushs-hounds-of-love-album"
+      ],
+      "scope": "work",
+      "kind": "sourced",
+      "origin": "model",
+      "verdict": "partial",
+      "verdictReason": "The BBC excerpt confirms the title change but does not explain the subtitle.",
+      "numericCheck": "n/a",
+      "factoid": {
+        "title": "A title with two lives",
+        "type": "curiosity",
+        "entities": [
+          {
+            "text": "Kate Bush",
+            "type": "artist"
+          },
+          {
+            "text": "1985",
+            "type": "year"
+          }
+        ]
+      },
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 5>",
+      "text": "MusicBrainz lists a 2012 remix of this recording, along with later remix versions credited to Club Bizarre, Daisy O’Dell, Juelz and others.",
+      "about": "production",
+      "evidenceIds": [
+        "musicbrainz:track/recording/6029d549-5858-4936-9156-b90770d2ae92/remixed-by/recording/7a0aecf5-0538-42d6-a468-78e0d3a9dead",
+        "musicbrainz:track/recording/6029d549-5858-4936-9156-b90770d2ae92/remixed-by/recording/00a066ec-1f0b-46b8-87bd-ecd0632287e6",
+        "musicbrainz:track/recording/6029d549-5858-4936-9156-b90770d2ae92/remixed-by/recording/bcb55954-b5f7-4b19-b11b-a8ac9f45db21",
+        "musicbrainz:track/recording/6029d549-5858-4936-9156-b90770d2ae92/remixed-by/recording/2c3711fb-478b-4405-8ddb-0b576a435be6"
+      ],
+      "scope": "recording",
+      "kind": "inferred",
+      "origin": "model",
+      "verdict": "partial",
+      "verdictReason": "The MusicBrainz remix excerpts name four versions but establish no dates for the others.",
+      "numericCheck": "n/a",
+      "factoid": {
+        "title": "A song revisited in remixes",
+        "type": "production",
+        "entities": [
+          {
+            "text": "Kate Bush",
+            "type": "artist"
+          },
+          {
+            "text": "2012",
+            "type": "year"
+          },
+          {
+            "text": "Club Bizarre",
+            "type": "producer"
+          },
+          {
+            "text": "Daisy O’Dell",
+            "type": "producer"
+          }
+        ]
+      },
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 6>",
+      "text": "MusicBrainz identifies Kate Bush’s recording as sampled in “Independence” by Contopp nd #Sloppit#.",
+      "about": "sample",
+      "evidenceIds": [
+        "musicbrainz:track/recording/6029d549-5858-4936-9156-b90770d2ae92/sampled-by/recording/168e45c8-6d78-4c6a-9119-9e4a50315f98"
+      ],
+      "scope": "recording",
+      "kind": "sourced",
+      "origin": "model",
+      "verdict": "supported",
+      "verdictReason": "The MusicBrainz sampled-by excerpt names “Independence” by Contopp nd #Sloppit#.",
+      "numericCheck": "n/a",
+      "factoid": {
+        "title": "A sample in another track",
+        "type": "sample",
+        "entities": [
+          {
+            "text": "Independence",
+            "type": "sample"
+          },
+          {
+            "text": "Contopp nd #Sloppit#",
+            "type": "artist"
+          }
+        ]
+      },
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 7>",
+      "text": "MusicBrainz records covers of the song by artists including Within Temptation, Tori Amos and Placebo.",
+      "about": "connection",
+      "evidenceIds": [
+        "musicbrainz:work/0dffe206-0a59-34e3-996e-665b8638ff76/covered-by/recording/9614ecb8-e005-497f-af5c-9526e5f88140",
+        "musicbrainz:work/0dffe206-0a59-34e3-996e-665b8638ff76/covered-by/recording/54eab6c2-901a-4164-84ba-fbdffc5974d3",
+        "musicbrainz:work/0dffe206-0a59-34e3-996e-665b8638ff76/covered-by/recording/b945d21e-7df0-45f0-8ef1-0b8d6db8004e"
+      ],
+      "scope": "work",
+      "kind": "sourced",
+      "origin": "model",
+      "verdict": "supported",
+      "verdictReason": "The three MusicBrainz work excerpts name covers by Within Temptation, Tori Amos and Placebo.",
+      "numericCheck": "n/a",
+      "factoid": {
+        "title": "A song taken up by other artists",
+        "type": "connection",
+        "entities": [
+          {
+            "text": "Within Temptation",
+            "type": "artist"
+          },
+          {
+            "text": "Tori Amos",
+            "type": "artist"
+          },
+          {
+            "text": "Placebo",
+            "type": "artist"
+          }
+        ]
+      },
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 8>",
+      "text": "\"Running Up That Hill (club Bizarre edit) - Kate Bush\" is a remix of \"Running Up That Hill (A Deal With God) - Kate Bush\".",
+      "about": "sample",
+      "evidenceIds": [
+        "musicbrainz:track/recording/6029d549-5858-4936-9156-b90770d2ae92/remixed-by/recording/00a066ec-1f0b-46b8-87bd-ecd0632287e6"
+      ],
+      "scope": "recording",
+      "kind": "sourced",
+      "origin": "model",
+      "verdict": "supported",
+      "verdictReason": "The MusicBrainz Club Bizarre relationship excerpt identifies it as a remix.",
+      "numericCheck": "n/a"
+    },
+    {
+      "id": "<id 9>",
+      "text": "\"Running up That Hill (A Deal With God)\" by Kate Bush is remixed in \"Running up That Hill (A Deal With God) (2012 remix)\" by Kate Bush.",
+      "about": "sample",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:track/recording/6029d549-5858-4936-9156-b90770d2ae92/remixed-by/recording/7a0aecf5-0538-42d6-a468-78e0d3a9dead"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "recording"
+    },
+    {
+      "id": "<id 10>",
+      "text": "\"Running up That Hill (A Deal With God)\" by Kate Bush is remixed in \"Running Up That Hill (club Bizarre edit)\" by Kate Bush remixed by Club Bizarre.",
+      "about": "sample",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:track/recording/6029d549-5858-4936-9156-b90770d2ae92/remixed-by/recording/00a066ec-1f0b-46b8-87bd-ecd0632287e6"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "recording"
+    },
+    {
+      "id": "<id 11>",
+      "text": "\"Running up That Hill (A Deal With God)\" by Kate Bush is remixed in \"Running Up That Hill (Daisy O'Dell version)\" by Kate Bush remixed by Daisy O’Dell.",
+      "about": "sample",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:track/recording/6029d549-5858-4936-9156-b90770d2ae92/remixed-by/recording/bcb55954-b5f7-4b19-b11b-a8ac9f45db21"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "recording"
+    },
+    {
+      "id": "<id 12>",
+      "text": "\"Running up That Hill (A Deal With God)\" by Kate Bush is remixed in \"Running Up That Hill (Juelz remix)\" by Kate Bush.",
+      "about": "sample",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:track/recording/6029d549-5858-4936-9156-b90770d2ae92/remixed-by/recording/2c3711fb-478b-4405-8ddb-0b576a435be6"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "recording"
+    },
+    {
+      "id": "<id 13>",
+      "text": "\"Running up That Hill (A Deal With God)\" by Kate Bush is sampled in \"Independence\" by Contopp nd #Sloppit#.",
+      "about": "sample",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:track/recording/6029d549-5858-4936-9156-b90770d2ae92/sampled-by/recording/168e45c8-6d78-4c6a-9119-9e4a50315f98"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "recording"
+    },
+    {
+      "id": "<id 14>",
+      "text": "The work \"Running Up That Hill\" is covered by \"Running Up That Hill\" by Within Temptation.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/0dffe206-0a59-34e3-996e-665b8638ff76/covered-by/recording/9614ecb8-e005-497f-af5c-9526e5f88140"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 15>",
+      "text": "The work \"Running Up That Hill\" is covered by \"Running Up That Hill (live at The Edisons Amsterdam)\" by Within Temptation.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/0dffe206-0a59-34e3-996e-665b8638ff76/covered-by/recording/84147e86-3e0c-4f68-a171-874e99b46125"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 16>",
+      "text": "The work \"Running Up That Hill\" is covered by \"Running Up That Hill\" by Placebo.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/0dffe206-0a59-34e3-996e-665b8638ff76/covered-by/recording/b945d21e-7df0-45f0-8ef1-0b8d6db8004e"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 17>",
+      "text": "The work \"Running Up That Hill\" is covered by \"Running Up That Hill\" by Placebo.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/0dffe206-0a59-34e3-996e-665b8638ff76/covered-by/recording/727c650c-f617-47f6-96af-bb56ec619867"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 18>",
+      "text": "The work \"Running Up That Hill\" is covered by \"Running Up That Hill\" by Placebo.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/0dffe206-0a59-34e3-996e-665b8638ff76/covered-by/recording/fa7f2f3c-2fe5-4594-b7b9-39add1f50217"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 19>",
+      "text": "The work \"Running Up That Hill\" is covered by \"Running Up That Hill\" by Nolwenn Leroy.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/0dffe206-0a59-34e3-996e-665b8638ff76/covered-by/recording/b0894a24-f19e-43c8-a7b5-f3175634ca41"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 20>",
+      "text": "\"Running up That Hill (A Deal With God)\" by Kate Bush appears on the official album \"Hounds of Love\" (1985-09-16).",
+      "about": "track",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:release/e4b5581f-4b95-4f44-8c26-b89eedda962a"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "release"
+    }
+  ],
+  "run": {
+    "id": "<id 1>",
+    "analyzerVersion": "2.3.6+essentia.models-5c5c0c7f",
+    "fallback": false,
+    "usage": {
+      "llmCalls": 4,
+      "inputTokens": 17246,
+      "outputTokens": 2700,
+      "reasoningTokens": 282
+    },
+    "verifier": {
+      "judged": 8,
+      "unjudged": 0,
+      "restated": 1
+    },
+    "sourceErrors": [
+      {
+        "source": "discogs",
+        "code": "not_configured",
+        "message": "DISCOGS_TOKEN is not set"
+      },
+      {
+        "source": "secondhandsongs",
+        "code": "unavailable",
+        "message": "secondhandsongs: HTTP 403 (the source refused the request)"
+      }
+    ]
+  },
+  "audio": {
+    "version": 2,
+    "analyzerVersion": "2.3.6+essentia.models-5c5c0c7f",
+    "window": {
+      "kind": "preview-30s",
+      "durationSeconds": 29.986
+    },
+    "gate": {
+      "passed": true,
+      "reason": null
+    },
+    "tempo": {
+      "bpm": 108.37,
+      "confidence": 0.71,
+      "rawConfidence": {
+        "value": 3.778,
+        "range": [
+          0,
+          5.32
+        ]
+      },
+      "method": "essentia.RhythmExtractor2013+beat-regression",
+      "basis": "signal"
+    },
+    "key": null,
+    "loudness": {
+      "rmsMean": 0.096421,
+      "method": "mean frame RMS, 2048-sample frames at 22050 Hz, DC removed",
+      "basis": "signal"
+    },
+    "beats": {
+      "times": [
+        0.58,
+        1.138,
+        1.695,
+        2.252,
+        2.798,
+        3.355,
+        3.901,
+        4.458,
+        5.016,
+        5.573,
+        6.13,
+        6.687,
+        7.245,
+        7.79,
+        8.336,
+        8.893,
+        9.451,
+        10.008,
+        10.565,
+        11.111,
+        11.656,
+        12.214,
+        12.771,
+        13.328,
+        13.874,
+        14.42,
+        14.977,
+        15.534,
+        16.091,
+        16.649,
+        17.206,
+        17.74,
+        18.297,
+        18.855,
+        19.412,
+        19.969,
+        20.526,
+        21.084,
+        21.618,
+        22.175,
+        22.732,
+        23.29,
+        23.847,
+        24.404,
+        24.95,
+        25.496,
+        26.053,
+        26.61,
+        27.167,
+        27.725,
+        28.27,
+        28.828,
+        29.373
+      ],
+      "method": "essentia.RhythmExtractor2013",
+      "basis": "signal"
+    },
+    "energyContour": {
+      "hopSeconds": 0.09288,
+      "values": [
+        0.098832,
+        0.102963,
+        0.093547,
+        0.10417,
+        0.068587,
+        0.108985,
+        0.112359,
+        0.115998,
+        0.089292,
+        0.095076,
+        0.089213,
+        0.08838,
+        0.103347,
+        0.060139,
+        0.048477,
+        0.054456,
+        0.057881,
+        0.06027,
+        0.075453,
+        0.041811,
+        0.032385,
+        0.053031,
+        0.049632,
+        0.049932,
+        0.095815,
+        0.06931,
+        0.061181,
+        0.06591,
+        0.071055,
+        0.057442,
+        0.088151,
+        0.07145,
+        0.054458,
+        0.076564,
+        0.081507,
+        0.083928,
+        0.125446,
+        0.10612,
+        0.092924,
+        0.092453,
+        0.081818,
+        0.109945,
+        0.119225,
+        0.10186,
+        0.108317,
+        0.135642,
+        0.108337,
+        0.068066,
+        0.110984,
+        0.098567,
+        0.069075,
+        0.083468,
+        0.098845,
+        0.107071,
+        0.103246,
+        0.089759,
+        0.061669,
+        0.071963,
+        0.081566,
+        0.120085,
+        0.105187,
+        0.092595,
+        0.071027,
+        0.092416,
+        0.08466,
+        0.081644,
+        0.114691,
+        0.09663,
+        0.09299,
+        0.085344,
+        0.098096,
+        0.059507,
+        0.101896,
+        0.068563,
+        0.070026,
+        0.109213,
+        0.080998,
+        0.076115,
+        0.123064,
+        0.114158,
+        0.114267,
+        0.127849,
+        0.111668,
+        0.123445,
+        0.142845,
+        0.10876,
+        0.076843,
+        0.107001,
+        0.096112,
+        0.092914,
+        0.111761,
+        0.076097,
+        0.075707,
+        0.096836,
+        0.092361,
+        0.085094,
+        0.112359,
+        0.06246,
+        0.089057,
+        0.090325,
+        0.084628,
+        0.075773,
+        0.129198,
+        0.099367,
+        0.102727,
+        0.117126,
+        0.123151,
+        0.104454,
+        0.127258,
+        0.086834,
+        0.07595,
+        0.09951,
+        0.108865,
+        0.104464,
+        0.122338,
+        0.094479,
+        0.090293,
+        0.095135,
+        0.086198,
+        0.099412,
+        0.10154,
+        0.062681,
+        0.083995,
+        0.080859,
+        0.073342,
+        0.09882,
+        0.141576,
+        0.117116,
+        0.117507,
+        0.120301,
+        0.128488,
+        0.131469,
+        0.129503,
+        0.102784,
+        0.079017,
+        0.107231,
+        0.110128,
+        0.120789,
+        0.113237,
+        0.088905,
+        0.10823,
+        0.121978,
+        0.134503,
+        0.143916,
+        0.113325,
+        0.082285,
+        0.084751,
+        0.10063,
+        0.100169,
+        0.105504,
+        0.085367,
+        0.05745,
+        0.074478,
+        0.09651,
+        0.111115,
+        0.128732,
+        0.092858,
+        0.070721,
+        0.069269,
+        0.088933,
+        0.091315,
+        0.1112,
+        0.090136,
+        0.082544,
+        0.094427,
+        0.098972,
+        0.094968,
+        0.137352,
+        0.099207,
+        0.088094,
+        0.10161,
+        0.09831,
+        0.101417,
+        0.126928,
+        0.12565,
+        0.110548,
+        0.129931,
+        0.124176,
+        0.122091,
+        0.163744,
+        0.115778,
+        0.081673,
+        0.093617,
+        0.11757,
+        0.116282,
+        0.118827,
+        0.098473,
+        0.097381,
+        0.105407,
+        0.099645,
+        0.095982,
+        0.133489,
+        0.102491,
+        0.084627,
+        0.08953,
+        0.098795,
+        0.091678,
+        0.126935,
+        0.107583,
+        0.097165,
+        0.106456,
+        0.105428,
+        0.10912,
+        0.13294,
+        0.093648,
+        0.061411,
+        0.091132,
+        0.089405,
+        0.090716,
+        0.122846,
+        0.088432,
+        0.08044,
+        0.094255,
+        0.091027,
+        0.083006,
+        0.11806,
+        0.089503,
+        0.069918,
+        0.090656,
+        0.109449,
+        0.102089,
+        0.126233,
+        0.112886,
+        0.112575,
+        0.132399,
+        0.134455,
+        0.129812,
+        0.152977,
+        0.101112,
+        0.077071,
+        0.083213,
+        0.07403,
+        0.062817,
+        0.099522,
+        0.049462,
+        0.035981,
+        0.058781,
+        0.067849,
+        0.057926,
+        0.108841,
+        0.057117,
+        0.044614,
+        0.070454,
+        0.070927,
+        0.052263,
+        0.09411,
+        0.039612,
+        0.032654,
+        0.062084,
+        0.063814,
+        0.062431,
+        0.108618,
+        0.065671,
+        0.055635,
+        0.083477,
+        0.092781,
+        0.102724,
+        0.117732,
+        0.082477,
+        0.106757,
+        0.112265,
+        0.099456,
+        0.11603,
+        0.145562,
+        0.106634,
+        0.087772,
+        0.118667,
+        0.119277,
+        0.111436,
+        0.117507,
+        0.094711,
+        0.115462,
+        0.100775,
+        0.119415,
+        0.121028,
+        0.134985,
+        0.091186,
+        0.092273,
+        0.09466,
+        0.102448,
+        0.10561,
+        0.119484,
+        0.085524,
+        0.099457,
+        0.098507,
+        0.103243,
+        0.120812,
+        0.106459,
+        0.089663,
+        0.097528,
+        0.101923,
+        0.111633,
+        0.121373,
+        0.114398,
+        0.103699,
+        0.09008,
+        0.095376,
+        0.084558,
+        0.113973,
+        0.095735,
+        0.10078,
+        0.092516,
+        0.08867,
+        0.097727,
+        0.117853,
+        0.102586,
+        0.100195,
+        0.118749,
+        0.124581,
+        0.095697,
+        0.114531,
+        0.100946,
+        0.104836,
+        0.108416,
+        0.105768,
+        0.088245,
+        0.122164,
+        0.103689,
+        0.10438,
+        0.093324,
+        0.099007,
+        0.075782
+      ],
+      "method": "frame RMS, 2048-sample frames at 22050 Hz, DC removed",
+      "basis": "signal"
+    },
+    "sections": {
+      "segments": [
+        {
+          "label": "A",
+          "start": 0,
+          "end": 29.986
+        }
+      ],
+      "method": "novelty-on-beat-chroma",
+      "basis": "signal"
+    },
+    "keyMoments": [
+      {
+        "time": 0.09,
+        "type": "onset",
+        "intensity": 1,
+        "description": "Onset"
+      },
+      {
+        "time": 1.2,
+        "type": "onset",
+        "intensity": 0.245,
+        "description": "Onset"
+      },
+      {
+        "time": 1.74,
+        "type": "onset",
+        "intensity": 0.308,
+        "description": "Onset"
+      },
+      {
+        "time": 2.29,
+        "type": "onset",
+        "intensity": 0.304,
+        "description": "Onset"
+      },
+      {
+        "time": 2.85,
+        "type": "onset",
+        "intensity": 0.406,
+        "description": "Onset"
+      },
+      {
+        "time": 5.64,
+        "type": "onset",
+        "intensity": 0.197,
+        "description": "Onset"
+      },
+      {
+        "time": 7.24,
+        "type": "onset",
+        "intensity": 0.262,
+        "description": "Onset"
+      },
+      {
+        "time": 11.7,
+        "type": "onset",
+        "intensity": 0.213,
+        "description": "Onset"
+      },
+      {
+        "time": 16.67,
+        "type": "energy_peak",
+        "intensity": 1,
+        "description": "Energy peak"
+      },
+      {
+        "time": 18.92,
+        "type": "onset",
+        "intensity": 0.261,
+        "description": "Onset"
+      },
+      {
+        "time": 21.68,
+        "type": "onset",
+        "intensity": 0.222,
+        "description": "Onset"
+      },
+      {
+        "time": 22.24,
+        "type": "onset",
+        "intensity": 0.256,
+        "description": "Onset"
+      },
+      {
+        "time": 24.45,
+        "type": "onset",
+        "intensity": 0.219,
+        "description": "Onset"
+      },
+      {
+        "time": 25.56,
+        "type": "onset",
+        "intensity": 0.222,
+        "description": "Onset"
+      },
+      {
+        "time": 28.32,
+        "type": "onset",
+        "intensity": 0.258,
+        "description": "Onset"
+      },
+      {
+        "time": 28.88,
+        "type": "onset",
+        "intensity": 0.216,
+        "description": "Onset"
+      }
+    ],
+    "fingerprint": {
+      "styles": {
+        "model": {
+          "id": "discogs-effnet-bs64-1",
+          "licence": "CC BY-NC-SA 4.0"
+        },
+        "top": [
+          {
+            "label": "Electronic---Synth-pop",
+            "score": 0.388
+          },
+          {
+            "label": "Electronic---Euro-Disco",
+            "score": 0.1763
+          },
+          {
+            "label": "Pop---Europop",
+            "score": 0.1733
+          },
+          {
+            "label": "Electronic---Italo-Disco",
+            "score": 0.1025
+          },
+          {
+            "label": "Pop---Ballad",
+            "score": 0.094
+          },
+          {
+            "label": "Rock---Pop Rock",
+            "score": 0.077
+          },
+          {
+            "label": "Pop---Vocal",
+            "score": 0.0744
+          },
+          {
+            "label": "Electronic---Disco",
+            "score": 0.0738
+          },
+          {
+            "label": "Electronic---New Wave",
+            "score": 0.0703
+          },
+          {
+            "label": "Pop---Chanson",
+            "score": 0.0573
+          }
+        ],
+        "basis": "model"
+      },
+      "tags": {
+        "model": {
+          "id": "msd-musicnn-1",
+          "licence": "CC BY-NC-SA 4.0"
+        },
+        "scores": [
+          {
+            "label": "female vocalists",
+            "score": 0.2395
+          },
+          {
+            "label": "pop",
+            "score": 0.1958
+          },
+          {
+            "label": "rock",
+            "score": 0.143
+          },
+          {
+            "label": "electronic",
+            "score": 0.1308
+          },
+          {
+            "label": "80s",
+            "score": 0.0926
+          },
+          {
+            "label": "indie",
+            "score": 0.0733
+          },
+          {
+            "label": "jazz",
+            "score": 0.0714
+          },
+          {
+            "label": "soul",
+            "score": 0.0695
+          },
+          {
+            "label": "alternative",
+            "score": 0.069
+          },
+          {
+            "label": "oldies",
+            "score": 0.0539
+          },
+          {
+            "label": "ambient",
+            "score": 0.0495
+          },
+          {
+            "label": "chillout",
+            "score": 0.047
+          },
+          {
+            "label": "60s",
+            "score": 0.0411
+          },
+          {
+            "label": "dance",
+            "score": 0.0409
+          },
+          {
+            "label": "folk",
+            "score": 0.0408
+          },
+          {
+            "label": "experimental",
+            "score": 0.0408
+          },
+          {
+            "label": "electronica",
+            "score": 0.0359
+          },
+          {
+            "label": "90s",
+            "score": 0.0295
+          },
+          {
+            "label": "female vocalist",
+            "score": 0.0292
+          },
+          {
+            "label": "classic rock",
+            "score": 0.0285
+          },
+          {
+            "label": "Progressive rock",
+            "score": 0.0271
+          },
+          {
+            "label": "instrumental",
+            "score": 0.027
+          },
+          {
+            "label": "beautiful",
+            "score": 0.0235
+          },
+          {
+            "label": "70s",
+            "score": 0.0218
+          },
+          {
+            "label": "blues",
+            "score": 0.0179
+          },
+          {
+            "label": "alternative rock",
+            "score": 0.0178
+          },
+          {
+            "label": "easy listening",
+            "score": 0.0175
+          },
+          {
+            "label": "indie rock",
+            "score": 0.0169
+          },
+          {
+            "label": "Mellow",
+            "score": 0.0153
+          },
+          {
+            "label": "indie pop",
+            "score": 0.015
+          },
+          {
+            "label": "rnb",
+            "score": 0.0123
+          },
+          {
+            "label": "chill",
+            "score": 0.0105
+          },
+          {
+            "label": "acoustic",
+            "score": 0.0094
+          },
+          {
+            "label": "House",
+            "score": 0.0094
+          },
+          {
+            "label": "funk",
+            "score": 0.0091
+          },
+          {
+            "label": "male vocalists",
+            "score": 0.0091
+          },
+          {
+            "label": "00s",
+            "score": 0.0091
+          },
+          {
+            "label": "electro",
+            "score": 0.0087
+          },
+          {
+            "label": "hard rock",
+            "score": 0.0086
+          },
+          {
+            "label": "sexy",
+            "score": 0.0083
+          },
+          {
+            "label": "country",
+            "score": 0.0078
+          },
+          {
+            "label": "sad",
+            "score": 0.0075
+          },
+          {
+            "label": "guitar",
+            "score": 0.007
+          },
+          {
+            "label": "punk",
+            "score": 0.0066
+          },
+          {
+            "label": "metal",
+            "score": 0.0066
+          },
+          {
+            "label": "heavy metal",
+            "score": 0.0057
+          },
+          {
+            "label": "catchy",
+            "score": 0.0051
+          },
+          {
+            "label": "Hip-Hop",
+            "score": 0.0037
+          },
+          {
+            "label": "party",
+            "score": 0.0032
+          },
+          {
+            "label": "happy",
+            "score": 0.0029
+          }
+        ],
+        "basis": "model"
+      },
+      "moods": {
+        "danceability": {
+          "value": 0.8015,
+          "range": [
+            0,
+            1
+          ],
+          "model": {
+            "id": "danceability-msd-musicnn-1",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "acoustic": {
+          "value": 0.0747,
+          "range": [
+            0,
+            1
+          ],
+          "model": {
+            "id": "mood_acoustic-discogs-effnet-1",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "instrumental": {
+          "value": 0.1013,
+          "range": [
+            0,
+            1
+          ],
+          "model": {
+            "id": "voice_instrumental-msd-musicnn-1",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "valence": {
+          "value": 5.229,
+          "range": [
+            1,
+            9
+          ],
+          "model": {
+            "id": "deam-msd-musicnn-2",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "arousal": {
+          "value": 5.093,
+          "range": [
+            1,
+            9
+          ],
+          "model": {
+            "id": "deam-msd-musicnn-2",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        }
+      }
+    },
+    "withheld": {
+      "key": {
+        "code": "few_pitch_classes",
+        "reason": "fewer than three pitch classes"
+      }
+    }
+  },
+  "bpm": 108,
+  "key": null,
+  "energy": 0.306,
+  "valence": 0.529,
+  "danceability": 0.802,
+  "acousticness": 0.075,
+  "keyMoments": [
+    {
+      "time": 0.09,
+      "type": "onset",
+      "intensity": 1,
+      "description": "Onset"
+    },
+    {
+      "time": 1.2,
+      "type": "onset",
+      "intensity": 0.245,
+      "description": "Onset"
+    },
+    {
+      "time": 1.74,
+      "type": "onset",
+      "intensity": 0.308,
+      "description": "Onset"
+    },
+    {
+      "time": 2.29,
+      "type": "onset",
+      "intensity": 0.304,
+      "description": "Onset"
+    },
+    {
+      "time": 2.85,
+      "type": "onset",
+      "intensity": 0.406,
+      "description": "Onset"
+    },
+    {
+      "time": 5.64,
+      "type": "onset",
+      "intensity": 0.197,
+      "description": "Onset"
+    },
+    {
+      "time": 7.24,
+      "type": "onset",
+      "intensity": 0.262,
+      "description": "Onset"
+    },
+    {
+      "time": 11.7,
+      "type": "onset",
+      "intensity": 0.213,
+      "description": "Onset"
+    },
+    {
+      "time": 16.67,
+      "type": "energy_peak",
+      "intensity": 1,
+      "description": "Energy peak"
+    },
+    {
+      "time": 18.92,
+      "type": "onset",
+      "intensity": 0.261,
+      "description": "Onset"
+    },
+    {
+      "time": 21.68,
+      "type": "onset",
+      "intensity": 0.222,
+      "description": "Onset"
+    },
+    {
+      "time": 22.24,
+      "type": "onset",
+      "intensity": 0.256,
+      "description": "Onset"
+    },
+    {
+      "time": 24.45,
+      "type": "onset",
+      "intensity": 0.219,
+      "description": "Onset"
+    },
+    {
+      "time": 25.56,
+      "type": "onset",
+      "intensity": 0.222,
+      "description": "Onset"
+    },
+    {
+      "time": 28.32,
+      "type": "onset",
+      "intensity": 0.258,
+      "description": "Onset"
+    },
+    {
+      "time": 28.88,
+      "type": "onset",
+      "intensity": 0.216,
+      "description": "Onset"
+    }
+  ],
+  "audioSource": "unavailable",
+  "audioConfidence": "low",
+  "audioUnavailableReason": "not_detected"
+}

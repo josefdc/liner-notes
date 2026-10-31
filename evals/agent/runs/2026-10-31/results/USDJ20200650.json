@@ -1,0 +1,1403 @@
+{
+  "id": "28cnXtME493VX9NOw9cIUh",
+  "title": "Hurt",
+  "artist": "Johnny Cash",
+  "album": "American IV: The Man Comes Around",
+  "coverUrl": "[link]",
+  "spotifyUrl": "https://open.spotify.com/track/28cnXtME493VX9NOw9cIUh",
+  "releaseYear": "2002",
+  "explicit": false,
+  "durationSeconds": 217,
+  "isrc": "USDJ20200650",
+  "preview": {
+    "provider": "deezer",
+    "method": "isrc",
+    "score": null
+  },
+  "queryMatch": "exact",
+  "evidence": [
+    {
+      "id": "musicbrainz:track/recording/25d8de5e-3662-4ffd-8dea-511a696ac3e7",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/25d8de5e-3662-4ffd-8dea-511a696ac3e7",
+      "title": "Hurt — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Hurt\" by Johnny Cash (3:39), ISRC USDJ20200650, first released 2002-11-05.",
+      "recordRef": "track/recording/25d8de5e-3662-4ffd-8dea-511a696ac3e7"
+    },
+    {
+      "id": "musicbrainz:track/recording/25d8de5e-3662-4ffd-8dea-511a696ac3e7/cover-of/work/ca56bd56-0e88-35f3-aec2-12eb8e9c739e",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/25d8de5e-3662-4ffd-8dea-511a696ac3e7",
+      "title": "Hurt — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Hurt\" by Johnny Cash is a cover of \"Hurt\".",
+      "recordRef": "track/recording/25d8de5e-3662-4ffd-8dea-511a696ac3e7/cover-of/work/ca56bd56-0e88-35f3-aec2-12eb8e9c739e"
+    },
+    {
+      "id": "musicbrainz:release/261de123-7315-4a2f-8c40-3dad9092313e",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/release/261de123-7315-4a2f-8c40-3dad9092313e",
+      "title": "American IV: The Man Comes Around — MusicBrainz release",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Hurt\" by Johnny Cash appears on the official album \"American IV: The Man Comes Around\" (2002-11-05).",
+      "recordRef": "release/261de123-7315-4a2f-8c40-3dad9092313e"
+    },
+    {
+      "id": "tavily:https://www.whosampled.com/Johnny-Cash",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.whosampled.com/Johnny-Cash",
+      "title": "Johnny Cash - Samples, Covers and Remixes",
+      "retrievedAt": "[time]",
+      "excerpt": "Johnny Cash's Hurt Hurt (2002) is a cover of Hurt by Nine Inch Nails (1994) was sampled in Relicário by Menestrel (2017) Mindennek ára Van by Kontroll feat.",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.whosampled.com/Il-Turco/Hurt",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.whosampled.com/Il-Turco/Hurt",
+      "title": "Hurt by Il Turco - Samples, Covers and Remixes",
+      "retrievedAt": "[time]",
+      "excerpt": "Which songs were sampled in \"Hurt\" by Il Turco? \"Hurt\" contains samples of \"Hurt\" by Johnny Cash and \"The Silence of a Candle\" by Paul Winter Consort.Read more",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.whosampled.com/Johnny-Cash/Hurt",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.whosampled.com/Johnny-Cash/Hurt",
+      "title": "Hurt by Johnny Cash - Samples, Covers and Remixes",
+      "retrievedAt": "[time]",
+      "excerpt": "Hurt by Johnny Cash - discover this song's samples, covers and remixes on WhoSampled. ... Sampled in 11 songs. Menestrel's Relicário, Relicário · Menestrel, 2017 ...Read more",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.whosampled.com/Nine-Inch-Nails/Hurt",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.whosampled.com/Nine-Inch-Nails/Hurt",
+      "title": "Hurt by Nine Inch Nails - Samples, Covers and Remixes",
+      "retrievedAt": "[time]",
+      "excerpt": "Sampled in 9 songs Westside Connection's The Gangsta, the Killa and the Dope Dealer … 54 songs Johnny Cash's Hurt. David Bowie and Nine Inch Nails's \"Hurt\" was",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://en.wikipedia.org/wiki/Hurt_(Nine_Inch_Nails_song)",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://en.wikipedia.org/wiki/Hurt_(Nine_Inch_Nails_song)",
+      "title": "Hurt (Nine Inch Nails song) - Wikipedia",
+      "retrievedAt": "[time]",
+      "excerpt": "In 2002, American country singer Johnny Cash covered the song for his final album during his lifetime, American IV: The Man Comes Around. Its accompanying video, featuring images from Cash's life and directed by Mark Romanek, was named the best video of the year by the Grammy Awards and CMA Awards, and the best video of all time by NME in July 2011. The single contains a cover of Depeche Mode's \"Personal Jesus\" as a B-side. [...] \"Orange Blossom Special \"Orange Blossom Special (song)\")\" \"The On…",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.imdb.com/title/tt6149452/trivia",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.imdb.com/title/tt6149452/trivia",
+      "title": "Trivia - Johnny Cash: Hurt (Music Video 2003)",
+      "retrievedAt": "[time]",
+      "excerpt": "Rick Rubin now sees the video as a historical document of Johnny Cash. who was 71 years of age at the time of filming in February 2003, He died seven months",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.songfacts.com/facts/johnny-cash/hurt",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.songfacts.com/facts/johnny-cash/hurt",
+      "title": "Hurt by Johnny Cash",
+      "retrievedAt": "[time]",
+      "excerpt": "Rubin became Cash's producer and label boss in 1994 after they came to a working agreement: They would record songs of Cash's choosing in Rubin's home studio ...Read more",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.youtube.com/watch?v=Vli0mAXp-Oo",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.youtube.com/watch?v=Vli0mAXp-Oo",
+      "title": "Rick Rubin on Producing Johnny Cash’s Masterpiece",
+      "retrievedAt": "[time]",
+      "excerpt": "[6:57] yeah and the popularity of these records did that surprise him it completely blew [7:04] his mind he couldn't believe it he loved it he loved the acceptance of young [7:12] people on the first album we put out it really changed everything and then when hurt happened and it was [7:21] really a big hit which again was not expected he was ecstatic it was really a beautiful um [...] [3:17] it together with the band and everything and I remember the buildup at the end of the song We I had all…",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://savingcountrymusic.com/20-years-ago-today-johnny-cash-films-the-video-for-hurt",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://savingcountrymusic.com/20-years-ago-today-johnny-cash-films-the-video-for-hurt",
+      "title": "20 Years Ago Today: Johnny Cash Films the Video for “Hurt”",
+      "retrievedAt": "[time]",
+      "excerpt": "Oct 18, 2022 — It was specifically due to the song “Hurt”—a cover of a Nine Inch Nails song written by Trent Reznor. And even more specifically, it had to do ...Read more",
+      "recordRef": null
+    }
+  ],
+  "segments": [
+    {
+      "label": "Intro",
+      "start": 0,
+      "end": 8
+    },
+    {
+      "label": "Verse 1",
+      "start": 8,
+      "end": 25
+    },
+    {
+      "label": "Chorus",
+      "start": 25,
+      "end": 42
+    },
+    {
+      "label": "Verse 2",
+      "start": 42,
+      "end": 58
+    },
+    {
+      "label": "Bridge",
+      "start": 58,
+      "end": 75
+    },
+    {
+      "label": "Chorus",
+      "start": 75,
+      "end": 92
+    },
+    {
+      "label": "Outro",
+      "start": 92,
+      "end": 100
+    }
+  ],
+  "segmentsSource": "template",
+  "samples": [],
+  "factoids": [
+    {
+      "id": "<id 9>",
+      "title": "A song reinterpreted",
+      "content": "Cash's “Hurt” is a cover of the song by Nine Inch Nails. The recording appeared on “American IV: The Man Comes Around.”",
+      "type": "connection",
+      "entities": [
+        {
+          "id": "<id 10>",
+          "text": "Nine Inch Nails",
+          "type": "artist",
+          "searchQuery": "Nine Inch Nails"
+        },
+        {
+          "id": "<id 11>",
+          "text": "American IV: The Man Comes Around",
+          "type": "album",
+          "searchQuery": "American IV: The Man Comes Around"
+        }
+      ],
+      "claimId": "<id 4>"
+    },
+    {
+      "id": "<id 12>",
+      "title": "Rubin on the song's reception",
+      "content": "Rick Rubin recalled that the success of Cash's “Hurt” was unexpected and that Cash was ecstatic about its reception.",
+      "type": "trivia",
+      "entities": [
+        {
+          "id": "<id 13>",
+          "text": "Rick Rubin",
+          "type": "producer",
+          "searchQuery": "Rick Rubin"
+        }
+      ],
+      "claimId": "<id 5>"
+    }
+  ],
+  "genealogy": {
+    "nodes": [
+      {
+        "id": "current",
+        "group": 1,
+        "label": "Hurt",
+        "size": 40,
+        "trackTitle": "Hurt",
+        "trackArtist": "Johnny Cash",
+        "mbid": "25d8de5e-3662-4ffd-8dea-511a696ac3e7",
+        "year": 2002
+      },
+      {
+        "id": "nin_hurt",
+        "group": 4,
+        "label": "Hurt - Nine Inch Nails (1994)",
+        "size": 22,
+        "trackTitle": "Hurt",
+        "trackArtist": "Nine Inch Nails",
+        "spotifyId": "27tX58NOpv1YKQ0abW7EPy"
+      },
+      {
+        "id": "mb-ca56bd56-0e88-35f3-aec2-12eb8e9c739e",
+        "group": 4,
+        "label": "Hurt (the song)",
+        "size": 22,
+        "mbid": "ca56bd56-0e88-35f3-aec2-12eb8e9c739e"
+      }
+    ],
+    "links": [
+      {
+        "source": "nin_hurt",
+        "target": "current",
+        "value": 2,
+        "type": "cover",
+        "kind": "sourced",
+        "origin": "model",
+        "claimId": "<id 6>",
+        "evidenceIds": [
+          "tavily:https://www.whosampled.com/Johnny-Cash"
+        ]
+      },
+      {
+        "source": "mb-ca56bd56-0e88-35f3-aec2-12eb8e9c739e",
+        "target": "current",
+        "value": 2,
+        "type": "cover",
+        "kind": "sourced",
+        "origin": "code",
+        "claimId": "<id 7>",
+        "evidenceIds": [
+          "musicbrainz:track/recording/25d8de5e-3662-4ffd-8dea-511a696ac3e7/cover-of/work/ca56bd56-0e88-35f3-aec2-12eb8e9c739e"
+        ]
+      }
+    ]
+  },
+  "claims": [
+    {
+      "id": "<id 2>",
+      "text": "Johnny Cash's recording of “Hurt” is a cover of the song originally recorded by Nine Inch Nails.",
+      "about": "track",
+      "evidenceIds": [
+        "musicbrainz:track/recording/25d8de5e-3662-4ffd-8dea-511a696ac3e7/cover-of/work/ca56bd56-0e88-35f3-aec2-12eb8e9c739e",
+        "tavily:https://www.whosampled.com/Johnny-Cash"
+      ],
+      "scope": "recording",
+      "kind": "sourced",
+      "origin": "model",
+      "verdict": "supported",
+      "verdictReason": "The WhoSampled excerpt identifies Cash’s recording as a cover of Nine Inch Nails’ “Hurt.”",
+      "numericCheck": "n/a",
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 3>",
+      "text": "The recording was first released on November 5, 2002.",
+      "about": "history",
+      "evidenceIds": [
+        "musicbrainz:track/recording/25d8de5e-3662-4ffd-8dea-511a696ac3e7"
+      ],
+      "scope": "recording",
+      "kind": "sourced",
+      "origin": "model",
+      "verdict": "supported",
+      "verdictReason": "The MusicBrainz recording excerpt says it was first released on 2002-11-05.",
+      "numericCheck": "n/a",
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 4>",
+      "text": "Cash's “Hurt” is a cover of the song by Nine Inch Nails. The recording appeared on “American IV: The Man Comes Around.”",
+      "about": "connection",
+      "evidenceIds": [
+        "musicbrainz:track/recording/25d8de5e-3662-4ffd-8dea-511a696ac3e7/cover-of/work/ca56bd56-0e88-35f3-aec2-12eb8e9c739e"
+      ],
+      "scope": "recording",
+      "kind": "inferred",
+      "origin": "model",
+      "verdict": "partial",
+      "verdictReason": "The MusicBrainz relationships excerpt identifies a cover but names neither Nine Inch Nails nor the album.",
+      "numericCheck": "n/a",
+      "factoid": {
+        "title": "A song reinterpreted",
+        "type": "connection",
+        "entities": [
+          {
+            "text": "Nine Inch Nails",
+            "type": "artist"
+          },
+          {
+            "text": "American IV: The Man Comes Around",
+            "type": "album"
+          }
+        ]
+      },
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 5>",
+      "text": "Rick Rubin recalled that the success of Cash's “Hurt” was unexpected and that Cash was ecstatic about its reception.",
+      "about": "trivia",
+      "evidenceIds": [
+        "tavily:https://www.youtube.com/watch?v=Vli0mAXp-Oo"
+      ],
+      "scope": "recording",
+      "kind": "sourced",
+      "origin": "model",
+      "verdict": "supported",
+      "verdictReason": "The Rick Rubin excerpt says the hit was unexpected and Cash was ecstatic.",
+      "numericCheck": "n/a",
+      "factoid": {
+        "title": "Rubin on the song's reception",
+        "type": "trivia",
+        "entities": [
+          {
+            "text": "Rick Rubin",
+            "type": "producer"
+          }
+        ]
+      },
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 6>",
+      "text": "\"Hurt - Johnny Cash\" is a cover of \"Hurt - Nine Inch Nails (1994)\".",
+      "about": "cover",
+      "evidenceIds": [
+        "tavily:https://www.whosampled.com/Johnny-Cash"
+      ],
+      "scope": "work",
+      "kind": "sourced",
+      "origin": "model",
+      "verdict": "supported",
+      "verdictReason": "The WhoSampled excerpt calls Cash’s “Hurt” a cover of Nine Inch Nails’ 1994 song.",
+      "numericCheck": "n/a"
+    },
+    {
+      "id": "<id 7>",
+      "text": "\"Hurt\" by Johnny Cash is a cover of \"Hurt\".",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:track/recording/25d8de5e-3662-4ffd-8dea-511a696ac3e7/cover-of/work/ca56bd56-0e88-35f3-aec2-12eb8e9c739e"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "recording"
+    },
+    {
+      "id": "<id 8>",
+      "text": "\"Hurt\" by Johnny Cash appears on the official album \"American IV: The Man Comes Around\" (2002-11-05).",
+      "about": "track",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:release/261de123-7315-4a2f-8c40-3dad9092313e"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "release"
+    }
+  ],
+  "run": {
+    "id": "<id 1>",
+    "analyzerVersion": "2.3.6+essentia.models-5c5c0c7f",
+    "fallback": false,
+    "usage": {
+      "llmCalls": 4,
+      "inputTokens": 11043,
+      "outputTokens": 1544,
+      "reasoningTokens": 239
+    },
+    "verifier": {
+      "judged": 6,
+      "unjudged": 0,
+      "restated": 1
+    },
+    "sourceErrors": [
+      {
+        "source": "discogs",
+        "code": "not_configured",
+        "message": "DISCOGS_TOKEN is not set"
+      },
+      {
+        "source": "secondhandsongs",
+        "code": "unavailable",
+        "message": "secondhandsongs: HTTP 403 (the source refused the request)"
+      }
+    ]
+  },
+  "audio": {
+    "version": 2,
+    "analyzerVersion": "2.3.6+essentia.models-5c5c0c7f",
+    "window": {
+      "kind": "preview-30s",
+      "durationSeconds": 29.986
+    },
+    "gate": {
+      "passed": true,
+      "reason": null
+    },
+    "tempo": {
+      "bpm": 90.95,
+      "confidence": 0.591,
+      "rawConfidence": {
+        "value": 3.144,
+        "range": [
+          0,
+          5.32
+        ]
+      },
+      "method": "essentia.RhythmExtractor2013+beat-regression",
+      "basis": "signal"
+    },
+    "key": null,
+    "loudness": {
+      "rmsMean": 0.125792,
+      "method": "mean frame RMS, 2048-sample frames at 22050 Hz, DC removed",
+      "basis": "signal"
+    },
+    "beats": {
+      "times": [
+        0.673,
+        1.358,
+        2.055,
+        2.752,
+        3.46,
+        4.18,
+        4.865,
+        5.55,
+        6.223,
+        6.896,
+        7.546,
+        8.197,
+        8.847,
+        9.497,
+        10.147,
+        10.797,
+        11.447,
+        12.098,
+        12.759,
+        13.421,
+        14.071,
+        14.733,
+        15.395,
+        16.057,
+        16.73,
+        17.392,
+        18.042,
+        18.692,
+        19.342,
+        20.004,
+        20.677,
+        21.328,
+        21.989,
+        22.639,
+        23.29,
+        23.951,
+        24.613,
+        25.287,
+        25.925,
+        26.587,
+        27.237,
+        27.899,
+        28.572,
+        29.234
+      ],
+      "method": "essentia.RhythmExtractor2013",
+      "basis": "signal"
+    },
+    "energyContour": {
+      "hopSeconds": 0.09288,
+      "values": [
+        0.174969,
+        0.1682,
+        0.13515,
+        0.112659,
+        0.102877,
+        0.09031,
+        0.070793,
+        0.108414,
+        0.076833,
+        0.062951,
+        0.144241,
+        0.130519,
+        0.098671,
+        0.098732,
+        0.096802,
+        0.092575,
+        0.081996,
+        0.068156,
+        0.062301,
+        0.05769,
+        0.05339,
+        0.194525,
+        0.171541,
+        0.184666,
+        0.16132,
+        0.183169,
+        0.129832,
+        0.09569,
+        0.100574,
+        0.138775,
+        0.158945,
+        0.160385,
+        0.158367,
+        0.145153,
+        0.097429,
+        0.126921,
+        0.112992,
+        0.078788,
+        0.055161,
+        0.07571,
+        0.06572,
+        0.058062,
+        0.067133,
+        0.063237,
+        0.054072,
+        0.115354,
+        0.22153,
+        0.204416,
+        0.180038,
+        0.127561,
+        0.06273,
+        0.094574,
+        0.135342,
+        0.156084,
+        0.100293,
+        0.056002,
+        0.110576,
+        0.156136,
+        0.134866,
+        0.118937,
+        0.138588,
+        0.108466,
+        0.095606,
+        0.080008,
+        0.07802,
+        0.07186,
+        0.067664,
+        0.09732,
+        0.070531,
+        0.06399,
+        0.0545,
+        0.053841,
+        0.047042,
+        0.040082,
+        0.071503,
+        0.056503,
+        0.052952,
+        0.054691,
+        0.051589,
+        0.048696,
+        0.041284,
+        0.076328,
+        0.052859,
+        0.046719,
+        0.059425,
+        0.063086,
+        0.052575,
+        0.045423,
+        0.152289,
+        0.224212,
+        0.187497,
+        0.080227,
+        0.199467,
+        0.213101,
+        0.209231,
+        0.227802,
+        0.211737,
+        0.09369,
+        0.059864,
+        0.163003,
+        0.202336,
+        0.187099,
+        0.181764,
+        0.192172,
+        0.18596,
+        0.200344,
+        0.197533,
+        0.108204,
+        0.041501,
+        0.116018,
+        0.178593,
+        0.093003,
+        0.073612,
+        0.200217,
+        0.158512,
+        0.139252,
+        0.180532,
+        0.126282,
+        0.100775,
+        0.102707,
+        0.089317,
+        0.08317,
+        0.078697,
+        0.12562,
+        0.123462,
+        0.087484,
+        0.090786,
+        0.075415,
+        0.070996,
+        0.063053,
+        0.110306,
+        0.098984,
+        0.065408,
+        0.060934,
+        0.061833,
+        0.063254,
+        0.055881,
+        0.119251,
+        0.096425,
+        0.060338,
+        0.056028,
+        0.072974,
+        0.061479,
+        0.064535,
+        0.143476,
+        0.122618,
+        0.108434,
+        0.1243,
+        0.148565,
+        0.146,
+        0.190791,
+        0.199031,
+        0.153023,
+        0.155308,
+        0.114052,
+        0.090429,
+        0.07591,
+        0.150362,
+        0.192831,
+        0.19552,
+        0.160551,
+        0.150408,
+        0.191573,
+        0.176191,
+        0.150961,
+        0.12401,
+        0.106979,
+        0.09376,
+        0.127474,
+        0.208976,
+        0.183824,
+        0.160888,
+        0.131602,
+        0.118216,
+        0.116642,
+        0.123047,
+        0.106817,
+        0.091543,
+        0.076369,
+        0.065485,
+        0.091689,
+        0.07069,
+        0.073171,
+        0.065858,
+        0.06315,
+        0.053638,
+        0.050491,
+        0.096602,
+        0.079373,
+        0.076269,
+        0.065905,
+        0.057395,
+        0.050507,
+        0.049871,
+        0.10379,
+        0.078535,
+        0.073072,
+        0.07568,
+        0.099057,
+        0.080513,
+        0.083742,
+        0.213295,
+        0.22067,
+        0.203357,
+        0.113266,
+        0.168956,
+        0.193738,
+        0.203208,
+        0.218079,
+        0.214368,
+        0.156146,
+        0.197343,
+        0.182872,
+        0.168948,
+        0.157789,
+        0.168947,
+        0.152092,
+        0.135988,
+        0.110564,
+        0.131847,
+        0.161478,
+        0.142938,
+        0.167412,
+        0.156625,
+        0.143926,
+        0.142689,
+        0.188691,
+        0.184735,
+        0.180457,
+        0.180769,
+        0.176002,
+        0.133107,
+        0.104944,
+        0.103174,
+        0.088178,
+        0.090376,
+        0.088697,
+        0.134357,
+        0.095529,
+        0.082226,
+        0.081815,
+        0.074831,
+        0.065126,
+        0.152715,
+        0.233004,
+        0.206939,
+        0.217792,
+        0.201466,
+        0.187044,
+        0.122718,
+        0.094992,
+        0.1758,
+        0.171259,
+        0.161377,
+        0.166349,
+        0.225447,
+        0.211544,
+        0.150319,
+        0.151558,
+        0.112104,
+        0.105884,
+        0.109805,
+        0.090578,
+        0.093367,
+        0.117948,
+        0.171712,
+        0.143779,
+        0.125925,
+        0.091187,
+        0.08211,
+        0.08159,
+        0.178049,
+        0.205693,
+        0.186858,
+        0.174515,
+        0.159587,
+        0.134341,
+        0.13281,
+        0.132689,
+        0.176796,
+        0.153119,
+        0.140582,
+        0.155635,
+        0.152128,
+        0.154362,
+        0.161385,
+        0.214637,
+        0.155377,
+        0.144663,
+        0.120859,
+        0.119342,
+        0.112236,
+        0.107907,
+        0.16477,
+        0.141951,
+        0.130592,
+        0.134042,
+        0.12506,
+        0.101322,
+        0.098807,
+        0.165719,
+        0.131789,
+        0.126749,
+        0.120659,
+        0.115948,
+        0.114835,
+        0.095397,
+        0.174324,
+        0.15272,
+        0.152491,
+        0.165631,
+        0.204506,
+        0.17606,
+        0.149233,
+        0.227443,
+        0.211912,
+        0.21023,
+        0.203206,
+        0.217762,
+        0.158492,
+        0.122624,
+        0.220279
+      ],
+      "method": "frame RMS, 2048-sample frames at 22050 Hz, DC removed",
+      "basis": "signal"
+    },
+    "sections": {
+      "segments": [
+        {
+          "label": "A",
+          "start": 0,
+          "end": 4.853
+        },
+        {
+          "label": "B",
+          "start": 4.853,
+          "end": 18.669
+        },
+        {
+          "label": "A",
+          "start": 18.669,
+          "end": 23.266
+        },
+        {
+          "label": "B",
+          "start": 23.266,
+          "end": 29.986
+        }
+      ],
+      "method": "novelty-on-beat-chroma",
+      "basis": "signal"
+    },
+    "keyMoments": [
+      {
+        "time": 0.06,
+        "type": "onset",
+        "intensity": 1,
+        "description": "Onset"
+      },
+      {
+        "time": 0.97,
+        "type": "onset",
+        "intensity": 0.288,
+        "description": "Onset"
+      },
+      {
+        "time": 1.99,
+        "type": "onset",
+        "intensity": 0.37,
+        "description": "Onset"
+      },
+      {
+        "time": 1.99,
+        "type": "energy_peak",
+        "intensity": 0.835,
+        "description": "Energy peak"
+      },
+      {
+        "time": 4.31,
+        "type": "energy_peak",
+        "intensity": 0.951,
+        "description": "Energy peak"
+      },
+      {
+        "time": 4.85,
+        "type": "harmonic_change",
+        "intensity": 0.347,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 7.59,
+        "type": "onset",
+        "intensity": 0.309,
+        "description": "Onset"
+      },
+      {
+        "time": 8.17,
+        "type": "harmonic_change",
+        "intensity": 0.26,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 8.87,
+        "type": "energy_peak",
+        "intensity": 0.978,
+        "description": "Energy peak"
+      },
+      {
+        "time": 10.49,
+        "type": "onset",
+        "intensity": 0.343,
+        "description": "Onset"
+      },
+      {
+        "time": 14.81,
+        "type": "energy_peak",
+        "intensity": 0.839,
+        "description": "Energy peak"
+      },
+      {
+        "time": 16.04,
+        "type": "harmonic_change",
+        "intensity": 0.254,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 18.66,
+        "type": "harmonic_change",
+        "intensity": 0.343,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 18.8,
+        "type": "energy_peak",
+        "intensity": 0.947,
+        "description": "Energy peak"
+      },
+      {
+        "time": 22.7,
+        "type": "energy_peak",
+        "intensity": 1,
+        "description": "Energy peak"
+      },
+      {
+        "time": 27.26,
+        "type": "onset",
+        "intensity": 0.233,
+        "description": "Onset"
+      }
+    ],
+    "fingerprint": {
+      "styles": {
+        "model": {
+          "id": "discogs-effnet-bs64-1",
+          "licence": "CC BY-NC-SA 4.0"
+        },
+        "top": [
+          {
+            "label": "Folk, World, & Country---Folk",
+            "score": 0.1358
+          },
+          {
+            "label": "Rock---Alternative Rock",
+            "score": 0.1193
+          },
+          {
+            "label": "Rock---Neofolk",
+            "score": 0.1023
+          },
+          {
+            "label": "Folk, World, & Country---Country",
+            "score": 0.097
+          },
+          {
+            "label": "Rock---Folk Rock",
+            "score": 0.0673
+          },
+          {
+            "label": "Folk, World, & Country---Celtic",
+            "score": 0.0671
+          },
+          {
+            "label": "Folk, World, & Country---Gospel",
+            "score": 0.066
+          },
+          {
+            "label": "Rock---Indie Rock",
+            "score": 0.0594
+          },
+          {
+            "label": "Rock---Pop Rock",
+            "score": 0.0592
+          },
+          {
+            "label": "Rock---Brit Pop",
+            "score": 0.0578
+          }
+        ],
+        "basis": "model"
+      },
+      "tags": {
+        "model": {
+          "id": "msd-musicnn-1",
+          "licence": "CC BY-NC-SA 4.0"
+        },
+        "scores": [
+          {
+            "label": "folk",
+            "score": 0.2381
+          },
+          {
+            "label": "rock",
+            "score": 0.2229
+          },
+          {
+            "label": "acoustic",
+            "score": 0.2037
+          },
+          {
+            "label": "indie",
+            "score": 0.1649
+          },
+          {
+            "label": "country",
+            "score": 0.137
+          },
+          {
+            "label": "alternative",
+            "score": 0.1035
+          },
+          {
+            "label": "pop",
+            "score": 0.0668
+          },
+          {
+            "label": "Mellow",
+            "score": 0.0504
+          },
+          {
+            "label": "alternative rock",
+            "score": 0.0457
+          },
+          {
+            "label": "indie rock",
+            "score": 0.0416
+          },
+          {
+            "label": "beautiful",
+            "score": 0.0379
+          },
+          {
+            "label": "male vocalists",
+            "score": 0.0322
+          },
+          {
+            "label": "blues",
+            "score": 0.031
+          },
+          {
+            "label": "classic rock",
+            "score": 0.0306
+          },
+          {
+            "label": "oldies",
+            "score": 0.0266
+          },
+          {
+            "label": "sad",
+            "score": 0.022
+          },
+          {
+            "label": "00s",
+            "score": 0.0189
+          },
+          {
+            "label": "indie pop",
+            "score": 0.0187
+          },
+          {
+            "label": "60s",
+            "score": 0.0166
+          },
+          {
+            "label": "easy listening",
+            "score": 0.0155
+          },
+          {
+            "label": "guitar",
+            "score": 0.0145
+          },
+          {
+            "label": "90s",
+            "score": 0.0129
+          },
+          {
+            "label": "70s",
+            "score": 0.0122
+          },
+          {
+            "label": "Progressive rock",
+            "score": 0.0116
+          },
+          {
+            "label": "metal",
+            "score": 0.0111
+          },
+          {
+            "label": "chill",
+            "score": 0.0109
+          },
+          {
+            "label": "jazz",
+            "score": 0.0109
+          },
+          {
+            "label": "hard rock",
+            "score": 0.0107
+          },
+          {
+            "label": "punk",
+            "score": 0.0093
+          },
+          {
+            "label": "80s",
+            "score": 0.008
+          },
+          {
+            "label": "female vocalists",
+            "score": 0.0076
+          },
+          {
+            "label": "electronic",
+            "score": 0.006
+          },
+          {
+            "label": "chillout",
+            "score": 0.006
+          },
+          {
+            "label": "experimental",
+            "score": 0.0059
+          },
+          {
+            "label": "soul",
+            "score": 0.0059
+          },
+          {
+            "label": "heavy metal",
+            "score": 0.0042
+          },
+          {
+            "label": "catchy",
+            "score": 0.003
+          },
+          {
+            "label": "happy",
+            "score": 0.0027
+          },
+          {
+            "label": "ambient",
+            "score": 0.0026
+          },
+          {
+            "label": "dance",
+            "score": 0.0018
+          },
+          {
+            "label": "electronica",
+            "score": 0.0016
+          },
+          {
+            "label": "rnb",
+            "score": 0.0014
+          },
+          {
+            "label": "sexy",
+            "score": 0.0014
+          },
+          {
+            "label": "female vocalist",
+            "score": 0.0011
+          },
+          {
+            "label": "instrumental",
+            "score": 0.0011
+          },
+          {
+            "label": "Hip-Hop",
+            "score": 0.0011
+          },
+          {
+            "label": "party",
+            "score": 0.0009
+          },
+          {
+            "label": "funk",
+            "score": 0.0008
+          },
+          {
+            "label": "electro",
+            "score": 0.0007
+          },
+          {
+            "label": "House",
+            "score": 0.0005
+          }
+        ],
+        "basis": "model"
+      },
+      "moods": {
+        "danceability": {
+          "value": 0.0028,
+          "range": [
+            0,
+            1
+          ],
+          "model": {
+            "id": "danceability-msd-musicnn-1",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "acoustic": {
+          "value": 0.9926,
+          "range": [
+            0,
+            1
+          ],
+          "model": {
+            "id": "mood_acoustic-discogs-effnet-1",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "instrumental": {
+          "value": 0.0011,
+          "range": [
+            0,
+            1
+          ],
+          "model": {
+            "id": "voice_instrumental-msd-musicnn-1",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "valence": {
+          "value": 4.1672,
+          "range": [
+            1,
+            9
+          ],
+          "model": {
+            "id": "deam-msd-musicnn-2",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "arousal": {
+          "value": 3.8353,
+          "range": [
+            1,
+            9
+          ],
+          "model": {
+            "id": "deam-msd-musicnn-2",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        }
+      }
+    },
+    "withheld": {
+      "key": {
+        "code": "no_sustained_pitch",
+        "reason": "no sustained pitch"
+      }
+    }
+  },
+  "bpm": 91,
+  "key": null,
+  "energy": 0.423,
+  "valence": 0.396,
+  "danceability": 0.003,
+  "acousticness": 0.993,
+  "keyMoments": [
+    {
+      "time": 0.06,
+      "type": "onset",
+      "intensity": 1,
+      "description": "Onset"
+    },
+    {
+      "time": 0.97,
+      "type": "onset",
+      "intensity": 0.288,
+      "description": "Onset"
+    },
+    {
+      "time": 1.99,
+      "type": "onset",
+      "intensity": 0.37,
+      "description": "Onset"
+    },
+    {
+      "time": 1.99,
+      "type": "energy_peak",
+      "intensity": 0.835,
+      "description": "Energy peak"
+    },
+    {
+      "time": 4.31,
+      "type": "energy_peak",
+      "intensity": 0.951,
+      "description": "Energy peak"
+    },
+    {
+      "time": 4.85,
+      "type": "harmonic_change",
+      "intensity": 0.347,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 7.59,
+      "type": "onset",
+      "intensity": 0.309,
+      "description": "Onset"
+    },
+    {
+      "time": 8.17,
+      "type": "harmonic_change",
+      "intensity": 0.26,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 8.87,
+      "type": "energy_peak",
+      "intensity": 0.978,
+      "description": "Energy peak"
+    },
+    {
+      "time": 10.49,
+      "type": "onset",
+      "intensity": 0.343,
+      "description": "Onset"
+    },
+    {
+      "time": 14.81,
+      "type": "energy_peak",
+      "intensity": 0.839,
+      "description": "Energy peak"
+    },
+    {
+      "time": 16.04,
+      "type": "harmonic_change",
+      "intensity": 0.254,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 18.66,
+      "type": "harmonic_change",
+      "intensity": 0.343,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 18.8,
+      "type": "energy_peak",
+      "intensity": 0.947,
+      "description": "Energy peak"
+    },
+    {
+      "time": 22.7,
+      "type": "energy_peak",
+      "intensity": 1,
+      "description": "Energy peak"
+    },
+    {
+      "time": 27.26,
+      "type": "onset",
+      "intensity": 0.233,
+      "description": "Onset"
+    }
+  ],
+  "audioSource": "unavailable",
+  "audioConfidence": "low",
+  "audioUnavailableReason": "not_detected"
+}

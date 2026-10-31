@@ -115,8 +115,9 @@ rendered from records marked `"synthetic": true` says so at the top.
 records and golden file its header names (with its date, commit and subset) and requires the
 Markdown and the results file (`agent-<date>.json`) to match byte for byte; the held-out
 exclusion is re-derived from the runs' evidence, never read from the results file. The header
-carries the sha256 of the run-record directory, so records that changed since the report are
-named as such (keep each golden run's records in a directory of its own). It also checks the
+carries the sha256 of the run-record directory (its records, `perturb/` and `results/`), so
+records that changed since the report are named as such (keep each golden run's records in a
+directory of its own). It also checks the
 structure on its own: a header with the dataset (its sha256 must still match), run records,
 date, commit and results file; Markdown tables at the start of the line (no HTML, no indent)
 with value, n and "95 % CI" columns; every rate's "(k/n)" against its n and its Wilson interval
@@ -140,19 +141,52 @@ with its `synthetic` flag removed and a real commit set. Where
 the records come from is shown by the golden run's own trail (its cassettes and spend log), not
 by this check.
 
-`npm run eval -- --suite agent --mode replay --subset ci|all` replays the subset (six rows,
+`npm run eval -- --suite agent --mode replay --subset ci|all` replays the subset (seven rows,
 `CI_SUBSET` in `lib/golden.mjs`, or the whole live subset) through the API: one API process per
 row, with dummy keys, the recorded answers of `fixtures/cassettes/llm/golden/<isrc>` and
 `fixtures/cassettes/sources/golden/<isrc>` (the audio block is `audio.json` there), and
-`tests/deny-network.mjs` loaded in each. Rows b, c and d of every replayed run must equal the
-committed records of the newest directory under `evals/agent/runs`, with 0 outbound attempts
-and 0 spend lines; then it prints the report of those records. A difference exits 1 and says
-how to record again (a change to a prompt, a schema, a tier or an output cap makes the recorded
-answers misses). A source the recorded run had no credential for is replayed as not configured
-(the cassette directory's `credentials.json`). Only the CI subset's cassettes are committed, so
-`--subset all` fails on the other rows, naming each. `--runs <dir>` uses
-another directory; `--score-only` scores the records with no replay (the synthetic test data has
-no cassettes). CI runs the CI subset with the network denied.
+`tests/deny-network.mjs` loaded in each. Two things of every replayed run must equal what the
+newest directory under `evals/agent/runs` keeps, with 0 outbound attempts and 0 spend lines:
+
+- rows b, c and d, the scored part (identity, clarification, the measured audio fields,
+  evidence, the current track's edges, claims, source errors, schema and fallback);
+- the whole result the run showed, normalised (`results/<ISRC>.json`, written by
+  `assemble.mjs` from the run's event stream): every claim, factoid, genealogy node and link
+  (links between two related recordings included), the audio block, energy and the other
+  features, key moments, segments, release year, preview match, the verifier's counts and the
+  source errors.
+
+The normalisation (`RESULT_MASKS` in `lib/record.mjs`) masks only what changes between two runs
+of the same code on the same answers, and nothing else:
+
+- the run's id, and the ids of claims, factoids and factoid entities, each replaced by its order
+  of first appearance (new random ids every run; references to them keep pointing the same way);
+- `run.mode`, `run.replayed`, `run.recordedAt`, `run.commit` and `run.usage.usd`, left out (how
+  and when the run was made; a replay spends nothing);
+- `previewUrl`, anywhere, left out (a signed link that expires; the cassettes keep none);
+- `coverUrl`, kept as present or absent, and a genealogy node's `img`, left out (CDN image
+  links, kept out of the committed files);
+- evidence `retrievedAt` (the time the run read the source).
+
+A difference exits 1, prints the first differing paths of the result
+(`.genealogy.links[1].value: recorded 2, replayed 3`), writes the replayed records and result to
+the scratch directory, and says how to record again (a change to a prompt, a schema, a tier or
+an output cap makes the recorded answers misses). A missing committed record or result of a
+replayed row is an error. A source the recorded run had no credential for is replayed as not
+configured (the cassette directory's `credentials.json`). Only the CI subset's cassettes are
+committed, so `--subset all` fails on the other rows, naming each. `--runs <dir>` uses another
+directory; `--score-only` scores the records with no replay (the synthetic test data has no
+cassettes). The CI subset holds Stronger (`USUM70741299`), whose result links two related
+recordings (second-hop samples) and whose preview gave no measurement.
+
+CI runs, with every outbound connection refused and no spending: the CI subset's replay;
+`check-report.mjs evals/reports/agent-latest.md` (which needs the whole history, so that the
+commit the runs were recorded at and `evals/golden.jsonl` as it was there can be read); and
+`perturb-check.mjs`. `node --test 'evals/**/*.test.mjs'` also scans every committed file under
+`fixtures/cassettes` and `evals/agent/runs` for credential shapes (keys in their services'
+formats, api-key and Authorization headers, bearer tokens and token fields that are not
+`[redacted]`, credentials in a query), preview hosts with or without a scheme, and signed links'
+parameters (`lib/scan.mjs`, `scan.test.mjs`).
 
 ## Recording the golden run
 
@@ -240,7 +274,8 @@ node evals/agent/export-labels.mjs --out labels.csv --key ~/labels-key.json
   measured tempo blocks and the synthetic ones, how many equivalents and estimator errors were
   rejected (0), how many false values were rejected, and how many were shown both by design.
   It then replays the app's judge on the claim cases from `fixtures/cassettes/llm/perturb` and
-  exits 1 unless every verdict is the committed record's, no spend line is written and the
+  exits 1 unless every case (its verdict, whether it is shown as sourced, and each other field)
+  is the committed record's, no spend line is written and the
   record was made on this perturbation set; it prints the false-positive rate (positives
   rejected) and the catch rate (mutations rejected) overall, per positive source and per
   mutation. A case is rejected when its verdict would not show it as sourced, by the app's rule.

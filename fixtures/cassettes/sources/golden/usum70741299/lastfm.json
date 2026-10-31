@@ -1,0 +1,135 @@
+{
+  "version": 1,
+  "entries": {
+    "GET https://ws.audioscrobbler.com/2.0/?artist=Kanye+West&autocorrect=1&format=json&limit=5&method=track.getSimilar&track=Stronger": {
+      "status": 200,
+      "contentType": "application/json",
+      "json": {
+        "similartracks": {
+          "track": [
+            {
+              "name": "Can't Tell Me Nothing",
+              "match": 1,
+              "artist": {
+                "name": "Kanye West"
+              }
+            },
+            {
+              "name": "I Wonder",
+              "match": 0.968855,
+              "artist": {
+                "name": "Kanye West"
+              }
+            },
+            {
+              "name": "Ms. Jackson",
+              "match": 0.261026,
+              "artist": {
+                "name": "OutKast",
+                "mbid": "73fdb566-a9b1-494c-9f32-51768ec9fd27"
+              }
+            },
+            {
+              "name": "In Da Club",
+              "match": 0.248117,
+              "artist": {
+                "name": "50 Cent",
+                "mbid": "8e68819d-71be-4e7d-b41d-f1df81b01d3f"
+              }
+            },
+            {
+              "name": "Swimming Pools (Drank)",
+              "match": 0.236928,
+              "artist": {
+                "name": "Kendrick Lamar",
+                "mbid": "381086ea-f511-4aba-bdf9-71c753dc5077"
+              }
+            }
+          ],
+          "@attr": {
+            "artist": "Kanye West",
+            "track": "Stronger"
+          }
+        }
+      }
+    },
+    "GET https://ws.audioscrobbler.com/2.0/?artist=Kanye+West&autocorrect=1&format=json&method=track.getTopTags&track=Stronger": {
+      "status": 200,
+      "contentType": "application/json; charset=UTF-8",
+      "json": {
+        "toptags": {
+          "tag": [
+            {
+              "name": "Hip-Hop",
+              "count": 100
+            },
+            {
+              "name": "rap",
+              "count": 61
+            },
+            {
+              "name": "Kanye West",
+              "count": 40
+            },
+            {
+              "name": "dance",
+              "count": 27
+            },
+            {
+              "name": "hip hop",
+              "count": 13
+            },
+            {
+              "name": "electronic",
+              "count": 9
+            },
+            {
+              "name": "Daft Punk",
+              "count": 5
+            },
+            {
+              "name": "Stronger",
+              "count": 2
+            },
+            {
+              "name": "rnb",
+              "count": 1
+            },
+            {
+              "name": "00s",
+              "count": 1
+            }
+          ],
+          "@attr": {
+            "artist": "Kanye West",
+            "track": "Stronger"
+          }
+        }
+      }
+    },
+    "GET https://ws.audioscrobbler.com/2.0/?autocorrect=1&format=json&limit=5&mbid=164f0d73-1234-4e2c-8743-d77bf2191051&method=artist.getSimilar": {
+      "status": 200,
+      "contentType": "application/json",
+      "json": {
+        "error": 6,
+        "message": "The artist you supplied could not be found"
+      }
+    },
+    "GET https://ws.audioscrobbler.com/2.0/?autocorrect=1&format=json&mbid=164f0d73-1234-4e2c-8743-d77bf2191051&method=artist.getInfo": {
+      "status": 200,
+      "contentType": "application/json",
+      "json": {
+        "error": 6,
+        "message": "The artist you supplied could not be found"
+      }
+    },
+    "GET https://ws.audioscrobbler.com/2.0/?autocorrect=1&format=json&mbid=164f0d73-1234-4e2c-8743-d77bf2191051&method=artist.getTopTags": {
+      "status": 200,
+      "contentType": "application/json; charset=UTF-8",
+      "json": {
+        "error": 6,
+        "message": "The artist you supplied could not be found"
+      }
+    }
+  }
+}

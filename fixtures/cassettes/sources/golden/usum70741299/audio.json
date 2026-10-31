@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "entries": {
+    "audio isrc:USUM70741299 analyzer:2.3.6+essentia.models-5c5c0c7f window:preview-30s": {
+      "status": 200,
+      "contentType": "application/json",
+      "json": {
+        "unavailable": "no_preview",
+        "detail": "No preview of this recording on Deezer or Spotify (entries turned down: 2 other_version, 9 artist_differs)",
+        "sent": false,
+        "match": null
+      }
+    },
+    "GET /health": {
+      "status": 200,
+      "contentType": "application/json",
+      "json": {
+        "analyzer_version": "2.3.6+essentia.models-5c5c0c7f"
+      }
+    }
+  }
+}

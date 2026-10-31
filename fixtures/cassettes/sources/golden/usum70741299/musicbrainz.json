@@ -1,0 +1,7141 @@
+{
+  "version": 1,
+  "entries": {
+    "GET https://musicbrainz.org/ws/2/artist?fmt=json&limit=10&query=artist%3A%22Kanye+West%22": {
+      "status": 200,
+      "contentType": "application/json",
+      "json": {
+        "count": 2,
+        "artists": [
+          {
+            "id": "0eb17834-1d29-47ef-a422-9dc68d73c5e4",
+            "name": "Kanye West Tribute Band",
+            "score": 100,
+            "type": "Group"
+          },
+          {
+            "id": "48c25fb5-480f-48ca-86f3-8aba60bc6ce9",
+            "name": "Kanye West & Hatsune Miku",
+            "score": 93,
+            "type": "Group",
+            "country": "US"
+          }
+        ]
+      }
+    },
+    "GET https://musicbrainz.org/ws/2/artist/164f0d73-1234-4e2c-8743-d77bf2191051?fmt=json&inc=artist-rels+recording-rels+url-rels": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "id": "164f0d73-1234-4e2c-8743-d77bf2191051",
+        "name": "Ye",
+        "type": "Person",
+        "country": "US",
+        "relations": [
+          {
+            "type": "artistic director",
+            "artist": {
+              "id": "6c37f6ee-172a-454a-ad74-4005535a260e",
+              "name": "Sunday Service Choir"
+            }
+          },
+          {
+            "type": "founder",
+            "artist": {
+              "id": "4bd6793a-b4ec-4d34-b996-84f100a02b7a",
+              "name": "DONDA Academy Gospel Choir"
+            }
+          },
+          {
+            "type": "instrumental supporting musician",
+            "artist": {
+              "id": "3e98b1e7-7fb0-44ae-9ba9-ba0f154d9d3d",
+              "name": "Million Dollar Mano"
+            }
+          },
+          {
+            "type": "instrumental supporting musician",
+            "artist": {
+              "id": "5ebb34a7-b4e0-4bb5-b26a-590d3ec5bf37",
+              "name": "Darrell Robinson"
+            }
+          },
+          {
+            "type": "instrumental supporting musician",
+            "artist": {
+              "id": "47ea59b7-81c2-4001-8ac3-567877b3172a",
+              "name": "A‐Trak"
+            }
+          },
+          {
+            "type": "instrumental supporting musician",
+            "artist": {
+              "id": "75207e08-3848-4069-b95e-e0873f8744ff",
+              "name": "DJ Aktive"
+            }
+          },
+          {
+            "type": "instrumental supporting musician",
+            "artist": {
+              "id": "a2fdc044-010f-4317-97d2-a1c67e978543",
+              "name": "Jeff Bhasker"
+            }
+          },
+          {
+            "type": "instrumental supporting musician",
+            "artist": {
+              "id": "73e36439-1e9a-4925-bf2c-1d7f7885fbb0",
+              "name": "Mike Dean"
+            }
+          },
+          {
+            "type": "instrumental supporting musician",
+            "artist": {
+              "id": "a228bc1a-8bdf-4a1d-ad91-292b5712e7eb",
+              "name": "Rob Gueringer"
+            }
+          },
+          {
+            "type": "instrumental supporting musician",
+            "artist": {
+              "id": "49b137c1-9041-469d-9c2d-711602a4b93b",
+              "name": "Charles Haynes"
+            }
+          },
+          {
+            "type": "instrumental supporting musician",
+            "artist": {
+              "id": "527839a7-59a7-4488-8fde-3931fe1b2f85",
+              "name": "George “Spanky” McCurdy"
+            }
+          },
+          {
+            "type": "instrumental supporting musician",
+            "artist": {
+              "id": "7f36004d-571f-4f66-b403-79e86b3f2243",
+              "name": "Tim Ressler"
+            }
+          },
+          {
+            "type": "involved with",
+            "artist": {
+              "id": "80ff1c00-d064-4887-ae07-81c01cbc2fdc",
+              "name": "Amber Rose"
+            }
+          },
+          {
+            "type": "involved with",
+            "artist": {
+              "id": "b13c7b85-86bf-41d0-baa7-444f03ec0b38",
+              "name": "Kim Kardashian"
+            }
+          },
+          {
+            "type": "married",
+            "artist": {
+              "id": "b13c7b85-86bf-41d0-baa7-444f03ec0b38",
+              "name": "Kim Kardashian"
+            }
+          },
+          {
+            "type": "member of band",
+            "artist": {
+              "id": "9563442b-69e2-43cf-8012-3c9371f174cb",
+              "name": "Child Rebel Soldier"
+            }
+          },
+          {
+            "type": "member of band",
+            "artist": {
+              "id": "793e220b-64f8-46d9-954d-e033dbcfeef4",
+              "name": "KIDS SEE GHOSTS"
+            }
+          },
+          {
+            "type": "member of band",
+            "artist": {
+              "id": "58daf317-be5f-439f-a04d-0d6727f1a3b2",
+              "name": "¥$"
+            }
+          },
+          {
+            "type": "member of band",
+            "artist": {
+              "id": "33cfd8a2-85de-4b0a-9acd-bd8ba91df3a0",
+              "name": "Go Getters"
+            }
+          },
+          {
+            "type": "member of band",
+            "artist": {
+              "id": "6c37f6ee-172a-454a-ad74-4005535a260e",
+              "name": "Sunday Service Choir"
+            }
+          },
+          {
+            "type": "member of band",
+            "artist": {
+              "id": "f8c4a5e7-4697-4bd3-90bd-04d092508738",
+              "name": "Roc-A-Fella Family"
+            }
+          },
+          {
+            "type": "member of band",
+            "artist": {
+              "id": "bb637e2e-64a8-4ecb-81ac-bf492fb48f04",
+              "name": "Madvillainz"
+            }
+          },
+          {
+            "type": "member of band",
+            "artist": {
+              "id": "11b534f4-006f-493e-a873-ebc34a536030",
+              "name": "The Hooligans"
+            }
+          },
+          {
+            "type": "member of band",
+            "artist": {
+              "id": "79f591ab-6ab8-41ea-9cab-1c2240cd43fe",
+              "name": "The Throne"
+            }
+          },
+          {
+            "type": "named after artist",
+            "artist": {
+              "id": "1ce70900-77b1-4d8d-8bb6-0fb1237c3d49",
+              "name": "Kanye East"
+            }
+          },
+          {
+            "type": "named after artist",
+            "artist": {
+              "id": "a1edd02d-4249-49c9-bab1-d81844459d76",
+              "name": "tsew eynak"
+            }
+          },
+          {
+            "type": "named after artist",
+            "artist": {
+              "id": "c227777b-3d32-4454-bd0f-5a2a38330bde",
+              "name": "kanyewest62"
+            }
+          },
+          {
+            "type": "parent",
+            "artist": {
+              "id": "0f423ef4-7835-4da0-bddf-65579ca3a353",
+              "name": "Dr. Donda West"
+            }
+          },
+          {
+            "type": "parent",
+            "artist": {
+              "id": "9bba8640-a28c-43c1-9611-3b4e9515efe1",
+              "name": "North West"
+            }
+          },
+          {
+            "type": "parent",
+            "artist": {
+              "id": "bfaecbe0-5e0a-4893-ba37-1598d4667b38",
+              "name": "Chicago West"
+            }
+          },
+          {
+            "type": "chorus master"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "instrument"
+          },
+          {
+            "type": "misc"
+          },
+          {
+            "type": "misc"
+          },
+          {
+            "type": "mix"
+          },
+          {
+            "type": "mix"
+          },
+          {
+            "type": "mix"
+          },
+          {
+            "type": "mix"
+          },
+          {
+            "type": "mix"
+          },
+          {
+            "type": "mix"
+          },
+          {
+            "type": "mix"
+          },
+          {
+            "type": "mix"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "performer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "producer"
+          },
+          {
+            "type": "programming"
+          },
+          {
+            "type": "programming"
+          },
+          {
+            "type": "programming"
+          },
+          {
+            "type": "programming"
+          },
+          {
+            "type": "programming"
+          },
+          {
+            "type": "programming"
+          },
+          {
+            "type": "programming"
+          },
+          {
+            "type": "programming"
+          },
+          {
+            "type": "programming"
+          },
+          {
+            "type": "programming"
+          },
+          {
+            "type": "programming"
+          },
+          {
+            "type": "programming"
+          },
+          {
+            "type": "programming"
+          },
+          {
+            "type": "programming"
+          },
+          {
+            "type": "programming"
+          },
+          {
+            "type": "programming"
+          },
+          {
+            "type": "programming"
+          },
+          {
+            "type": "programming"
+          },
+          {
+            "type": "programming"
+          },
+          {
+            "type": "programming"
+          },
+          {
+            "type": "programming"
+          },
+          {
+            "type": "remixer"
+          },
+          {
+            "type": "remixer"
+          },
+          {
+            "type": "remixer"
+          },
+          {
+            "type": "remixer"
+          },
+          {
+            "type": "remixer"
+          },
+          {
+            "type": "remixer"
+          },
+          {
+            "type": "remixer"
+          },
+          {
+            "type": "remixer"
+          },
+          {
+            "type": "remixer"
+          },
+          {
+            "type": "remixer"
+          },
+          {
+            "type": "remixer"
+          },
+          {
+            "type": "remixer"
+          },
+          {
+            "type": "remixer"
+          },
+          {
+            "type": "remixer"
+          },
+          {
+            "type": "samples from artist"
+          },
+          {
+            "type": "samples from artist"
+          },
+          {
+            "type": "samples from artist"
+          },
+          {
+            "type": "samples from artist"
+          },
+          {
+            "type": "video appearance"
+          },
+          {
+            "type": "video appearance"
+          },
+          {
+            "type": "video appearance"
+          },
+          {
+            "type": "video appearance"
+          },
+          {
+            "type": "video appearance"
+          },
+          {
+            "type": "video director"
+          },
+          {
+            "type": "video director"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "vocal"
+          },
+          {
+            "type": "allmusic"
+          },
+          {
+            "type": "bandcamp"
+          },
+          {
+            "type": "bandsintown"
+          },
+          {
+            "type": "BBC Music page"
+          },
+          {
+            "type": "discogs"
+          },
+          {
+            "type": "discogs"
+          },
+          {
+            "type": "discogs"
+          },
+          {
+            "type": "discogs"
+          },
+          {
+            "type": "free streaming"
+          },
+          {
+            "type": "free streaming"
+          },
+          {
+            "type": "free streaming"
+          },
+          {
+            "type": "free streaming"
+          },
+          {
+            "type": "free streaming"
+          },
+          {
+            "type": "free streaming"
+          },
+          {
+            "type": "free streaming"
+          },
+          {
+            "type": "image"
+          },
+          {
+            "type": "IMDb"
+          },
+          {
+            "type": "last.fm"
+          },
+          {
+            "type": "last.fm"
+          },
+          {
+            "type": "last.fm"
+          },
+          {
+            "type": "lyrics"
+          },
+          {
+            "type": "myspace"
+          },
+          {
+            "type": "official homepage"
+          },
+          {
+            "type": "official homepage"
+          },
+          {
+            "type": "other databases"
+          },
+          {
+            "type": "other databases"
+          },
+          {
+            "type": "other databases"
+          },
+          {
+            "type": "other databases"
+          },
+          {
+            "type": "other databases"
+          },
+          {
+            "type": "other databases"
+          },
+          {
+            "type": "other databases"
+          },
+          {
+            "type": "other databases"
+          },
+          {
+            "type": "other databases"
+          },
+          {
+            "type": "other databases"
+          },
+          {
+            "type": "other databases"
+          },
+          {
+            "type": "other databases"
+          },
+          {
+            "type": "other databases"
+          },
+          {
+            "type": "other databases"
+          },
+          {
+            "type": "purchase for download"
+          },
+          {
+            "type": "purchase for download"
+          },
+          {
+            "type": "purchase for download"
+          },
+          {
+            "type": "purchase for download"
+          },
+          {
+            "type": "purchase for download"
+          },
+          {
+            "type": "purchase for download"
+          },
+          {
+            "type": "purchase for download"
+          },
+          {
+            "type": "purchase for download"
+          },
+          {
+            "type": "secondhandsongs"
+          },
+          {
+            "type": "setlistfm"
+          },
+          {
+            "type": "social network"
+          },
+          {
+            "type": "social network"
+          },
+          {
+            "type": "social network"
+          },
+          {
+            "type": "songkick"
+          },
+          {
+            "type": "soundcloud"
+          },
+          {
+            "type": "streaming"
+          },
+          {
+            "type": "streaming"
+          },
+          {
+            "type": "streaming"
+          },
+          {
+            "type": "streaming"
+          },
+          {
+            "type": "streaming"
+          },
+          {
+            "type": "streaming"
+          },
+          {
+            "type": "streaming"
+          },
+          {
+            "type": "streaming"
+          },
+          {
+            "type": "VIAF"
+          },
+          {
+            "type": "wikidata"
+          },
+          {
+            "type": "youtube"
+          },
+          {
+            "type": "youtube"
+          },
+          {
+            "type": "youtube"
+          },
+          {
+            "type": "youtube music"
+          }
+        ]
+      }
+    },
+    "GET https://musicbrainz.org/ws/2/isrc/USUM70741299?fmt=json&inc=artist-credits": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "isrc": "USUM70741299",
+        "recordings": [
+          {
+            "id": "8009d470-912b-42fa-8261-b88c488eb935",
+            "title": "Stronger",
+            "first-release-date": "2007-08-13",
+            "length": 312000,
+            "disambiguation": "explicit",
+            "artist-credit": [
+              {
+                "name": "Kanye West",
+                "joinphrase": "",
+                "artist": {
+                  "id": "164f0d73-1234-4e2c-8743-d77bf2191051",
+                  "name": "Ye"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "GET https://musicbrainz.org/ws/2/recording?fmt=json&limit=1&query=rid%3A%28f1a6a40f-78f5-4918-968d-f64363bae94c%29": {
+      "status": 200,
+      "contentType": "application/json",
+      "json": {
+        "count": 1,
+        "recordings": [
+          {
+            "id": "f1a6a40f-78f5-4918-968d-f64363bae94c",
+            "first-release-date": "2001-02-26"
+          }
+        ]
+      }
+    },
+    "GET https://musicbrainz.org/ws/2/recording?fmt=json&limit=6&query=rid%3A%2883aa2ba7-5d60-4f0e-88e7-340c36d2f392+OR+763a8126-170f-4f01-bd14-2646113563ca+OR+3e3bf2aa-d27a-400c-9c64-427cf85d3a5d+OR+10e00673-4062-405f-82b4-dc28cf8048cd+OR+4d2026ef-505e-463d-8c10-d44af82ffd2f+OR+45574086-6c4e-45a7-8fde-cf84f6c01e93%29": {
+      "status": 200,
+      "contentType": "application/json",
+      "json": {
+        "count": 6,
+        "recordings": [
+          {
+            "id": "10e00673-4062-405f-82b4-dc28cf8048cd",
+            "first-release-date": "2016-08-23"
+          },
+          {
+            "id": "4d2026ef-505e-463d-8c10-d44af82ffd2f",
+            "first-release-date": "2008"
+          },
+          {
+            "id": "763a8126-170f-4f01-bd14-2646113563ca",
+            "first-release-date": "2025-09-20"
+          },
+          {
+            "id": "3e3bf2aa-d27a-400c-9c64-427cf85d3a5d",
+            "first-release-date": "2020-01-08"
+          },
+          {
+            "id": "45574086-6c4e-45a7-8fde-cf84f6c01e93",
+            "first-release-date": "2007-05-11"
+          },
+          {
+            "id": "83aa2ba7-5d60-4f0e-88e7-340c36d2f392",
+            "first-release-date": "2024-03-30"
+          }
+        ]
+      }
+    },
+    "GET https://musicbrainz.org/ws/2/recording/8009d470-912b-42fa-8261-b88c488eb935?fmt=json&inc=artist-credits+recording-rels+work-rels+work-level-rels+url-rels": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "id": "8009d470-912b-42fa-8261-b88c488eb935",
+        "title": "Stronger",
+        "first-release-date": "2007-08-13",
+        "length": 312000,
+        "disambiguation": "explicit",
+        "artist-credit": [
+          {
+            "name": "Kanye West",
+            "joinphrase": "",
+            "artist": {
+              "id": "164f0d73-1234-4e2c-8743-d77bf2191051",
+              "name": "Ye"
+            }
+          }
+        ],
+        "relations": [
+          {
+            "type": "mashes up",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "c123b77e-5b2e-4cf0-8703-90593b706b3c",
+              "title": "Hellifrançais",
+              "length": 181000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "D.J. DryBowser",
+                  "joinphrase": " & ",
+                  "artist": {
+                    "id": "c2dd5bd2-74ec-4641-ba2c-a71f919591da",
+                    "name": "D.J. DryBowser"
+                  }
+                },
+                {
+                  "name": "CrystalForce",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "38ecad2e-9d8d-450b-b353-9d85ef384885",
+                    "name": "CrystalForce"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "mashes up",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "da5682b7-541c-48d6-a70c-8e7313389288",
+              "title": "I Think I’m Gonna Be Sick",
+              "length": 226625,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Expensive Dispenser",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "7991cbf8-5505-4689-82b1-eed89e24ec3c",
+                    "name": "Expensive Dispenser"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "mashes up",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "3f77d48d-e8a1-455f-97fc-6a0407570f90",
+              "title": "Stronger Bonfire",
+              "length": 143000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Darren Hess",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "bb5740a6-c943-42f4-9ea6-fe04325138a0",
+                    "name": "Darren Hess"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "mashes up",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "b8924f32-6cd8-4a3e-bf80-d9953f5539f6",
+              "title": "Stronger in the End",
+              "length": 260000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "SmadaLeinad",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "01729395-439a-42b5-823b-27d4269ebc3b",
+                    "name": "SmadaLeinad"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "mashes up",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "77c8bd26-4149-4af6-8a56-b2878e2a7ba2",
+              "title": "Stronger Squared",
+              "length": 240000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Unkle Adams Originalposting",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "290104f7-9ae7-42ec-af26-209d6ea9d604",
+                    "name": "Unkle Adams Originalposting"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "mashes up",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "3a70c749-f728-4a04-9213-f66fd709d7e6",
+              "title": "Stronger This Way (Lady Gaga vs. Kanye West vs. Eminem vs. Smash Mouth vs. blink-182)",
+              "length": 263462,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "TCMusic!",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "ec39ed6e-36c0-45d1-9c60-139de3abec07",
+                    "name": "TCMusic!"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "mashes up",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "2da65eb6-eb1e-4898-a469-d011d268226a",
+              "title": "Wilder",
+              "length": 268364,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Pluffaduff",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "c581547c-9b45-4757-ae31-4a1efe0508bc",
+                    "name": "Pluffaduff"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "music video",
+            "direction": "forward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "7c79e931-eb2d-40ad-89ad-1de160d67fdd",
+              "title": "Stronger",
+              "length": 266000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Kanye West",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "164f0d73-1234-4e2c-8743-d77bf2191051",
+                    "name": "Ye"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "samples material",
+            "direction": "forward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "f1a6a40f-78f5-4918-968d-f64363bae94c",
+              "title": "Harder, Better, Faster, Stronger",
+              "length": 224293,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Daft Punk",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "056e4f3e-d505-4dad-8ec1-d04f521cbb56",
+                    "name": "Daft Punk"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "free streaming",
+            "direction": "forward",
+            "target-type": "url",
+            "attributes": [],
+            "url": {
+              "resource": "https://open.spotify.com/track/0j2T0R9dR9qdJYsB7ciXhf"
+            }
+          },
+          {
+            "type": "free streaming",
+            "direction": "forward",
+            "target-type": "url",
+            "attributes": [],
+            "url": {
+              "resource": "https://open.spotify.com/track/1eLJoRzqfc8oeSl9KsNmN8"
+            }
+          },
+          {
+            "type": "free streaming",
+            "direction": "forward",
+            "target-type": "url",
+            "attributes": [],
+            "url": {
+              "resource": "https://www.deezer.com/track/2630876"
+            }
+          },
+          {
+            "type": "free streaming",
+            "direction": "forward",
+            "target-type": "url",
+            "attributes": [],
+            "url": {
+              "resource": "https://www.deezer.com/track/630827242"
+            }
+          },
+          {
+            "type": "purchase for download",
+            "direction": "forward",
+            "target-type": "url",
+            "attributes": [],
+            "url": {
+              "resource": "https://music.apple.com/de/song/1445288542"
+            }
+          },
+          {
+            "type": "purchase for download",
+            "direction": "forward",
+            "target-type": "url",
+            "attributes": [],
+            "url": {
+              "resource": "https://music.apple.com/us/song/1451902446"
+            }
+          },
+          {
+            "type": "streaming",
+            "direction": "forward",
+            "target-type": "url",
+            "attributes": [],
+            "url": {
+              "resource": "https://music.apple.com/de/song/1445288542"
+            }
+          },
+          {
+            "type": "streaming",
+            "direction": "forward",
+            "target-type": "url",
+            "attributes": [],
+            "url": {
+              "resource": "https://music.apple.com/us/song/1451902446"
+            }
+          },
+          {
+            "type": "streaming",
+            "direction": "forward",
+            "target-type": "url",
+            "attributes": [],
+            "url": {
+              "resource": "https://tidal.com/track/103805726"
+            }
+          },
+          {
+            "type": "streaming",
+            "direction": "forward",
+            "target-type": "url",
+            "attributes": [],
+            "url": {
+              "resource": "https://tidal.com/track/13041186"
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "forward",
+            "target-type": "work",
+            "attributes": [],
+            "work": {
+              "id": "972c1bcc-b1dd-38e2-b881-37825c07d9ef",
+              "title": "Stronger",
+              "relations": [
+                {
+                  "type": "wikidata",
+                  "direction": "backward",
+                  "target-type": "url",
+                  "url": {
+                    "resource": "https://www.wikidata.org/wiki/Q2018005"
+                  }
+                },
+                {
+                  "type": "based on",
+                  "direction": "backward",
+                  "target-type": "work"
+                },
+                {
+                  "type": "other version",
+                  "direction": "forward",
+                  "target-type": "work"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "GET https://musicbrainz.org/ws/2/recording/f1a6a40f-78f5-4918-968d-f64363bae94c?fmt=json&inc=artist-credits+recording-rels+work-rels+work-level-rels+url-rels": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "id": "f1a6a40f-78f5-4918-968d-f64363bae94c",
+        "title": "Harder, Better, Faster, Stronger",
+        "first-release-date": "2001-02-26",
+        "length": 224293,
+        "disambiguation": "",
+        "artist-credit": [
+          {
+            "name": "Daft Punk",
+            "joinphrase": "",
+            "artist": {
+              "id": "056e4f3e-d505-4dad-8ec1-d04f521cbb56",
+              "name": "Daft Punk"
+            }
+          }
+        ],
+        "relations": [
+          {
+            "type": "DJ-mix",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "58af6b1e-ec63-4db6-b921-1fd8b02624c3",
+              "title": "Around the World / Harder Better Faster Stronger",
+              "length": 342626,
+              "disambiguation": "live, 2007-06-14: Bercy, Paris",
+              "artist-credit": [
+                {
+                  "name": "Daft Punk",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "056e4f3e-d505-4dad-8ec1-d04f521cbb56",
+                    "name": "Daft Punk"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "edit",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "3d9c412c-abfd-4659-b9ff-95970fee3d4b",
+              "title": "Harder Better Faster Stronger (MH YS2019 edit)",
+              "length": 296991,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Daft Punk",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "056e4f3e-d505-4dad-8ec1-d04f521cbb56",
+                    "name": "Daft Punk"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "mashes up",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "1a0c9d63-4fec-48c9-932b-f68054b6c3b7",
+              "title": "0900 Daft Purple",
+              "length": 246000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "The Kleptones",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "f73b2b70-33d5-4118-923b-05ba8ad7e702",
+                    "name": "The Kleptones"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "mashes up",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "93ba473f-6b28-4784-b8b4-269cd67ee884",
+              "title": "Baby I’m Stronger (Breakbot vs. Survivor vs. Skrillex vs. Daft Punk)",
+              "length": 210500,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "TCMusic!",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "ec39ed6e-36c0-45d1-9c60-139de3abec07",
+                    "name": "TCMusic!"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "mashes up",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "7edd5e90-6ca2-4d77-97e4-814a7880639f",
+              "title": "Better Blue Master People (New Order vs. Depeche Mode vs. Daft Punk)",
+              "length": 270000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Sterbinszky",
+                  "joinphrase": " & ",
+                  "artist": {
+                    "id": "fd20b9bb-56ae-4434-a343-b38b9bfe0096",
+                    "name": "Sterbinszky"
+                  }
+                },
+                {
+                  "name": "Coddie",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "33bb5636-bd84-4d98-bfeb-e928011a87a9",
+                    "name": "Coddie"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "mashes up",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "c4e3ab68-20e6-4522-a450-f677cb90ed71",
+              "title": "Better Blue Master People (New Order vs. Depeche Mode vs. Daft Punk)",
+              "length": 189000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Sterbinszky",
+                  "joinphrase": " & ",
+                  "artist": {
+                    "id": "fd20b9bb-56ae-4434-a343-b38b9bfe0096",
+                    "name": "Sterbinszky"
+                  }
+                },
+                {
+                  "name": "Coddie",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "33bb5636-bd84-4d98-bfeb-e928011a87a9",
+                    "name": "Coddie"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "mashes up",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "b1db2013-7c98-4ce1-89ae-16f08f940d7a",
+              "title": "Britney Dead or Alive? (Britney Spears vs. Dead or Alive vs. Daft Punk)",
+              "length": 203000,
+              "disambiguation": "part of “Best of Bootie 2007” DJ‐mix",
+              "artist-credit": [
+                {
+                  "name": "team9",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "db717be2-08ab-4b78-b08e-2eafbd917aaf",
+                    "name": "team9"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "mashes up",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "77034d67-3b32-4b43-87b8-155ab2a1a4d0",
+              "title": "Daft Mouth",
+              "length": 183000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Neil Cicierega",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "68f8885e-0752-480f-bf84-6d2fc67cff80",
+                    "name": "Neil Cicierega"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "mashes up",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "e413f5bb-54c5-4058-92b7-99a551f65cf0",
+              "title": "Daft Wash (Daft Punk vs Shark Tale OST)",
+              "length": 212000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "DJ Nerd42",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "6f1f75e6-90f9-4b1f-90b5-912aa35cb350",
+                    "name": "DJ Nerd42"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "mashes up",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "797ab53c-29f2-4c8f-85bd-104d60361bd1",
+              "title": "Daft Wash (Extended Mix)",
+              "length": 243755,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "DJ Nerd42",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "6f1f75e6-90f9-4b1f-90b5-912aa35cb350",
+                    "name": "DJ Nerd42"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "mashes up",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "e385bdb3-01ec-4980-93b4-e8f0ac03f603",
+              "title": "EXTREME MEME MUSIC MEGAMASHUP",
+              "length": 552000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "DaymanOurSavior",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "dff48d11-a78d-47e8-ad97-0788d8753db2",
+                    "name": "DaymanOurSavior"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "mashes up",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "09f25029-6d04-44b3-aee8-4a87e38590cd",
+              "title": "H.B.F.S.",
+              "length": 198785,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "vvsvlogs",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "b0217297-841f-4257-9083-64266c00fec8",
+                    "name": "vvsvlogs"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "mashes up",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "77cba397-fe26-4fe9-afab-fd51276a1b33",
+              "title": "Harder Blizzard Faster Stronger (Kavinsky vs. Daft Punk)",
+              "length": 210000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "YITT",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "0b864b04-7917-4e2d-9bf9-75d7d397fe84",
+                    "name": "YITT"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "mashes up",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "eb0a22f1-35da-43f1-a1c2-d8277ee7fbe1",
+              "title": "Harder, Better, Faster, Stronger / Sexual Sportswear",
+              "length": 227000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Daft Punk",
+                  "joinphrase": ", ",
+                  "artist": {
+                    "id": "056e4f3e-d505-4dad-8ec1-d04f521cbb56",
+                    "name": "Daft Punk"
+                  }
+                },
+                {
+                  "name": "Sébastien Tellier",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "ac69016f-42cc-4322-b70e-101458b769aa",
+                    "name": "Sébastien Tellier"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "mashes up",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "da5682b7-541c-48d6-a70c-8e7313389288",
+              "title": "I Think I’m Gonna Be Sick",
+              "length": 226625,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Expensive Dispenser",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "7991cbf8-5505-4689-82b1-eed89e24ec3c",
+                    "name": "Expensive Dispenser"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "mashes up",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "7d10c256-9bf5-4ebf-9bd0-120ec15509c9",
+              "title": "Just the Two of Us are Harder, Better, Faster, Stronger than You (3x SU mashup)",
+              "length": 160459,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "anosci",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "f7059fe9-637f-44d2-bb64-cc32ec73ed13",
+                    "name": "anosci"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "mashes up",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "ac46bc74-0a15-4896-b5f2-217b189d339f",
+              "title": "Klash-Up (Cinco de Mayo 2009 - Cellmate mix)",
+              "length": 353000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Celldweller",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "fad8967c-a327-4af5-a64a-d4de66ece652",
+                    "name": "Celldweller"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "mashes up",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "1e4d6463-2d92-40f3-adf8-8d44c14ae3a8",
+              "title": "ryuuseigun mashup",
+              "length": 832366,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "jan Misali",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "e4acb86c-55bb-4661-9f04-5f352f92850d",
+                    "name": "jan Misali"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "mashes up",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "e7db5e9e-11a0-4ab3-ada0-f75c2ad7c99b",
+              "title": "Scream and Shout and Something Else Too",
+              "length": 185195,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Pantsmode",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "82d32f9b-b04b-4364-9fd4-ea474495a04e",
+                    "name": "Pantsmode"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "mashes up",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "51b792e0-2179-403a-94d5-3dc08301048e",
+              "title": "Spin Me Harder (Daft Punk vs. Dead or Alive)",
+              "length": 233000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "DJ Tripp",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "fe0049c6-efe4-4582-ad8c-5ef9d8e9d404",
+                    "name": "DJ Tripp"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "mashes up",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "356e4c78-2885-476f-8823-3eda96d17317",
+              "title": "Starry Sky YEAH! (remix) (full ver.)",
+              "length": 425000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Novoiski",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "cc0b63d7-ba0c-486c-ab25-bcf668d737a5",
+                    "name": "Novoiski"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "mashes up",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "c2c9b660-2bc6-4aa0-bc13-b978188ed3b9",
+              "title": "Stressproof (La Roux vs. Laurent Wolf vs. Daft Punk)",
+              "length": 324000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "9freak9",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "3da707f6-7a2d-4584-897d-7a5ffc4a415e",
+                    "name": "9freak9"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "mashes up",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "8cec1bef-3513-462c-9739-bad7fa2a2fc9",
+              "title": "This Is Harder",
+              "length": 79000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Daft Grips",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "44ccf4a8-bcfc-4b9f-a126-5378b19dff9a",
+                    "name": "Daft Grips"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "mashes up",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "086c9eff-4a3a-4cb0-962a-5fb5fcb3923f",
+              "title": "Trinity Part 2",
+              "length": 238590,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "The Sheep Queen Experiment",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "783dd6de-8500-417e-9477-6d1aec66fe92",
+                    "name": "The Sheep Queen Experiment"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "mashes up",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "cf17eeb8-a936-489e-8164-f3322ba79cf9",
+              "title": "We Swarm",
+              "length": 120000,
+              "disambiguation": "part of \"Drink the Sea, Part2: The Mixtape\" DJ-mix",
+              "artist-credit": [
+                {
+                  "name": "The Glitch Mob",
+                  "joinphrase": " vs. ",
+                  "artist": {
+                    "id": "2e62daef-dc0d-40ad-b430-fd6872e992aa",
+                    "name": "The Glitch Mob"
+                  }
+                },
+                {
+                  "name": "M.I.A.",
+                  "joinphrase": ", ",
+                  "artist": {
+                    "id": "7cf0ea9d-86b9-4dad-ba9e-2355a64899ea",
+                    "name": "M.I.A."
+                  }
+                },
+                {
+                  "name": "Mobb Deep",
+                  "joinphrase": " & ",
+                  "artist": {
+                    "id": "d75d1f08-bbb8-4eae-9877-399ca9121197",
+                    "name": "Mobb Deep"
+                  }
+                },
+                {
+                  "name": "Daft Punk",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "056e4f3e-d505-4dad-8ec1-d04f521cbb56",
+                    "name": "Daft Punk"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "mashes up",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "816bfb35-58fb-4b5e-89ca-dfd72f08b51f",
+              "title": "You Don’t Always Die From Daft Punk",
+              "length": 64000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Breakmaster Cylinder",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "c5e68ebc-5e50-473a-a982-d56642d20141",
+                    "name": "Breakmaster Cylinder"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "remix",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "816c4e12-1cf3-44a6-9782-e5fadbf99d90",
+              "title": "Harder Better Faster Illamerica (Kid Crookes bootleg)",
+              "length": 296000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Daft Punk",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "056e4f3e-d505-4dad-8ec1-d04f521cbb56",
+                    "name": "Daft Punk"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "remix",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "87f51ded-b296-4368-9c46-cd94276117a8",
+              "title": "Harder Better Faster Stronger (deadmau5 edit)",
+              "length": 380000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Daft Punk",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "056e4f3e-d505-4dad-8ec1-d04f521cbb56",
+                    "name": "Daft Punk"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "remix",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "f5a9e98b-8c66-42cc-8c17-ec55f30864dd",
+              "title": "Harder Better Faster Stronger (OTIK dubstep remix)",
+              "length": 266340,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Daft Punk",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "056e4f3e-d505-4dad-8ec1-d04f521cbb56",
+                    "name": "Daft Punk"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "remix",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "316da191-9f31-49cf-ad9c-fa0ea4ac7630",
+              "title": "Harder, Better, Faster, Stronger",
+              "length": 228031,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Far Out",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "3d9ba4cb-73c4-4424-afea-c2c16d5bdd71",
+                    "name": "Far Out"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "remix",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "3fbabc6e-b535-4dc7-91d2-f29252d1a44b",
+              "title": "Harder, Better, Faster, Stronger (Complexive Remix)",
+              "length": 320000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Daft Punk",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "056e4f3e-d505-4dad-8ec1-d04f521cbb56",
+                    "name": "Daft Punk"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "remix",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "de7a70b2-f7da-4057-91b2-5c28e1420e63",
+              "title": "Harder, Better, Faster, Stronger (Jess and Crabbe Regulator mix)",
+              "length": 361000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Daft Punk",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "056e4f3e-d505-4dad-8ec1-d04f521cbb56",
+                    "name": "Daft Punk"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "remix",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "5a9cea41-904d-4388-8e34-043eaec454eb",
+              "title": "Harder, Better, Faster, Stronger (The Neptunes remix)",
+              "length": 311493,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Daft Punk",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "056e4f3e-d505-4dad-8ec1-d04f521cbb56",
+                    "name": "Daft Punk"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "remix",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "98813a99-51c4-4ffb-8f9c-6dfdacc023e7",
+              "title": "Harder, Better, Mother, Fucker",
+              "length": 47386,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Moustiluigi Random",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "5129a9ad-cec5-4023-ae31-7090b9611b4c",
+                    "name": "Moustiluigi Random"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "remix",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "5f94a078-ea6c-4abd-b864-d6e54203ec3d",
+              "title": "Work Is Never Over",
+              "length": 226000,
+              "disambiguation": "remix of Daft Punk's \"Harder, Better, Faster, Stronger\"",
+              "artist-credit": [
+                {
+                  "name": "Diplo",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "a56bd8f9-8ef8-4d63-89a4-794ed1360dd2",
+                    "name": "Diplo"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "samples material",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "83aa2ba7-5d60-4f0e-88e7-340c36d2f392",
+              "title": "\"Android Porn (HARDER)\" x T-1000",
+              "length": 112547,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Twerknation28",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "e58cf7eb-3164-437b-ad94-29839e880c3e",
+                    "name": "Twerknation28"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "samples material",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "763a8126-170f-4f01-bd14-2646113563ca",
+              "title": "ACTION PEOPLE",
+              "length": 203000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Cheryl Stelli",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "e71866a5-ba50-4757-88a9-161071ae74b1",
+                    "name": "Cheryl Stelli"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "samples material",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "3e3bf2aa-d27a-400c-9c64-427cf85d3a5d",
+              "title": "AIN’T NOTHIN’ LIKE A FLAT BEAT",
+              "length": 154000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Expensive Dispenser",
+                  "joinphrase": " & ",
+                  "artist": {
+                    "id": "7991cbf8-5505-4689-82b1-eed89e24ec3c",
+                    "name": "Expensive Dispenser"
+                  }
+                },
+                {
+                  "name": "CrystalForce",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "38ecad2e-9d8d-450b-b353-9d85ef384885",
+                    "name": "CrystalForce"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "samples material",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "10e00673-4062-405f-82b4-dc28cf8048cd",
+              "title": "Anthology (Daft Punk Tribute)",
+              "length": 377903,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "OVERWERK",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "67404ef7-0377-4377-b21b-48a06ecfb63e",
+                    "name": "OVERWERK"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "samples material",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "4d2026ef-505e-463d-8c10-d44af82ffd2f",
+              "title": "Better Sounding on Drugs",
+              "length": 345000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "BSOD",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "46329df9-9860-44b3-b17f-70df5207bc37",
+                    "name": "BSOD"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "samples material",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "45574086-6c4e-45a7-8fde-cf84f6c01e93",
+              "title": "BSOD",
+              "length": 372000,
+              "disambiguation": "original mix",
+              "artist-credit": [
+                {
+                  "name": "BSOD",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "46329df9-9860-44b3-b17f-70df5207bc37",
+                    "name": "BSOD"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "samples material",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [
+              "lead vocals"
+            ],
+            "recording": {
+              "id": "66aa8cd7-bc2b-417b-a4b0-5f3a26b93d38",
+              "title": "Daft Buster",
+              "length": 181000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "ChickenSuitGuy",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "7e9ff0cb-444f-4e2f-a323-d86b4e98aa29",
+                    "name": "ChickenSuitGuy"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "samples material",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "c0f70fa4-cf0c-40dd-b72c-89dce1f87b0d",
+              "title": "Daft Punk vs Outkast - Punk Roses",
+              "length": 214337,
+              "disambiguation": "Mashup",
+              "artist-credit": [
+                {
+                  "name": "El Barto & Liam B",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "e2b103bf-d33c-43f4-9b3d-bd1e16239647",
+                    "name": "El Barto & Liam B"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "samples material",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "32ec8437-a715-4fe3-9e03-800c2c0cc3b3",
+              "title": "DAFTFOOL",
+              "length": 38400,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "YESCLIP",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "649a20d6-e168-49a3-8856-961a160a9b8b",
+                    "name": "YESCLIP"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "samples material",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [
+              "lead vocals"
+            ],
+            "recording": {
+              "id": "ecd31584-5014-426f-9c2e-76231287662b",
+              "title": "DETHMARCH",
+              "length": 43200,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "YESCLIP",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "649a20d6-e168-49a3-8856-961a160a9b8b",
+                    "name": "YESCLIP"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "samples material",
+            "direction": "forward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "40c14d4c-ed39-4c3f-8183-b93d62a7e460",
+              "title": "Cola Bottle Baby",
+              "length": 310360,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Edwin Birdsong",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "41f1960d-be42-4ca0-8599-8d0fb77ae6d4",
+                    "name": "Edwin Birdsong"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "samples material",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "016e44f7-e43c-41d5-b221-f2649bab870c",
+              "title": "In The Cold",
+              "length": 514000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "KatazTrophee",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "dc8a9207-960c-4ef2-ba5e-9aee4b8749bd",
+                    "name": "KatazTrophee"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "samples material",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "1763a9cf-8d21-48d7-9d77-8334c1433ec7",
+              "title": "iPod",
+              "length": 306000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Cacola",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "a45910d8-bf79-47c4-ba13-8c1489d323d2",
+                    "name": "Cacola"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "samples material",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "bcb68888-84a7-4d11-896c-7e30e9b7f560",
+              "title": "Let’s Takk About Revolte (Mac Stanton Revolution 909 remix)",
+              "length": 444987,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Revolte",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "33ee88d7-2b61-47a8-898a-8ce63a4e4a74",
+                    "name": "Revolte"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "samples material",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "84d6edac-66a8-45ad-a13e-67faa7e3153f",
+              "title": "RTRN II MAC",
+              "length": 234000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Sonnig 991",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "206a1bce-a38e-48b1-99bf-82290ce010df",
+                    "name": "Sonnig 991"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "samples material",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "96266690-11b1-48bc-a90c-09d5a0f60611",
+              "title": "Stronger",
+              "length": 247533,
+              "disambiguation": "radio edit",
+              "artist-credit": [
+                {
+                  "name": "Kanye West",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "164f0d73-1234-4e2c-8743-d77bf2191051",
+                    "name": "Ye"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "samples material",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "8009d470-912b-42fa-8261-b88c488eb935",
+              "title": "Stronger",
+              "length": 312000,
+              "disambiguation": "explicit",
+              "artist-credit": [
+                {
+                  "name": "Kanye West",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "164f0d73-1234-4e2c-8743-d77bf2191051",
+                    "name": "Ye"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "samples material",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "6a420e57-406f-4c8a-84e1-4ffeb9b4fc72",
+              "title": "Victory! Daft Punk",
+              "length": 11000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "duuzu",
+                  "joinphrase": " ft. ",
+                  "artist": {
+                    "id": "17f4c758-c120-4770-95e9-8c6441f32c5b",
+                    "name": "duuzu"
+                  }
+                },
+                {
+                  "name": "Pharrell",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "149f91ef-1287-46da-9a8e-87fee02f1471",
+                    "name": "Pharrell Williams"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "samples material",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "87d4aa89-2344-469e-bf7d-7fd96b26628f",
+              "title": "Victory! Daft Punk (Extended)",
+              "length": 190000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "duuzu",
+                  "joinphrase": " ft. ",
+                  "artist": {
+                    "id": "17f4c758-c120-4770-95e9-8c6441f32c5b",
+                    "name": "duuzu"
+                  }
+                },
+                {
+                  "name": "Pharrell",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "149f91ef-1287-46da-9a8e-87fee02f1471",
+                    "name": "Pharrell Williams"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "free streaming",
+            "direction": "forward",
+            "target-type": "url",
+            "attributes": [],
+            "url": {
+              "resource": "https://audiomack.com/daftpunk/song/harder-better-faster-stronger-2"
+            }
+          },
+          {
+            "type": "free streaming",
+            "direction": "forward",
+            "target-type": "url",
+            "attributes": [],
+            "url": {
+              "resource": "https://music.youtube.com/watch?v=JhulBGMA7G4"
+            }
+          },
+          {
+            "type": "free streaming",
+            "direction": "forward",
+            "target-type": "url",
+            "attributes": [],
+            "url": {
+              "resource": "https://open.spotify.com/track/5W3cjX2J3tjhG8zb6u0qHn"
+            }
+          },
+          {
+            "type": "free streaming",
+            "direction": "forward",
+            "target-type": "url",
+            "attributes": [],
+            "url": {
+              "resource": "https://soundcloud.com/daftpunkofficialmusic/harder-better-faster"
+            }
+          },
+          {
+            "type": "free streaming",
+            "direction": "forward",
+            "target-type": "url",
+            "attributes": [],
+            "url": {
+              "resource": "https://www.deezer.com/track/3135556"
+            }
+          },
+          {
+            "type": "free streaming",
+            "direction": "forward",
+            "target-type": "url",
+            "attributes": [
+              "video"
+            ],
+            "url": {
+              "resource": "https://www.youtube.com/watch?v=gAjR4_CbPpQ"
+            }
+          },
+          {
+            "type": "free streaming",
+            "direction": "forward",
+            "target-type": "url",
+            "attributes": [],
+            "url": {
+              "resource": "https://www.youtube.com/watch?v=JhulBGMA7G4"
+            }
+          },
+          {
+            "type": "free streaming",
+            "direction": "forward",
+            "target-type": "url",
+            "attributes": [],
+            "url": {
+              "resource": "https://www.youtube.com/watch?v=yydNF8tuVmU"
+            }
+          },
+          {
+            "type": "purchase for download",
+            "direction": "forward",
+            "target-type": "url",
+            "attributes": [],
+            "url": {
+              "resource": "https://music.apple.com/gb/song/697195787"
+            }
+          },
+          {
+            "type": "purchase for download",
+            "direction": "forward",
+            "target-type": "url",
+            "attributes": [],
+            "url": {
+              "resource": "https://open.qobuz.com/track/1068445"
+            }
+          },
+          {
+            "type": "purchase for download",
+            "direction": "forward",
+            "target-type": "url",
+            "attributes": [],
+            "url": {
+              "resource": "https://www.beatport.com/track/harder-better-faster-stronger/8291703"
+            }
+          },
+          {
+            "type": "streaming",
+            "direction": "forward",
+            "target-type": "url",
+            "attributes": [],
+            "url": {
+              "resource": "https://music.amazon.com/tracks/B0064UPV9K"
+            }
+          },
+          {
+            "type": "streaming",
+            "direction": "forward",
+            "target-type": "url",
+            "attributes": [],
+            "url": {
+              "resource": "https://music.apple.com/gb/song/697195787"
+            }
+          },
+          {
+            "type": "streaming",
+            "direction": "forward",
+            "target-type": "url",
+            "attributes": [],
+            "url": {
+              "resource": "https://music.apple.com/us/song/697195787"
+            }
+          },
+          {
+            "type": "streaming",
+            "direction": "forward",
+            "target-type": "url",
+            "attributes": [],
+            "url": {
+              "resource": "https://open.qobuz.com/track/1068445"
+            }
+          },
+          {
+            "type": "streaming",
+            "direction": "forward",
+            "target-type": "url",
+            "attributes": [],
+            "url": {
+              "resource": "https://tidal.com/track/1550549"
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "forward",
+            "target-type": "work",
+            "attributes": [],
+            "work": {
+              "id": "fb670a7d-4e22-3f65-8d3f-7cf2c29c6601",
+              "title": "Harder, Better, Faster, Stronger",
+              "relations": [
+                {
+                  "type": "secondhandsongs",
+                  "direction": "backward",
+                  "target-type": "url",
+                  "url": {
+                    "resource": "https://secondhandsongs.com/work/6609"
+                  }
+                },
+                {
+                  "type": "wikidata",
+                  "direction": "backward",
+                  "target-type": "url",
+                  "url": {
+                    "resource": "https://www.wikidata.org/wiki/Q1371074"
+                  }
+                },
+                {
+                  "type": "based on",
+                  "direction": "backward",
+                  "target-type": "work"
+                },
+                {
+                  "type": "based on",
+                  "direction": "forward",
+                  "target-type": "work"
+                },
+                {
+                  "type": "based on",
+                  "direction": "forward",
+                  "target-type": "work"
+                },
+                {
+                  "type": "medley",
+                  "direction": "backward",
+                  "target-type": "work"
+                },
+                {
+                  "type": "other version",
+                  "direction": "forward",
+                  "target-type": "work"
+                },
+                {
+                  "type": "other version",
+                  "direction": "forward",
+                  "target-type": "work"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "GET https://musicbrainz.org/ws/2/release?fmt=json&inc=url-rels+release-groups&limit=100&offset=0&recording=8009d470-912b-42fa-8261-b88c488eb935&status=official&type=album%7Csingle%7Cep": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "release-count": 34,
+        "release-offset": 0,
+        "releases": [
+          {
+            "id": "06a81817-093d-40f0-aef2-90673fa550ae",
+            "title": "Graduation",
+            "date": "2007-09-05",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": []
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": [
+              {
+                "type": "amazon asin",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.amazon.co.jp/gp/product/B000RY42PS"
+                }
+              },
+              {
+                "type": "discogs",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.discogs.com/release/3021163"
+                }
+              }
+            ]
+          },
+          {
+            "id": "08e0cab1-e95c-4b33-8ed3-1337d934fb7f",
+            "title": "Graduation",
+            "date": "2019-02-08",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": []
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": [
+              {
+                "type": "amazon asin",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.amazon.com/gp/product/B07NBBH75B"
+                }
+              },
+              {
+                "type": "free streaming",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://open.spotify.com/album/5fPglEDz9YEwRgbLRvhCZy"
+                }
+              },
+              {
+                "type": "free streaming",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.deezer.com/album/86304442"
+                }
+              },
+              {
+                "type": "free streaming",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.youtube.com/playlist?list=OLAK5uy_n4negEHWAKSsnUfvxnK-hbGuYASJ1IBa4"
+                }
+              },
+              {
+                "type": "purchase for download",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://itunes.apple.com/us/album/id1451142304"
+                }
+              },
+              {
+                "type": "streaming",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://music.amazon.com/albums/B07NBBH75B"
+                }
+              },
+              {
+                "type": "streaming",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://music.youtube.com/playlist?list=OLAK5uy_n4negEHWAKSsnUfvxnK-hbGuYASJ1IBa4"
+                }
+              }
+            ]
+          },
+          {
+            "id": "08fe3d4f-2af0-4264-8418-07826623c71e",
+            "title": "Stronger",
+            "date": "2007-08-13",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Single",
+              "secondary-types": []
+            },
+            "cover-art-archive": {
+              "front": false
+            },
+            "relations": [
+              {
+                "type": "amazon asin",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.amazon.co.uk/gp/product/B000TSJW48"
+                }
+              },
+              {
+                "type": "discogs",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.discogs.com/release/1039429"
+                }
+              }
+            ]
+          },
+          {
+            "id": "12c41d35-eb0e-4a9f-8bef-caf943a06ada",
+            "title": "Graduation",
+            "date": "2007-09-10",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": []
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": [
+              {
+                "type": "amazon asin",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.amazon.co.uk/gp/product/B000LSAIMQ"
+                }
+              },
+              {
+                "type": "discogs",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.discogs.com/release/1065352"
+                }
+              }
+            ]
+          },
+          {
+            "id": "14553cd0-bc96-44de-96ce-3746e355f35f",
+            "title": "Bravo: The Hits 2007",
+            "date": "2007",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": [
+                "Compilation"
+              ]
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": []
+          },
+          {
+            "id": "1d15d20a-b56b-4cd1-932e-31c28a2e2427",
+            "title": "Rn’B Chic",
+            "date": "2007-12-03",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": [
+                "Compilation"
+              ]
+            },
+            "cover-art-archive": {
+              "front": false
+            },
+            "relations": []
+          },
+          {
+            "id": "20ae7e88-6548-4a02-8412-9cd813116ea7",
+            "title": "Hits 2007",
+            "date": "2007-11-20",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": [
+                "Compilation"
+              ]
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": [
+              {
+                "type": "amazon asin",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.amazon.com/gp/product/B000X2465U"
+                }
+              }
+            ]
+          },
+          {
+            "id": "258131aa-b7d9-4e9f-8632-f91ce1c5a24d",
+            "title": "Stronger",
+            "date": "2007-08-13",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Single",
+              "secondary-types": []
+            },
+            "cover-art-archive": {
+              "front": false
+            },
+            "relations": [
+              {
+                "type": "amazon asin",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.amazon.co.uk/gp/product/B000TUNBLQ"
+                }
+              }
+            ]
+          },
+          {
+            "id": "259e1c13-04fe-4fae-a3d2-73a58be1b8e5",
+            "title": "Graduation",
+            "date": "2007-09-11",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": []
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": [
+              {
+                "type": "discogs",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.discogs.com/release/15370869"
+                }
+              }
+            ]
+          },
+          {
+            "id": "28613215-350d-4f05-9aac-2ef79653d67a",
+            "title": "Graduation",
+            "date": "2007-09-11",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": []
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": []
+          },
+          {
+            "id": "2aac4fc8-b637-486d-aa5f-e877760ba972",
+            "title": "Best of Black ’07",
+            "date": "2007-11-16",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": [
+                "Compilation"
+              ]
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": [
+              {
+                "type": "amazon asin",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.amazon.de/gp/product/B000X1BIN4"
+                }
+              },
+              {
+                "type": "other databases",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.musik-sammler.de/media/916632/"
+                }
+              }
+            ]
+          },
+          {
+            "id": "2add238b-d24b-485f-a054-75a82dfd7458",
+            "title": "The Dome, Volume 44",
+            "date": "2007-11-16",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": [
+                "Compilation"
+              ]
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": [
+              {
+                "type": "amazon asin",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.amazon.de/gp/product/B000XPEJP4"
+                }
+              }
+            ]
+          },
+          {
+            "id": "4ee572d7-cf58-451c-af40-23a8827cdbfd",
+            "title": "Graduation",
+            "date": "2007-09-11",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": []
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": [
+              {
+                "type": "discogs",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.discogs.com/release/1076860"
+                }
+              },
+              {
+                "type": "discogs",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.discogs.com/release/6475340"
+                }
+              }
+            ]
+          },
+          {
+            "id": "566327bb-5716-4571-894b-e97221df6c9a",
+            "title": "Stronger",
+            "date": "2017-05-05",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Single",
+              "secondary-types": []
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": [
+              {
+                "type": "purchase for download",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.7digital.com/artist/kanye-west/release/stronger-intl-ecd-maxi-116324"
+                }
+              }
+            ]
+          },
+          {
+            "id": "590319a1-6e5e-46f3-9a43-5dfb16f028c8",
+            "title": "Graduation",
+            "date": "2007-09-11",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": []
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": [
+              {
+                "type": "amazon asin",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.amazon.com/gp/product/B000RG1FMO"
+                }
+              },
+              {
+                "type": "discogs",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.discogs.com/release/1066601"
+                }
+              },
+              {
+                "type": "other databases",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://rateyourmusic.com/release/album/kanye_west/graduation.p/"
+                }
+              }
+            ]
+          },
+          {
+            "id": "590c5fc1-5dc3-470e-a714-5c5096a506e5",
+            "title": "Graduation",
+            "date": "2019-02-08",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": []
+            },
+            "cover-art-archive": {
+              "front": false
+            },
+            "relations": [
+              {
+                "type": "free streaming",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.deezer.com/album/86304442"
+                }
+              }
+            ]
+          },
+          {
+            "id": "61eee7a2-43cc-41b5-b7bc-cef045fa074a",
+            "title": "Graduation",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": []
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": [
+              {
+                "type": "discogs",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.discogs.com/release/30328484"
+                }
+              }
+            ]
+          },
+          {
+            "id": "64c600c3-6db4-4dfa-b5be-32badcc4e56a",
+            "title": "Graduation",
+            "date": "2007-09-11",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": []
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": []
+          },
+          {
+            "id": "67b397bf-7fcc-4300-8e74-a84b7966c577",
+            "title": "R&B: The Collection 2007",
+            "date": "2007-11-26",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": [
+                "Compilation"
+              ]
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": [
+              {
+                "type": "amazon asin",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.amazon.co.uk/gp/product/B000WS4PD8"
+                }
+              }
+            ]
+          },
+          {
+            "id": "8e55271c-bc69-4b04-a3e1-17f23aeeb472",
+            "title": "Graduation",
+            "date": "2007",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": []
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": [
+              {
+                "type": "discogs",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.discogs.com/release/7583505"
+                }
+              }
+            ]
+          },
+          {
+            "id": "9bc7c4aa-383c-44ee-a2de-e914816008b4",
+            "title": "Bad Table Manners",
+            "date": "2008-06-13",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": [
+                "DJ-mix"
+              ]
+            },
+            "cover-art-archive": {
+              "front": false
+            },
+            "relations": []
+          },
+          {
+            "id": "9c57c15f-cf52-4c52-92da-736becaa5a96",
+            "title": "Stronger",
+            "date": "2007-08-20",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Single",
+              "secondary-types": []
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": []
+          },
+          {
+            "id": "a38f76c3-1087-3791-a8b2-ae00b93db0cd",
+            "title": "Graduation",
+            "date": "2008-11-19",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": []
+            },
+            "cover-art-archive": {
+              "front": false
+            },
+            "relations": [
+              {
+                "type": "amazon asin",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.amazon.co.jp/gp/product/B001GM7FM2"
+                }
+              }
+            ]
+          },
+          {
+            "id": "a3ff2ecd-fb5e-42f3-b2cb-48b8bdc07d92",
+            "title": "Bravo: The Hits 2007",
+            "date": "2007-11-23",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": [
+                "Compilation"
+              ]
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": [
+              {
+                "type": "amazon asin",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.amazon.de/gp/product/B000X1BINE"
+                }
+              }
+            ]
+          },
+          {
+            "id": "a8ab7437-b18a-31c3-968e-e03d41c855c2",
+            "title": "Graduation",
+            "date": "2008-03-26",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": []
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": [
+              {
+                "type": "amazon asin",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.amazon.co.jp/gp/product/B0013E14X4"
+                }
+              },
+              {
+                "type": "discogs",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.discogs.com/release/9967720"
+                }
+              }
+            ]
+          },
+          {
+            "id": "abf72578-cef8-4222-9eb1-9c8bddc2faa9",
+            "title": "Love Lockdown",
+            "date": "2008-11-21",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "EP",
+              "secondary-types": [
+                "Compilation"
+              ]
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": [
+              {
+                "type": "free streaming",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://open.spotify.com/album/0hPcqGawJMPUeypvRAsIvJ"
+                }
+              },
+              {
+                "type": "free streaming",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.deezer.com/album/255930"
+                }
+              },
+              {
+                "type": "purchase for download",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://music.apple.com/de/album/1445288396"
+                }
+              },
+              {
+                "type": "streaming",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://music.apple.com/de/album/1445288396"
+                }
+              },
+              {
+                "type": "streaming",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://tidal.com/album/13041183"
+                }
+              }
+            ]
+          },
+          {
+            "id": "b4637a25-c99c-32ad-bf0c-1aa045a2697c",
+            "title": "Graduation",
+            "date": "2007-09-05",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": []
+            },
+            "cover-art-archive": {
+              "front": false
+            },
+            "relations": [
+              {
+                "type": "amazon asin",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.amazon.co.jp/gp/product/B000RW7CHU"
+                }
+              }
+            ]
+          },
+          {
+            "id": "c443971e-532a-46d9-8a38-39b65d7ad07e",
+            "title": "Stronger",
+            "date": "",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Single",
+              "secondary-types": []
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": []
+          },
+          {
+            "id": "ccd5625e-f49d-4b8a-a2f2-fecf7009f011",
+            "title": "Graduation",
+            "date": "2019-02-15",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": []
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": [
+              {
+                "type": "free streaming",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://open.spotify.com/album/4SZko61aMnmgvNhfhgTuD3"
+                }
+              },
+              {
+                "type": "free streaming",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.deezer.com/album/86994002"
+                }
+              },
+              {
+                "type": "purchase for download",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://music.apple.com/us/album/1451901307"
+                }
+              },
+              {
+                "type": "purchase for download",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.qobuz.com/us-en/album/graduation-kanye-west/xke579b9u7mmc"
+                }
+              },
+              {
+                "type": "streaming",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://music.apple.com/us/album/1451901307"
+                }
+              },
+              {
+                "type": "streaming",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://open.qobuz.com/album/xke579b9u7mmc"
+                }
+              },
+              {
+                "type": "streaming",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://tidal.com/album/103805723"
+                }
+              }
+            ]
+          },
+          {
+            "id": "d4eece79-611c-4c08-87b0-40bd3225c08a",
+            "title": "Radio 538: Hitzone 43",
+            "date": "2007-10-05",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": [
+                "Compilation"
+              ]
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": [
+              {
+                "type": "discogs",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.discogs.com/release/1120279"
+                }
+              }
+            ]
+          },
+          {
+            "id": "d6b253ab-bf38-4d65-97c8-82fed6cc4770",
+            "title": "Graduation",
+            "date": "2010",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": []
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": [
+              {
+                "type": "free streaming",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://open.spotify.com/album/0TkH5xirnI8LCHYusFZT5X"
+                }
+              },
+              {
+                "type": "free streaming",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.deezer.com/album/256434702"
+                }
+              },
+              {
+                "type": "streaming",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://music.apple.com/us/album/1584389548"
+                }
+              }
+            ]
+          },
+          {
+            "id": "d708ece8-7e8b-3e5c-9a0c-dbaf3abdc88d",
+            "title": "Graduation",
+            "date": "2009-03-04",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": []
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": [
+              {
+                "type": "amazon asin",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.amazon.co.jp/gp/product/B001P9KUMI"
+                }
+              }
+            ]
+          },
+          {
+            "id": "eaa38316-0a9b-48f5-a55b-b58a139dd922",
+            "title": "Graduation",
+            "date": "2012-09-22",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": []
+            },
+            "cover-art-archive": {
+              "front": true
+            },
+            "relations": [
+              {
+                "type": "purchase for mail-order",
+                "direction": "forward",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://www.cdjapan.co.jp/product/UICY-20385"
+                }
+              }
+            ]
+          },
+          {
+            "id": "f754b512-8fc5-4437-aeb5-592e7a69e380",
+            "title": "Graduation",
+            "date": "2007",
+            "status": "Official",
+            "release-group": {
+              "primary-type": "Album",
+              "secondary-types": []
+            },
+            "cover-art-archive": {
+              "front": false
+            },
+            "relations": []
+          }
+        ]
+      }
+    },
+    "GET https://musicbrainz.org/ws/2/work/972c1bcc-b1dd-38e2-b881-37825c07d9ef?fmt=json&inc=recording-rels+artist-credits": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "json": {
+        "id": "972c1bcc-b1dd-38e2-b881-37825c07d9ef",
+        "title": "Stronger",
+        "relations": [
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [
+              "live",
+              "medley"
+            ],
+            "recording": {
+              "id": "241731e0-16c9-4754-8e57-77b27e652ddd",
+              "title": "Medley (Gold Digger, Touch the Sky, Stranger, Diamonds From Sierra Leone, Jesus Walks)",
+              "length": 395175,
+              "disambiguation": "live, 2007‐07‐01: Concert for Diana, Wembley Stadium, London, England, UK",
+              "artist-credit": [
+                {
+                  "name": "Kanye West",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "164f0d73-1234-4e2c-8743-d77bf2191051",
+                    "name": "Ye"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [
+              "live"
+            ],
+            "recording": {
+              "id": "b8a88d69-4bcb-418e-af95-cd658dab989e",
+              "title": "Stronger",
+              "length": null,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Ye",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "164f0d73-1234-4e2c-8743-d77bf2191051",
+                    "name": "Ye"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [
+              "cover",
+              "medley"
+            ],
+            "recording": {
+              "id": "d3db1ad3-8f68-4835-81a0-e9d38795756e",
+              "title": "Kanye Medley",
+              "length": 378000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "New York University Mass Transit",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "0c939356-8d62-4551-b25d-e9d37c6268b9",
+                    "name": "New York University Mass Transit"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "ad409b52-e2ff-4f31-9fd8-f11a5a5da9ad",
+              "title": "Stranger",
+              "length": 177000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Kanye West",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "164f0d73-1234-4e2c-8743-d77bf2191051",
+                    "name": "Ye"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "6bf1a7c5-5e42-4dc2-8841-3bee9822334b",
+              "title": "Stronger",
+              "length": 272000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Kanye West",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "164f0d73-1234-4e2c-8743-d77bf2191051",
+                    "name": "Ye"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [
+              "cover",
+              "live"
+            ],
+            "recording": {
+              "id": "4ddf01a3-658d-4208-b48b-51d4fe1136ac",
+              "title": "Stronger",
+              "length": 361680,
+              "disambiguation": "live, Radio 1’s Live Lounge",
+              "artist-credit": [
+                {
+                  "name": "30 Seconds to Mars",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "d8354b38-e942-4c89-ba93-29323432abc3",
+                    "name": "Thirty Seconds to Mars"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "96266690-11b1-48bc-a90c-09d5a0f60611",
+              "title": "Stronger",
+              "length": 247533,
+              "disambiguation": "radio edit",
+              "artist-credit": [
+                {
+                  "name": "Kanye West",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "164f0d73-1234-4e2c-8743-d77bf2191051",
+                    "name": "Ye"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "7829c368-6c2a-4829-a31e-30492e910e47",
+              "title": "Stronger",
+              "length": 226000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Kanye West",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "164f0d73-1234-4e2c-8743-d77bf2191051",
+                    "name": "Ye"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [
+              "cover"
+            ],
+            "recording": {
+              "id": "87e1ceac-aabc-41fd-8f4f-727fad631d34",
+              "title": "Stronger",
+              "length": 149000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Richard Cheese & Lounge Against The Machine",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "858db18f-1e09-4f0d-96d3-c15d28762c15",
+                    "name": "Richard Cheese"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [
+              "cover"
+            ],
+            "recording": {
+              "id": "0925f662-4099-4ecf-8265-02e7ad3be968",
+              "title": "Stronger",
+              "length": 224000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Rockabye Baby!",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "5a045b09-af06-4348-9ce6-d51b6a370770",
+                    "name": "Rockabye Baby!"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [
+              "cover",
+              "instrumental"
+            ],
+            "recording": {
+              "id": "1443788c-4dc7-4a94-9402-358faa8ab27d",
+              "title": "Stronger",
+              "length": 158733,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Vitamin String Quartet",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "56cfe6aa-b464-43d2-bec7-8ec52f313e7d",
+                    "name": "Vitamin String Quartet"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "672ec650-5314-4ad0-b006-4861aeb53c88",
+              "title": "Stronger",
+              "length": 311000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Kanye West",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "164f0d73-1234-4e2c-8743-d77bf2191051",
+                    "name": "Ye"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "040cc48d-ad1a-469f-b1f4-1fcec9525d15",
+              "title": "Stronger",
+              "length": 312413,
+              "disambiguation": "clean",
+              "artist-credit": [
+                {
+                  "name": "Kanye West",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "164f0d73-1234-4e2c-8743-d77bf2191051",
+                    "name": "Ye"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [
+              "live"
+            ],
+            "recording": {
+              "id": "42fd484d-a783-42a9-9397-fcfd2ca50927",
+              "title": "Stronger",
+              "length": null,
+              "disambiguation": "live, VH1 Storytellers",
+              "artist-credit": [
+                {
+                  "name": "Kanye West",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "164f0d73-1234-4e2c-8743-d77bf2191051",
+                    "name": "Ye"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [
+              "cover",
+              "instrumental"
+            ],
+            "recording": {
+              "id": "f9d7c60e-116b-4411-b23e-a75b96df633e",
+              "title": "Stronger",
+              "length": 221213,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Vitamin String Quartet",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "56cfe6aa-b464-43d2-bec7-8ec52f313e7d",
+                    "name": "Vitamin String Quartet"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [
+              "cover"
+            ],
+            "recording": {
+              "id": "9d3b8784-0b9c-4b8e-ae06-7dc0faa6486d",
+              "title": "Stronger",
+              "length": 171000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Tigeroar",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "b38cd3f1-38fe-4ec4-9c54-d52aaa4b08e4",
+                    "name": "Tigeroar"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "7c79e931-eb2d-40ad-89ad-1de160d67fdd",
+              "title": "Stronger",
+              "length": 266000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Kanye West",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "164f0d73-1234-4e2c-8743-d77bf2191051",
+                    "name": "Ye"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [
+              "cover"
+            ],
+            "recording": {
+              "id": "ba56c8d7-331a-4aaf-952e-fcd0ff3be1a1",
+              "title": "Stronger",
+              "length": null,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Mixmaster Throwback",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "048acbe9-da00-460b-a9bc-bc2db6212ab4",
+                    "name": "Mixmaster Throwback"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [
+              "cover",
+              "instrumental"
+            ],
+            "recording": {
+              "id": "dd3f79fc-ef7a-4762-af13-4a88c2dd78e9",
+              "title": "Stronger",
+              "length": 221000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "The Smooth Jazz All Stars",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "0fee7b3a-13c5-46a4-9de8-5715439dcf6a",
+                    "name": "The Smooth Jazz All Stars"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [
+              "cover",
+              "instrumental"
+            ],
+            "recording": {
+              "id": "da4fcf8e-405a-48a4-a761-b8fe69abb8b1",
+              "title": "Stronger",
+              "length": 202000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "The Piano Tribute Players",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "a645c08f-613f-4ec0-bc8e-dd497fa29e7f",
+                    "name": "The Piano Tribute Players"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [
+              "cover"
+            ],
+            "recording": {
+              "id": "a23f3ea6-16ff-4930-84f1-ecc6a9d82476",
+              "title": "Stronger",
+              "length": 313000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Dartmouth College Aires",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "cfa8ba91-389f-4eda-a0b2-2432c000d86a",
+                    "name": "Dartmouth College Aires"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "8009d470-912b-42fa-8261-b88c488eb935",
+              "title": "Stronger",
+              "length": 312000,
+              "disambiguation": "explicit",
+              "artist-credit": [
+                {
+                  "name": "Kanye West",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "164f0d73-1234-4e2c-8743-d77bf2191051",
+                    "name": "Ye"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [
+              "cover"
+            ],
+            "recording": {
+              "id": "83a58bef-20c4-4c05-997e-39827bedcd32",
+              "title": "Stronger",
+              "length": 226000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "The Unplugged Band",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "74910d24-b454-4ac8-985b-629fb26be6ec",
+                    "name": "The Unplugged Band"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [
+              "cover",
+              "instrumental"
+            ],
+            "recording": {
+              "id": "2087ff50-0089-4003-804e-70a20015cd13",
+              "title": "Stronger",
+              "length": 252741,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "8-Bit Misfits",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "e0438aeb-9793-404c-8618-eb751faf1c24",
+                    "name": "8-Bit Misfits"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [
+              "live"
+            ],
+            "recording": {
+              "id": "69a512d6-3eba-4238-b4db-a2b3b8e82e34",
+              "title": "Stronger",
+              "length": null,
+              "disambiguation": "live in mexico",
+              "artist-credit": [
+                {
+                  "name": "Kanye West",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "164f0d73-1234-4e2c-8743-d77bf2191051",
+                    "name": "Ye"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "da51b53c-4a4b-48af-8e5a-315d5aadd140",
+              "title": "Stronger (A-Trak remix)",
+              "length": null,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Kanye West",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "164f0d73-1234-4e2c-8743-d77bf2191051",
+                    "name": "Ye"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "1fb827d6-d5e6-4a6d-a030-245955c07196",
+              "title": "Stronger (A-Trak remix)",
+              "length": 276000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Kanye West",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "164f0d73-1234-4e2c-8743-d77bf2191051",
+                    "name": "Ye"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "6bf6b0be-b463-492f-8874-5488815344e0",
+              "title": "Stronger (A-Trak Remix)",
+              "length": 45949,
+              "disambiguation": "part of “Gone Til November (Tour CD)” DJ-mix",
+              "artist-credit": [
+                {
+                  "name": "Kanye West",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "164f0d73-1234-4e2c-8743-d77bf2191051",
+                    "name": "Ye"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "3e20d54e-56a5-4a0e-85fe-a50a2194bdf7",
+              "title": "Stronger (A‐Trak remix)",
+              "length": 159000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Kanye West",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "164f0d73-1234-4e2c-8743-d77bf2191051",
+                    "name": "Ye"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "1ced8bfe-8e57-4725-b143-5458600b3dd4",
+              "title": "Stronger (Aaron Dee Remix)",
+              "length": null,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Aaron Dee Music",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "26a2d344-bb13-4633-a3c4-1a8f31e257e8",
+                    "name": "Aaron Dee Music"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "b51d3293-dbce-4973-8822-48f712d0c03b",
+              "title": "Stronger (Andrew Dawson remix)",
+              "length": 241080,
+              "disambiguation": "part of “Total Dance 2008, Volume 2” DJ‐mix",
+              "artist-credit": [
+                {
+                  "name": "Kanye West",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "164f0d73-1234-4e2c-8743-d77bf2191051",
+                    "name": "Ye"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "28f22158-f2ba-4b95-9c98-e3b648522b45",
+              "title": "Stronger (Andrew Dawson remix)",
+              "length": 287000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Kanye West",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "164f0d73-1234-4e2c-8743-d77bf2191051",
+                    "name": "Ye"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "619ef581-8b5c-4212-b451-c59e72b443fc",
+              "title": "Stronger (Andrew Dawson remix)",
+              "length": 285987,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Kanye West",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "164f0d73-1234-4e2c-8743-d77bf2191051",
+                    "name": "Ye"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "e024c7c2-7996-4410-aa3e-fff1df182934",
+              "title": "Stronger (Diplo’s Work Is Never Done remix)",
+              "length": null,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Kanye West",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "164f0d73-1234-4e2c-8743-d77bf2191051",
+                    "name": "Ye"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "4e6ba019-c50c-4f31-b2db-1af53fc39fd7",
+              "title": "Stronger (DJ A-Track remix)",
+              "length": 274311,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Kanye West",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "164f0d73-1234-4e2c-8743-d77bf2191051",
+                    "name": "Ye"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "39fe810f-36ae-4c5e-973c-5e4c0a78f175",
+              "title": "Stronger (DJ A‐Trak remix)",
+              "length": 181000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Kanye West",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "164f0d73-1234-4e2c-8743-d77bf2191051",
+                    "name": "Ye"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [
+              "instrumental"
+            ],
+            "recording": {
+              "id": "f3cfb312-d925-4c0e-ac75-6cb760edf1a0",
+              "title": "Stronger (instrumental)",
+              "length": 312906,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Kanye West",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "164f0d73-1234-4e2c-8743-d77bf2191051",
+                    "name": "Ye"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [
+              "live"
+            ],
+            "recording": {
+              "id": "068ccef7-62bf-432e-8da8-887f5973315c",
+              "title": "Stronger (live)",
+              "length": 276480,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Kanye West",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "164f0d73-1234-4e2c-8743-d77bf2191051",
+                    "name": "Ye"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [
+              "live"
+            ],
+            "recording": {
+              "id": "4df08a34-18e3-4cb3-9a35-8bb2a2d23c4d",
+              "title": "Stronger (live)",
+              "length": null,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Kanye West",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "164f0d73-1234-4e2c-8743-d77bf2191051",
+                    "name": "Ye"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "7cbe5b67-3649-4f5d-8130-433ec08b9956",
+              "title": "Stronger (Mano Remix)",
+              "length": 46289,
+              "disambiguation": "part of “Gone Til November (Tour CD)” DJ-mix",
+              "artist-credit": [
+                {
+                  "name": "Kanye West",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "164f0d73-1234-4e2c-8743-d77bf2191051",
+                    "name": "Ye"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "759af78d-d923-4573-b23f-09a4bcfe1f8d",
+              "title": "Stronger (Mano X remix)",
+              "length": null,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Kanye West",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "164f0d73-1234-4e2c-8743-d77bf2191051",
+                    "name": "Ye"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [
+              "cover",
+              "instrumental"
+            ],
+            "recording": {
+              "id": "26c1dea6-f44d-48c6-add1-12c752188278",
+              "title": "Stronger (Medieval Bardcore version)",
+              "length": 320020,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Beedle The Bardcore",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "0ca7c8d6-6a46-429c-af19-0582b6b23f6a",
+                    "name": "Beedle The Bardcore"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "d94d6542-4fea-45d8-9cfe-482273ec9930",
+              "title": "Stronger (Mike Wacks remix)",
+              "length": null,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Kanye West",
+                  "joinphrase": " feat. ",
+                  "artist": {
+                    "id": "164f0d73-1234-4e2c-8743-d77bf2191051",
+                    "name": "Ye"
+                  }
+                },
+                {
+                  "name": "JAY Z",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "f82bcf78-5b69-4622-a5ef-73800768d9ac",
+                    "name": "JAŸ-Z"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "ab0be132-d651-4523-80da-ced611cbc51c",
+              "title": "Stronger (original Unreleased version)",
+              "length": 90000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Kanye West",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "164f0d73-1234-4e2c-8743-d77bf2191051",
+                    "name": "Ye"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "2414636c-aba1-4a79-9683-c0217e735aae",
+              "title": "Stronger (Promo Only clean edit)",
+              "length": 248000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Kanye West",
+                  "joinphrase": " feat. ",
+                  "artist": {
+                    "id": "164f0d73-1234-4e2c-8743-d77bf2191051",
+                    "name": "Ye"
+                  }
+                },
+                {
+                  "name": "Daft Punk",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "056e4f3e-d505-4dad-8ec1-d04f521cbb56",
+                    "name": "Daft Punk"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "1f328969-904b-4b55-9e61-e037ff52f93a",
+              "title": "Stronger (Scot Project remix)",
+              "length": null,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Daft Punk",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "056e4f3e-d505-4dad-8ec1-d04f521cbb56",
+                    "name": "Daft Punk"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "64903b23-a4dd-4d26-ac93-fc83ab92e6e6",
+              "title": "Stronger (snippet)",
+              "length": 83226,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Kanye West",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "164f0d73-1234-4e2c-8743-d77bf2191051",
+                    "name": "Ye"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [],
+            "recording": {
+              "id": "21313ed5-7793-41ab-b17d-bcdcb16ff63e",
+              "title": "Stronger (The Bangerz remix)",
+              "length": 125000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Kanye West",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "164f0d73-1234-4e2c-8743-d77bf2191051",
+                    "name": "Ye"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "performance",
+            "direction": "backward",
+            "target-type": "recording",
+            "attributes": [
+              "cover",
+              "live",
+              "medley"
+            ],
+            "recording": {
+              "id": "e603a93f-0be1-491d-8296-1763953a1c81",
+              "title": "Stronger/Power (The Voice Performance)",
+              "length": 197000,
+              "disambiguation": "",
+              "artist-credit": [
+                {
+                  "name": "Moses Stone",
+                  "joinphrase": "",
+                  "artist": {
+                    "id": "7ecf3416-a662-45e7-9332-963e0d256432",
+                    "name": "Moses Stone"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  }
+}

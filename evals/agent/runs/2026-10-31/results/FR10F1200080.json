@@ -1,0 +1,1257 @@
+{
+  "id": "5MIgTjcn94EPeSUUo8dx4q",
+  "title": "More Spell On You",
+  "artist": "Eddie Johns",
+  "album": "More Spell On You",
+  "coverUrl": "[link]",
+  "spotifyUrl": "https://open.spotify.com/track/5MIgTjcn94EPeSUUo8dx4q",
+  "releaseYear": "2012",
+  "explicit": false,
+  "durationSeconds": 311,
+  "isrc": "FR10F1200080",
+  "preview": {
+    "provider": "deezer",
+    "method": "isrc",
+    "score": null
+  },
+  "queryMatch": "exact",
+  "evidence": [
+    {
+      "id": "tavily:https://www.whosampled.com/Eddie-Johns",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.whosampled.com/Eddie-Johns",
+      "title": "Eddie Johns - Samples, Covers and Remixes",
+      "retrievedAt": "[time]",
+      "excerpt": "More Spell on You (1979) was sampled in One More Time by Daft Punk (2000) Daft Funk by Social Disco Club (2010) One Mo' Gin by Play-N-Skillz feat. Lil Jon,",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.whosampled.com/sample/1363/Daft-Punk-One-More-Time-Eddie-Johns-More-Spell-on-You",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.whosampled.com/sample/1363/Daft-Punk-One-More-Time-Eddie-Johns-More-Spell-on-You",
+      "title": "Daft Punk's 'One More Time' sample of Eddie Johns's ' ...",
+      "retrievedAt": "[time]",
+      "excerpt": "\"One More Time\" by Daft Punk sampled Eddie Johns's \"More Spell on You\". Listen to both songs on WhoSampled.",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.whosampled.com/Eddie-Johns/More-Spell-on-You",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.whosampled.com/Eddie-Johns/More-Spell-on-You",
+      "title": "More Spell on You by Eddie Johns",
+      "retrievedAt": "[time]",
+      "excerpt": "Sampled in 7 songs Daft Punk's One More Time One More Time ・ feat. Lil Jon, Krayzie Bone and Bun B's One One Mo' Gin ・ yzie Bone and Bun B ・ was produced by",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.youtube.com/watch?v=DtLlVYcqHzs",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.youtube.com/watch?v=DtLlVYcqHzs",
+      "title": "Daft Punk - One more time (Sampled from Eddie Johns",
+      "retrievedAt": "[time]",
+      "excerpt": "Daft Punk - One more time (Sampled from Eddie Johns - More Spell On You) One More Spell On You (Victor Martelli & F.Brothers Edit) - Eddie John",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://routenote.com/radar/what-does-daft-punks-one-more-time-sample-and-who-sings-it",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://routenote.com/radar/what-does-daft-punks-one-more-time-sample-and-who-sings-it",
+      "title": "What Does Daft Punk’s “One More Time” Sample - and Who Sings It? - RouteNote - Radar",
+      "retrievedAt": "[time]",
+      "excerpt": "# RouteNote - Radar # RouteNote - Radar What Does Daft Punk’s “One More Time” Sample – and Who Sings It? News ## What Does Daft Punk’s “One More Time” Sample – and Who Sings It? By Radar Team6 mins read Daft Punk’s “One More Time” samples “More Spell on You” by Eddie Johns. The lead singer on “One More Time” is Romanthony. They are two different contributors to the sound of the record: Johns is the artist behind the sampled track, while Romanthony wrote and performed the vocal. [...] That disti…",
+      "recordRef": null
+    }
+  ],
+  "segments": [
+    {
+      "label": "Intro",
+      "start": 0,
+      "end": 8
+    },
+    {
+      "label": "Verse 1",
+      "start": 8,
+      "end": 25
+    },
+    {
+      "label": "Chorus",
+      "start": 25,
+      "end": 42
+    },
+    {
+      "label": "Verse 2",
+      "start": 42,
+      "end": 58
+    },
+    {
+      "label": "Bridge",
+      "start": 58,
+      "end": 75
+    },
+    {
+      "label": "Chorus",
+      "start": 75,
+      "end": 92
+    },
+    {
+      "label": "Outro",
+      "start": 92,
+      "end": 100
+    }
+  ],
+  "segmentsSource": "template",
+  "samples": [],
+  "factoids": [
+    {
+      "id": "<id 6>",
+      "title": "A source for Daft Punk",
+      "content": "Daft Punk sampled Eddie Johns’s “More Spell on You” for “One More Time.”",
+      "type": "sample",
+      "entities": [
+        {
+          "id": "<id 7>",
+          "text": "Daft Punk",
+          "type": "artist",
+          "searchQuery": "Daft Punk"
+        },
+        {
+          "id": "<id 8>",
+          "text": "One More Time",
+          "type": "album",
+          "searchQuery": "One More Time"
+        }
+      ],
+      "claimId": "<id 4>"
+    }
+  ],
+  "genealogy": {
+    "nodes": [
+      {
+        "id": "current",
+        "group": 1,
+        "label": "More Spell On You",
+        "size": 40,
+        "trackTitle": "More Spell On You",
+        "trackArtist": "Eddie Johns"
+      },
+      {
+        "id": "one-more-time",
+        "group": 4,
+        "label": "One More Time - Daft Punk (2000)",
+        "size": 22,
+        "trackTitle": "One More Time",
+        "trackArtist": "Daft Punk"
+      }
+    ],
+    "links": [
+      {
+        "source": "current",
+        "target": "one-more-time",
+        "value": 1,
+        "type": "sample",
+        "kind": "inferred",
+        "origin": "model",
+        "claimId": "<id 5>",
+        "evidenceIds": [
+          "tavily:https://www.whosampled.com/sample/1363/Daft-Punk-One-More-Time-Eddie-Johns-More-Spell-on-You"
+        ]
+      }
+    ]
+  },
+  "claims": [
+    {
+      "id": "<id 2>",
+      "text": "Eddie Johns’s “More Spell on You” was sampled in Daft Punk’s “One More Time.”",
+      "about": "sample",
+      "evidenceIds": [
+        "tavily:https://www.whosampled.com/sample/1363/Daft-Punk-One-More-Time-Eddie-Johns-More-Spell-on-You"
+      ],
+      "scope": "recording",
+      "kind": "sourced",
+      "origin": "model",
+      "verdict": "supported",
+      "verdictReason": "The WhoSampled sample excerpt says Daft Punk sampled Eddie Johns’s “More Spell on You.”",
+      "numericCheck": "n/a",
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 3>",
+      "text": "The source listing dates “More Spell on You” to 1979 and “One More Time” to 2000.",
+      "about": "history",
+      "evidenceIds": [
+        "tavily:https://www.whosampled.com/Eddie-Johns"
+      ],
+      "scope": "work",
+      "kind": "sourced",
+      "origin": "model",
+      "verdict": "supported",
+      "verdictReason": "The Eddie Johns listing dates “More Spell on You” to 1979 and “One More Time” to 2000.",
+      "numericCheck": "n/a",
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 4>",
+      "text": "Daft Punk sampled Eddie Johns’s “More Spell on You” for “One More Time.”",
+      "about": "sample",
+      "evidenceIds": [
+        "tavily:https://www.whosampled.com/sample/1363/Daft-Punk-One-More-Time-Eddie-Johns-More-Spell-on-You"
+      ],
+      "scope": "recording",
+      "kind": "sourced",
+      "origin": "model",
+      "verdict": "supported",
+      "verdictReason": "The WhoSampled sample excerpt says Daft Punk sampled Eddie Johns’s “More Spell on You.”",
+      "numericCheck": "n/a",
+      "factoid": {
+        "title": "A source for Daft Punk",
+        "type": "sample",
+        "entities": [
+          {
+            "text": "Daft Punk",
+            "type": "artist"
+          },
+          {
+            "text": "One More Time",
+            "type": "album"
+          }
+        ]
+      },
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 5>",
+      "text": "\"One More Time - Daft Punk (2000)\" samples \"More Spell On You - Eddie Johns\".",
+      "about": "sample",
+      "evidenceIds": [
+        "tavily:https://www.whosampled.com/sample/1363/Daft-Punk-One-More-Time-Eddie-Johns-More-Spell-on-You"
+      ],
+      "scope": "recording",
+      "kind": "inferred",
+      "origin": "model",
+      "verdict": "partial",
+      "verdictReason": "The WhoSampled sample excerpt confirms the sampling but does not date “One More Time” to 2000.",
+      "numericCheck": "n/a"
+    }
+  ],
+  "run": {
+    "id": "<id 1>",
+    "analyzerVersion": "2.3.6+essentia.models-5c5c0c7f",
+    "fallback": false,
+    "usage": {
+      "llmCalls": 4,
+      "inputTokens": 7218,
+      "outputTokens": 984,
+      "reasoningTokens": 262
+    },
+    "verifier": {
+      "judged": 4,
+      "unjudged": 0,
+      "restated": 0
+    },
+    "sourceErrors": [
+      {
+        "source": "musicbrainz",
+        "code": "unavailable",
+        "message": "musicbrainz: fetch failed"
+      },
+      {
+        "source": "discogs",
+        "code": "not_configured",
+        "message": "DISCOGS_TOKEN is not set"
+      },
+      {
+        "source": "genius",
+        "code": "unavailable",
+        "message": "musicbrainz: fetch failed"
+      },
+      {
+        "source": "secondhandsongs",
+        "code": "unavailable",
+        "message": "musicbrainz: fetch failed"
+      }
+    ]
+  },
+  "audio": {
+    "version": 2,
+    "analyzerVersion": "2.3.6+essentia.models-5c5c0c7f",
+    "window": {
+      "kind": "preview-30s",
+      "durationSeconds": 29.986
+    },
+    "gate": {
+      "passed": true,
+      "reason": null
+    },
+    "tempo": {
+      "bpm": 131.87,
+      "confidence": 0.601,
+      "rawConfidence": {
+        "value": 3.198,
+        "range": [
+          0,
+          5.32
+        ]
+      },
+      "method": "essentia.RhythmExtractor2013+beat-regression",
+      "basis": "signal"
+    },
+    "key": null,
+    "loudness": {
+      "rmsMean": 0.162302,
+      "method": "mean frame RMS, 2048-sample frames at 22050 Hz, DC removed",
+      "basis": "signal"
+    },
+    "beats": {
+      "times": [
+        0.499,
+        1.033,
+        1.498,
+        1.962,
+        2.426,
+        2.879,
+        3.32,
+        3.773,
+        4.238,
+        4.69,
+        5.143,
+        5.596,
+        6.049,
+        6.513,
+        6.954,
+        7.407,
+        7.872,
+        8.336,
+        8.8,
+        9.253,
+        9.706,
+        10.147,
+        10.6,
+        11.053,
+        11.505,
+        11.958,
+        12.423,
+        12.875,
+        13.328,
+        13.769,
+        14.234,
+        14.687,
+        15.151,
+        15.604,
+        16.057,
+        16.509,
+        16.962,
+        17.415,
+        17.868,
+        18.332,
+        18.785,
+        19.238,
+        19.691,
+        20.143,
+        20.596,
+        21.049,
+        21.502,
+        21.954,
+        22.419,
+        22.883,
+        23.348,
+        23.812,
+        24.265,
+        24.706,
+        25.17,
+        25.623,
+        26.064,
+        26.517,
+        26.97,
+        27.434,
+        27.887,
+        28.34,
+        28.793,
+        29.246,
+        29.698
+      ],
+      "method": "essentia.RhythmExtractor2013",
+      "basis": "signal"
+    },
+    "energyContour": {
+      "hopSeconds": 0.09288,
+      "values": [
+        0.081706,
+        0.228187,
+        0.141738,
+        0.150341,
+        0.112745,
+        0.123661,
+        0.207637,
+        0.089867,
+        0.058001,
+        0.060776,
+        0.054928,
+        0.215229,
+        0.11081,
+        0.06106,
+        0.210527,
+        0.101581,
+        0.258251,
+        0.252995,
+        0.17047,
+        0.193016,
+        0.084394,
+        0.239977,
+        0.214338,
+        0.162306,
+        0.178088,
+        0.118725,
+        0.198845,
+        0.047952,
+        0.086345,
+        0.234445,
+        0.184889,
+        0.238692,
+        0.051002,
+        0.116281,
+        0.187616,
+        0.199253,
+        0.230958,
+        0.103533,
+        0.092474,
+        0.105283,
+        0.206653,
+        0.128375,
+        0.034475,
+        0.067422,
+        0.058295,
+        0.164434,
+        0.116271,
+        0.034102,
+        0.061086,
+        0.060486,
+        0.209864,
+        0.10574,
+        0.052347,
+        0.098523,
+        0.079015,
+        0.223881,
+        0.189197,
+        0.147026,
+        0.154568,
+        0.116151,
+        0.22858,
+        0.185279,
+        0.150008,
+        0.164909,
+        0.141016,
+        0.197089,
+        0.051729,
+        0.0905,
+        0.210411,
+        0.155257,
+        0.274951,
+        0.109032,
+        0.128892,
+        0.19276,
+        0.180135,
+        0.209346,
+        0.038545,
+        0.251836,
+        0.219591,
+        0.197261,
+        0.126784,
+        0.122121,
+        0.248654,
+        0.194911,
+        0.142758,
+        0.129491,
+        0.109713,
+        0.243629,
+        0.166347,
+        0.114556,
+        0.046334,
+        0.023924,
+        0.23419,
+        0.235217,
+        0.21495,
+        0.236957,
+        0.241308,
+        0.206618,
+        0.110362,
+        0.240099,
+        0.222683,
+        0.195564,
+        0.134281,
+        0.082672,
+        0.248577,
+        0.234849,
+        0.229115,
+        0.227514,
+        0.207813,
+        0.249207,
+        0.198385,
+        0.108804,
+        0.22825,
+        0.208407,
+        0.272314,
+        0.217849,
+        0.210739,
+        0.218054,
+        0.225905,
+        0.264991,
+        0.072011,
+        0.098974,
+        0.086301,
+        0.086109,
+        0.190303,
+        0.0489,
+        0.076094,
+        0.107883,
+        0.203805,
+        0.144266,
+        0.089758,
+        0.19584,
+        0.217377,
+        0.216672,
+        0.266708,
+        0.167296,
+        0.22401,
+        0.240155,
+        0.24222,
+        0.25173,
+        0.166081,
+        0.19007,
+        0.119129,
+        0.235964,
+        0.199148,
+        0.238307,
+        0.212033,
+        0.130981,
+        0.237335,
+        0.173845,
+        0.079002,
+        0.19264,
+        0.176463,
+        0.242507,
+        0.149918,
+        0.096175,
+        0.166254,
+        0.181639,
+        0.224174,
+        0.177423,
+        0.157297,
+        0.113606,
+        0.135027,
+        0.220307,
+        0.089594,
+        0.090572,
+        0.09618,
+        0.092875,
+        0.254127,
+        0.149336,
+        0.177884,
+        0.268467,
+        0.149132,
+        0.270325,
+        0.246213,
+        0.179174,
+        0.212124,
+        0.212722,
+        0.215643,
+        0.200211,
+        0.20528,
+        0.228933,
+        0.200179,
+        0.143696,
+        0.092318,
+        0.198223,
+        0.223823,
+        0.255708,
+        0.188162,
+        0.10256,
+        0.20397,
+        0.208197,
+        0.280931,
+        0.209068,
+        0.22016,
+        0.097348,
+        0.08885,
+        0.212526,
+        0.061348,
+        0.06194,
+        0.081505,
+        0.078202,
+        0.196844,
+        0.093043,
+        0.076551,
+        0.102694,
+        0.08147,
+        0.222701,
+        0.104239,
+        0.15546,
+        0.214896,
+        0.138246,
+        0.317025,
+        0.239429,
+        0.202721,
+        0.180635,
+        0.160261,
+        0.270134,
+        0.183757,
+        0.148737,
+        0.224964,
+        0.195431,
+        0.158599,
+        0.108752,
+        0.214314,
+        0.219924,
+        0.234812,
+        0.168067,
+        0.077841,
+        0.179816,
+        0.259251,
+        0.25596,
+        0.154779,
+        0.097594,
+        0.279557,
+        0.264345,
+        0.261478,
+        0.193262,
+        0.217301,
+        0.302858,
+        0.203483,
+        0.140407,
+        0.218678,
+        0.224843,
+        0.28626,
+        0.256464,
+        0.228755,
+        0.160479,
+        0.189861,
+        0.162942,
+        0.095615,
+        0.247918,
+        0.147512,
+        0.117132,
+        0.110798,
+        0.118473,
+        0.22844,
+        0.081453,
+        0.077822,
+        0.143302,
+        0.212011,
+        0.233748,
+        0.097271,
+        0.102381,
+        0.200863,
+        0.156055,
+        0.218031,
+        0.07557,
+        0.119108,
+        0.170586,
+        0.156813,
+        0.223838,
+        0.108237,
+        0.109588,
+        0.11764,
+        0.161412,
+        0.16659,
+        0.057464,
+        0.082602,
+        0.074776,
+        0.187907,
+        0.132107,
+        0.072324,
+        0.087788,
+        0.1176,
+        0.24923,
+        0.129831,
+        0.075784,
+        0.17265,
+        0.154106,
+        0.234479,
+        0.146863,
+        0.134716,
+        0.135302,
+        0.104957,
+        0.227234,
+        0.092636,
+        0.077373,
+        0.107131,
+        0.089542,
+        0.211148,
+        0.084433,
+        0.068953,
+        0.091453,
+        0.079278,
+        0.254495,
+        0.104099,
+        0.118207,
+        0.177356,
+        0.140695,
+        0.223575,
+        0.127127,
+        0.140328,
+        0.12992,
+        0.105226,
+        0.230325,
+        0.070052,
+        0.079931,
+        0.081853,
+        0.122266,
+        0.19407,
+        0.04578
+      ],
+      "method": "frame RMS, 2048-sample frames at 22050 Hz, DC removed",
+      "basis": "signal"
+    },
+    "sections": {
+      "segments": [
+        {
+          "label": "A",
+          "start": 0,
+          "end": 29.986
+        }
+      ],
+      "method": "novelty-on-beat-chroma",
+      "basis": "signal"
+    },
+    "keyMoments": [
+      {
+        "time": 0.06,
+        "type": "onset",
+        "intensity": 0.384,
+        "description": "Onset"
+      },
+      {
+        "time": 1.09,
+        "type": "onset",
+        "intensity": 0.391,
+        "description": "Onset"
+      },
+      {
+        "time": 1.53,
+        "type": "energy_peak",
+        "intensity": 0.815,
+        "description": "Energy peak"
+      },
+      {
+        "time": 4.73,
+        "type": "onset",
+        "intensity": 0.339,
+        "description": "Onset"
+      },
+      {
+        "time": 7.19,
+        "type": "energy_peak",
+        "intensity": 0.794,
+        "description": "Energy peak"
+      },
+      {
+        "time": 10.63,
+        "type": "energy_peak",
+        "intensity": 0.859,
+        "description": "Energy peak"
+      },
+      {
+        "time": 12.39,
+        "type": "harmonic_change",
+        "intensity": 0.221,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 12.49,
+        "type": "energy_peak",
+        "intensity": 0.841,
+        "description": "Energy peak"
+      },
+      {
+        "time": 16.04,
+        "type": "harmonic_change",
+        "intensity": 0.3,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 16.11,
+        "type": "energy_peak",
+        "intensity": 0.853,
+        "description": "Energy peak"
+      },
+      {
+        "time": 19.66,
+        "type": "harmonic_change",
+        "intensity": 0.251,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 22.24,
+        "type": "energy_peak",
+        "intensity": 0.955,
+        "description": "Energy peak"
+      },
+      {
+        "time": 25.17,
+        "type": "harmonic_change",
+        "intensity": 0.266,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 26.95,
+        "type": "harmonic_change",
+        "intensity": 0.254,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 28.37,
+        "type": "onset",
+        "intensity": 0.342,
+        "description": "Onset"
+      },
+      {
+        "time": 28.37,
+        "type": "energy_peak",
+        "intensity": 0.803,
+        "description": "Energy peak"
+      }
+    ],
+    "fingerprint": {
+      "styles": {
+        "model": {
+          "id": "discogs-effnet-bs64-1",
+          "licence": "CC BY-NC-SA 4.0"
+        },
+        "top": [
+          {
+            "label": "Funk / Soul---Disco",
+            "score": 0.505
+          },
+          {
+            "label": "Electronic---Disco",
+            "score": 0.3332
+          },
+          {
+            "label": "Funk / Soul---Soul",
+            "score": 0.188
+          },
+          {
+            "label": "Funk / Soul---Funk",
+            "score": 0.1428
+          },
+          {
+            "label": "Rock---Pop Rock",
+            "score": 0.1115
+          },
+          {
+            "label": "Pop---Schlager",
+            "score": 0.1077
+          },
+          {
+            "label": "Pop---Chanson",
+            "score": 0.095
+          },
+          {
+            "label": "Funk / Soul---Gospel",
+            "score": 0.0899
+          },
+          {
+            "label": "Electronic---Hi NRG",
+            "score": 0.0825
+          },
+          {
+            "label": "Pop---City Pop",
+            "score": 0.0772
+          }
+        ],
+        "basis": "model"
+      },
+      "tags": {
+        "model": {
+          "id": "msd-musicnn-1",
+          "licence": "CC BY-NC-SA 4.0"
+        },
+        "scores": [
+          {
+            "label": "pop",
+            "score": 0.2535
+          },
+          {
+            "label": "80s",
+            "score": 0.1872
+          },
+          {
+            "label": "soul",
+            "score": 0.175
+          },
+          {
+            "label": "dance",
+            "score": 0.1249
+          },
+          {
+            "label": "rock",
+            "score": 0.1175
+          },
+          {
+            "label": "female vocalists",
+            "score": 0.1158
+          },
+          {
+            "label": "funk",
+            "score": 0.1126
+          },
+          {
+            "label": "70s",
+            "score": 0.1056
+          },
+          {
+            "label": "electronic",
+            "score": 0.0732
+          },
+          {
+            "label": "indie",
+            "score": 0.0471
+          },
+          {
+            "label": "classic rock",
+            "score": 0.0363
+          },
+          {
+            "label": "oldies",
+            "score": 0.0338
+          },
+          {
+            "label": "House",
+            "score": 0.0296
+          },
+          {
+            "label": "alternative",
+            "score": 0.0278
+          },
+          {
+            "label": "jazz",
+            "score": 0.0253
+          },
+          {
+            "label": "rnb",
+            "score": 0.0199
+          },
+          {
+            "label": "electro",
+            "score": 0.019
+          },
+          {
+            "label": "60s",
+            "score": 0.0175
+          },
+          {
+            "label": "electronica",
+            "score": 0.0159
+          },
+          {
+            "label": "90s",
+            "score": 0.0154
+          },
+          {
+            "label": "Progressive rock",
+            "score": 0.0147
+          },
+          {
+            "label": "female vocalist",
+            "score": 0.0142
+          },
+          {
+            "label": "indie pop",
+            "score": 0.0141
+          },
+          {
+            "label": "party",
+            "score": 0.0141
+          },
+          {
+            "label": "indie rock",
+            "score": 0.0136
+          },
+          {
+            "label": "punk",
+            "score": 0.0135
+          },
+          {
+            "label": "blues",
+            "score": 0.0134
+          },
+          {
+            "label": "catchy",
+            "score": 0.012
+          },
+          {
+            "label": "folk",
+            "score": 0.011
+          },
+          {
+            "label": "male vocalists",
+            "score": 0.0106
+          },
+          {
+            "label": "sexy",
+            "score": 0.0102
+          },
+          {
+            "label": "00s",
+            "score": 0.0099
+          },
+          {
+            "label": "experimental",
+            "score": 0.0097
+          },
+          {
+            "label": "instrumental",
+            "score": 0.0096
+          },
+          {
+            "label": "chillout",
+            "score": 0.0093
+          },
+          {
+            "label": "hard rock",
+            "score": 0.0081
+          },
+          {
+            "label": "happy",
+            "score": 0.0075
+          },
+          {
+            "label": "alternative rock",
+            "score": 0.0064
+          },
+          {
+            "label": "easy listening",
+            "score": 0.006
+          },
+          {
+            "label": "Hip-Hop",
+            "score": 0.0057
+          },
+          {
+            "label": "beautiful",
+            "score": 0.0056
+          },
+          {
+            "label": "guitar",
+            "score": 0.0044
+          },
+          {
+            "label": "Mellow",
+            "score": 0.0039
+          },
+          {
+            "label": "chill",
+            "score": 0.0038
+          },
+          {
+            "label": "country",
+            "score": 0.0035
+          },
+          {
+            "label": "acoustic",
+            "score": 0.0031
+          },
+          {
+            "label": "ambient",
+            "score": 0.0028
+          },
+          {
+            "label": "heavy metal",
+            "score": 0.0023
+          },
+          {
+            "label": "metal",
+            "score": 0.0018
+          },
+          {
+            "label": "sad",
+            "score": 0.0015
+          }
+        ],
+        "basis": "model"
+      },
+      "moods": {
+        "danceability": {
+          "value": 0.996,
+          "range": [
+            0,
+            1
+          ],
+          "model": {
+            "id": "danceability-msd-musicnn-1",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "acoustic": {
+          "value": 0.1219,
+          "range": [
+            0,
+            1
+          ],
+          "model": {
+            "id": "mood_acoustic-discogs-effnet-1",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "instrumental": {
+          "value": 0.0244,
+          "range": [
+            0,
+            1
+          ],
+          "model": {
+            "id": "voice_instrumental-msd-musicnn-1",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "valence": {
+          "value": 6.4329,
+          "range": [
+            1,
+            9
+          ],
+          "model": {
+            "id": "deam-msd-musicnn-2",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "arousal": {
+          "value": 6.8005,
+          "range": [
+            1,
+            9
+          ],
+          "model": {
+            "id": "deam-msd-musicnn-2",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        }
+      }
+    },
+    "withheld": {
+      "key": {
+        "code": "no_sustained_pitch",
+        "reason": "no sustained pitch"
+      }
+    }
+  },
+  "bpm": 132,
+  "key": null,
+  "energy": 0.569,
+  "valence": 0.679,
+  "danceability": 0.996,
+  "acousticness": 0.122,
+  "keyMoments": [
+    {
+      "time": 0.06,
+      "type": "onset",
+      "intensity": 0.384,
+      "description": "Onset"
+    },
+    {
+      "time": 1.09,
+      "type": "onset",
+      "intensity": 0.391,
+      "description": "Onset"
+    },
+    {
+      "time": 1.53,
+      "type": "energy_peak",
+      "intensity": 0.815,
+      "description": "Energy peak"
+    },
+    {
+      "time": 4.73,
+      "type": "onset",
+      "intensity": 0.339,
+      "description": "Onset"
+    },
+    {
+      "time": 7.19,
+      "type": "energy_peak",
+      "intensity": 0.794,
+      "description": "Energy peak"
+    },
+    {
+      "time": 10.63,
+      "type": "energy_peak",
+      "intensity": 0.859,
+      "description": "Energy peak"
+    },
+    {
+      "time": 12.39,
+      "type": "harmonic_change",
+      "intensity": 0.221,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 12.49,
+      "type": "energy_peak",
+      "intensity": 0.841,
+      "description": "Energy peak"
+    },
+    {
+      "time": 16.04,
+      "type": "harmonic_change",
+      "intensity": 0.3,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 16.11,
+      "type": "energy_peak",
+      "intensity": 0.853,
+      "description": "Energy peak"
+    },
+    {
+      "time": 19.66,
+      "type": "harmonic_change",
+      "intensity": 0.251,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 22.24,
+      "type": "energy_peak",
+      "intensity": 0.955,
+      "description": "Energy peak"
+    },
+    {
+      "time": 25.17,
+      "type": "harmonic_change",
+      "intensity": 0.266,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 26.95,
+      "type": "harmonic_change",
+      "intensity": 0.254,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 28.37,
+      "type": "onset",
+      "intensity": 0.342,
+      "description": "Onset"
+    },
+    {
+      "time": 28.37,
+      "type": "energy_peak",
+      "intensity": 0.803,
+      "description": "Energy peak"
+    }
+  ],
+  "audioSource": "unavailable",
+  "audioConfidence": "low",
+  "audioUnavailableReason": "not_detected"
+}

@@ -52,7 +52,14 @@ import { readReport } from "../../scripts/stop-server.mjs";
 import { analyse, pinnedEnv, startApi } from "./lib/api.mjs";
 import { requireContract } from "./lib/app.mjs";
 import { CI_SUBSET, EVALS_DIR, readGolden, REPO_ROOT, subsetRows } from "./lib/golden.mjs";
-import { callsOf, differences, recordsOf } from "./lib/record.mjs";
+import {
+  callsOf,
+  differences,
+  normalisedResult,
+  RESULTS_DIR,
+  recordsOf,
+  resultDifferences,
+} from "./lib/record.mjs";
 
 export const CASSETTES = join(REPO_ROOT, "fixtures", "cassettes");
 export const RUNS_ROOT = join(EVALS_DIR, "agent", "runs");
@@ -339,10 +346,16 @@ export async function replay(opts) {
   try {
     for (const row of rows) {
       const recorded = committed.get(row.isrc);
-      if (!recorded?.d) {
-        failures.push(`${row.isrc}: no committed record`);
+      const lacking = ["b", "c", "d"].filter((id) => !recorded?.[id]);
+      const resultFile = join(runsDir, RESULTS_DIR, `${row.isrc}.json`);
+      if (!existsSync(resultFile)) lacking.push("the result");
+      if (lacking.length) {
+        failures.push(
+          `${row.isrc}: no committed ${lacking.join(", ")} (rows b, c, d and ${RESULTS_DIR}/${row.isrc}.json are all needed)`,
+        );
         continue;
       }
+      const recordedResult = JSON.parse(readFileSync(resultFile, "utf8"));
       const dir = (kind) =>
         join(resolve(opts.cassettes ?? CASSETTES), kind, "golden", row.isrc.toLowerCase());
       if (!existsSync(dir("llm")) || !existsSync(dir("sources"))) {
@@ -410,18 +423,24 @@ export async function replay(opts) {
         .filter((e) => e.type === "status" || e.type === "error")
         .filter((e) => /cassette/i.test(`${e.message ?? ""} ${e.error ?? ""} ${e.code ?? ""}`));
       const diffs = ["d", "c", "b"].flatMap((id) =>
-        recorded[id] ? differences(recorded[id], records[id]).map((f) => `row ${id} ${f}`) : [],
+        differences(recorded[id], records[id]).map((f) => `row ${id} ${f}`),
       );
+      // The whole result, not only what is scored: every shown field but RESULT_MASKS.
+      const resultDiffs = resultDifferences(recordedResult, normalisedResult(result.events));
+      if (resultDiffs.length) diffs.push("the result");
       const label = `${row.isrc} ${row.title}`;
       if (diffs.length === 0)
-        lines.push(`ok   ${label}: ${records.d.outcome}, rows b c d as recorded`);
+        lines.push(
+          `ok   ${label}: ${records.d.outcome}, rows b c d and the whole result as recorded`,
+        );
       else {
         failures.push(`${label}: ${diffs.join(", ")}`);
         lines.push(`FAIL ${label}: ${records.d.outcome}; differs in ${diffs.join(", ")}`);
+        for (const d of resultDiffs) lines.push(`     ${d}`);
         if (misses.length) lines.push(`     ${misses.length} event(s) mention a cassette`);
         writeFileSync(
           join(scratch, `${row.isrc}.replayed.json`),
-          `${JSON.stringify(records, null, 2)}\n`,
+          `${JSON.stringify({ records, result: normalisedResult(result.events) }, null, 2)}\n`,
         );
         opts.keepScratch = true;
       }

@@ -1,0 +1,1990 @@
+{
+  "id": "0ofHAoxe9vBkTCp2UQIavz",
+  "title": "Dreams - 2004 Remaster",
+  "artist": "Fleetwood Mac",
+  "album": "Rumours (Super Deluxe)",
+  "coverUrl": "[link]",
+  "spotifyUrl": "https://open.spotify.com/track/0ofHAoxe9vBkTCp2UQIavz",
+  "releaseYear": "1977",
+  "explicit": false,
+  "durationSeconds": 258,
+  "isrc": "USWB11301111",
+  "preview": {
+    "provider": "deezer",
+    "method": "isrc",
+    "score": null
+  },
+  "queryMatch": "exact",
+  "evidence": [
+    {
+      "id": "musicbrainz:track/recording/248cc9d1-97ea-493e-84d4-4c5ec718683b",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/248cc9d1-97ea-493e-84d4-4c5ec718683b",
+      "title": "Dreams — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Dreams\" by Fleetwood Mac (4:17), ISRC USWB11301111, first released 1977-02-04.",
+      "recordRef": "track/recording/248cc9d1-97ea-493e-84d4-4c5ec718683b"
+    },
+    {
+      "id": "musicbrainz:track/recording/248cc9d1-97ea-493e-84d4-4c5ec718683b/remixed-by/recording/a57592ea-9284-49d2-a158-e1da8a5c2ae4",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/248cc9d1-97ea-493e-84d4-4c5ec718683b",
+      "title": "Dreams — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Dreams\" by Fleetwood Mac is remixed in \"Dreams (Autograf Remix)\" by Autograf.",
+      "recordRef": "track/recording/248cc9d1-97ea-493e-84d4-4c5ec718683b/remixed-by/recording/a57592ea-9284-49d2-a158-e1da8a5c2ae4"
+    },
+    {
+      "id": "musicbrainz:track/recording/248cc9d1-97ea-493e-84d4-4c5ec718683b/remixed-by/recording/6260b276-d975-4a8c-8ed1-4cb81a6de334",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/248cc9d1-97ea-493e-84d4-4c5ec718683b",
+      "title": "Dreams — MusicBrainz relationships",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Dreams\" by Fleetwood Mac is remixed in \"Dreams (Mingus Rude edit)\" by Fleetwood Mac.",
+      "recordRef": "track/recording/248cc9d1-97ea-493e-84d4-4c5ec718683b/remixed-by/recording/6260b276-d975-4a8c-8ed1-4cb81a6de334"
+    },
+    {
+      "id": "musicbrainz:release/725a7242-21bc-47ec-81e7-327a14bc0130",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/release/725a7242-21bc-47ec-81e7-327a14bc0130",
+      "title": "Rumours (super deluxe) — MusicBrainz release",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: \"Dreams\" by Fleetwood Mac appears on the official album \"Rumours (super deluxe)\" (2013-01-25).",
+      "recordRef": "release/725a7242-21bc-47ec-81e7-327a14bc0130"
+    },
+    {
+      "id": "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/d0081304-de2e-437c-842e-632a717a72fd",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a",
+      "title": "Dreams — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Dreams\" is covered by \"Dreams\" by Soul Asylum.",
+      "recordRef": "work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/d0081304-de2e-437c-842e-632a717a72fd"
+    },
+    {
+      "id": "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/a5735047-a997-479d-a04e-8493f4462a4f",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a",
+      "title": "Dreams — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Dreams\" is covered by \"Dreams (Fleetwood Mac tribute)\" by The Corrs.",
+      "recordRef": "work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/a5735047-a997-479d-a04e-8493f4462a4f"
+    },
+    {
+      "id": "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/65195b93-6fe7-4c0f-b455-4f46f61601c4",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a",
+      "title": "Dreams — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Dreams\" is covered by \"Dreams\" by The Corrs.",
+      "recordRef": "work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/65195b93-6fe7-4c0f-b455-4f46f61601c4"
+    },
+    {
+      "id": "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/0cf895ef-5db8-4155-a79d-883e2a87daf1",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a",
+      "title": "Dreams — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Dreams\" is covered by \"Dreams\" by The Corrs feat. Mick Fleetwood.",
+      "recordRef": "work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/0cf895ef-5db8-4155-a79d-883e2a87daf1"
+    },
+    {
+      "id": "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/0f225856-c074-4629-a0ee-2e587b53d6b8",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a",
+      "title": "Dreams — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Dreams\" is covered by \"Dreams\" by The Corrs.",
+      "recordRef": "work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/0f225856-c074-4629-a0ee-2e587b53d6b8"
+    },
+    {
+      "id": "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/fe6723ee-d8ca-44e0-95bf-7e29b2d55fbf",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a",
+      "title": "Dreams — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Dreams\" is covered by \"Dreams\" by The Corrs.",
+      "recordRef": "work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/fe6723ee-d8ca-44e0-95bf-7e29b2d55fbf"
+    },
+    {
+      "id": "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/4a423dfb-3008-4721-92ee-94df721cf8d6",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a",
+      "title": "Dreams — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Dreams\" is covered by \"Dreams (Modena 09 June 1998)\" by The Corrs.",
+      "recordRef": "work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/4a423dfb-3008-4721-92ee-94df721cf8d6"
+    },
+    {
+      "id": "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/5088d070-8dc8-4e1e-b1e6-2aa88dad0f0e",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a",
+      "title": "Dreams — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Dreams\" is covered by \"Dreams\" by The Corrs.",
+      "recordRef": "work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/5088d070-8dc8-4e1e-b1e6-2aa88dad0f0e"
+    },
+    {
+      "id": "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/18e1776d-9449-406a-af30-d2f0a93cda1c",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a",
+      "title": "Dreams — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Dreams\" is covered by \"Dreams\" by The Corrs.",
+      "recordRef": "work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/18e1776d-9449-406a-af30-d2f0a93cda1c"
+    },
+    {
+      "id": "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/0497caf5-8503-4cc3-94bb-25e1aebbd8ef",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a",
+      "title": "Dreams — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Dreams\" is covered by \"Dreams (extended pop mix)\" by The Corrs.",
+      "recordRef": "work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/0497caf5-8503-4cc3-94bb-25e1aebbd8ef"
+    },
+    {
+      "id": "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/2bf79ece-f09f-4aad-86e5-14694546e3d4",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a",
+      "title": "Dreams — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Dreams\" is covered by \"Dreams (TFI Friday)\" by The Corrs.",
+      "recordRef": "work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/2bf79ece-f09f-4aad-86e5-14694546e3d4"
+    },
+    {
+      "id": "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/8b71eb53-827d-4c2d-95ea-87057f561703",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a",
+      "title": "Dreams — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Dreams\" is covered by \"Dreams\" by The Corrs.",
+      "recordRef": "work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/8b71eb53-827d-4c2d-95ea-87057f561703"
+    },
+    {
+      "id": "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/72940e03-0d9d-4f51-9d37-fa907008284d",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a",
+      "title": "Dreams — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Dreams\" is covered by \"Dreams\" by The Corrs.",
+      "recordRef": "work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/72940e03-0d9d-4f51-9d37-fa907008284d"
+    },
+    {
+      "id": "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/a999758e-c190-4783-a2b2-4a4966aa6dab",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a",
+      "title": "Dreams — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Dreams\" is covered by \"Dreams\" by The Corrs.",
+      "recordRef": "work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/a999758e-c190-4783-a2b2-4a4966aa6dab"
+    },
+    {
+      "id": "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/742ded01-fe87-4a93-88fe-cdccd8507d57",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a",
+      "title": "Dreams — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Dreams\" is covered by \"Dreams\" by The Corrs.",
+      "recordRef": "work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/742ded01-fe87-4a93-88fe-cdccd8507d57"
+    },
+    {
+      "id": "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/560f84fa-724a-4dac-a6ea-c825f840c739",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a",
+      "title": "Dreams — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Dreams\" is covered by \"Dreams\" by The Corrs.",
+      "recordRef": "work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/560f84fa-724a-4dac-a6ea-c825f840c739"
+    },
+    {
+      "id": "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/4538e95a-6b67-4db3-855c-6f8d9da08f6d",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a",
+      "title": "Dreams — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Dreams\" is covered by \"Dreams\" by The Corrs.",
+      "recordRef": "work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/4538e95a-6b67-4db3-855c-6f8d9da08f6d"
+    },
+    {
+      "id": "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/c867dbe4-6abf-461c-b2fe-d3b4e5d4b677",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a",
+      "title": "Dreams — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Dreams\" is covered by \"Dreams\" by The Corrs feat. Mick Fleetwood.",
+      "recordRef": "work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/c867dbe4-6abf-461c-b2fe-d3b4e5d4b677"
+    },
+    {
+      "id": "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/4e9bea1d-0fb6-40a1-a5ea-deff76c257c5",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a",
+      "title": "Dreams — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Dreams\" is covered by \"Dreams\" by The Corrs.",
+      "recordRef": "work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/4e9bea1d-0fb6-40a1-a5ea-deff76c257c5"
+    },
+    {
+      "id": "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/ac1177ce-2e75-44d9-b310-febe202cc27d",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a",
+      "title": "Dreams — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Dreams\" is covered by \"Dreams\" by Robin Pecknold.",
+      "recordRef": "work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/ac1177ce-2e75-44d9-b310-febe202cc27d"
+    },
+    {
+      "id": "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/9e4fd4a7-9721-4c0d-adba-0db1ef989bc2",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a",
+      "title": "Dreams — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Dreams\" is covered by \"Dreams\" by Sara Evans with The Barker Family Band.",
+      "recordRef": "work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/9e4fd4a7-9721-4c0d-adba-0db1ef989bc2"
+    },
+    {
+      "id": "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/6dc75e3d-ec2e-4be2-abf7-ea5c21015dc1",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a",
+      "title": "Dreams — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Dreams\" is covered by \"Dreams (Live from City Winery Nashville)\" by Sara Evans with The Barker Family Band.",
+      "recordRef": "work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/6dc75e3d-ec2e-4be2-abf7-ea5c21015dc1"
+    },
+    {
+      "id": "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/293510f0-71b8-4459-abac-10d2d9b46bc3",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a",
+      "title": "Dreams — MusicBrainz work",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz: the work \"Dreams\" is covered by \"Sleepy Singing\" by Nanashi Mumei.",
+      "recordRef": "work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/293510f0-71b8-4459-abac-10d2d9b46bc3"
+    },
+    {
+      "id": "tavily:https://www.whosampled.com/sample/344889/Sunspot-Jonz-Mikah-Nine-She-Fleetwood-Mac-Dreams",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.whosampled.com/sample/344889/Sunspot-Jonz-Mikah-Nine-She-Fleetwood-Mac-Dreams",
+      "title": "Sunspot Jonz feat. Mikah Nine's 'She' sample of Fleetwood ...",
+      "retrievedAt": "[time]",
+      "excerpt": "\"She\" by Sunspot Jonz feat. Mikah Nine sampled Fleetwood Mac's \"Dreams\". Listen to both songs on WhoSampled.",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://scholarcommons.sc.edu/cgi/viewcontent.cgi?article=8130&context=etd",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://scholarcommons.sc.edu/cgi/viewcontent.cgi?article=8130&context=etd",
+      "title": "The Rise of Interpolation in Popular Music - Scholar Commons",
+      "retrievedAt": "[time]",
+      "excerpt": "by GM Saylor · 2023 · Cited by 4 — WhoSampled.com is a user-generated site that pinpoints samples from songs, Fleetwood Mac's “Dreams” as one TikToker popularized the song cranberry juice. by",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.whosampled.com/Fleetwood-Mac/Dreams",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.whosampled.com/Fleetwood-Mac/Dreams",
+      "title": "Dreams by Fleetwood Mac - Samples, Covers and Remixes",
+      "retrievedAt": "[time]",
+      "excerpt": "Sampled in 21 songs ; Post Malone's Hollywood Dreams / Comedown, Hollywood Dreams / Comedown · Post Malone ; Soul Clap's Dreams, Dreams · Soul Clap ; Crazy Town's ...Read more",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://en.wikipedia.org/wiki/The_Chain",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://en.wikipedia.org/wiki/The_Chain",
+      "title": "The Chain - Wikipedia",
+      "retrievedAt": "[time]",
+      "excerpt": "Mac song)\")\" \"Sands of Time \"Sands of Time (song)\")\" \"Sentimental Lady\" \"Did You Ever Love Me \"Did You Ever Love Me (Fleetwood Mac song)\")\" \"For Your Love\" \"Heroes Are Hard to Find \"Heroes Are Hard to Find (song)\")\" \"Warm Ways\" \"Over My Head \"Over My Head (Fleetwood Mac song)\")\" \"Rhiannon \"Rhiannon (song)\")\" \"Say You Love Me \"Say You Love Me (Fleetwood Mac song)\")\" \"Go Your Own Way\" \"Dreams \"Dreams (Fleetwood Mac song)\")\" \"Don't Stop \"Don't Stop (Fleetwood Mac song)\")\" \"You Make [...] | Songs |…",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://somuchgreatmusic.com/2025/08/01/the-best-drum-intro-songs-ever",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://somuchgreatmusic.com/2025/08/01/the-best-drum-intro-songs-ever",
+      "title": "The Best Drum Intro Songs Ever | So Much Great Music",
+      "retrievedAt": "[time]",
+      "excerpt": "‘Mother and Child Reunion’ – Paul Simon ‘Ballroom Blitz’ – Sweet ‘Burnout’ – Green Day ‘Young Folks’ – Peter Bjorn and John ‘Dreams’ – Fleetwood Mac ‘Hello I Love You’ – Doors ‘Take on Me’ – a-ha ‘Whip It’ – Devo ‘We’re Not Gonna Take It’ – Twisted Sister ‘Addicted to Love’ – Robert Palmer ‘Rock and Roll All Nite’ – Kiss ‘What You Need’ – INXS ‘Whatcha Gonna Do’ – Pablo Cruise ‘Hungry Heart’ – Bruce Springsteen & The E Street Band ‘Semi-Charmed Life’ – Third Eye Blind [...] ‘Swingtown’ – Steve …",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://en.wikipedia.org/wiki/Dreams_(Fleetwood_Mac_song)",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://en.wikipedia.org/wiki/Dreams_(Fleetwood_Mac_song)",
+      "title": "Dreams (Fleetwood Mac song) - Wikipedia",
+      "retrievedAt": "[time]",
+      "excerpt": "The members of Fleetwood Mac were experiencing emotional upheavals while recording the Rumours album. Mick Fleetwood was going through a divorce, Christine McVie and John McVie were separating, while Lindsey Buckingham and Stevie Nicks were ending their eight-year relationship. \"We had to go through this elaborate exercise of denial,\" explained Buckingham to Blender \"Blender (magazine)\") magazine, \"keeping our personal feelings in one corner of the room while trying to be professional in the [.…",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.thisdayinmusic.com/classic-albums/fleetwood-mac-rumours",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.thisdayinmusic.com/classic-albums/fleetwood-mac-rumours",
+      "title": "Fleetwood Mac - Rumours - This Day In Music",
+      "retrievedAt": "[time]",
+      "excerpt": "The first sessions took place in Sausalito, just north of San Francisco, at the Record Plant, a well-appointed but secluded facility, where the band weren’t bothered by hangers-on. Ken Caillat, who had been working at LA’s Wally Heider recording studio, had previously mixed a radio broadcast for the band, and had stepped in to remix the single of “Rhiannon”. The band’s live engineer Richard Dashut, who had also worked on the white album, had been asked to supervise and engineer Fleetwood Mac’s …",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://americansongwriter.com/behind-the-song-dreams-by-fleetwood-mac",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://americansongwriter.com/behind-the-song-dreams-by-fleetwood-mac",
+      "title": "Behind the Song: \"Dreams\" by Fleetwood Mac - American Songwriter",
+      "retrievedAt": "[time]",
+      "excerpt": "In 1976, hidden behind lush Victorian drapes, atop a black velvet bed in the back studio of Sausalito’s Record Plant, a devastated Stevie Nicks sat alone at a Fender Rhodes piano. The master lyricist, beloved as a folk-rock matriarch, spilled her heartache into “Dreams.” The classic track became one of four US Top 10 singles from Fleetwood Mac’s eleventh studio album, Rumours. ## Videos by American Songwriter [...] The two joined the McVie’s and founding member, Mick Fleetwood, in 1974 when the…",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.rollingstone.com/feature/fleetwood-macs-rumours-10-things-you-didnt-know-121876",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.rollingstone.com/feature/fleetwood-macs-rumours-10-things-you-didnt-know-121876",
+      "title": "Fleetwood Mac's 'Rumours': 10 Things You Didn't Know",
+      "retrievedAt": "[time]",
+      "excerpt": "By all accounts it was quite an inspiring space, done up in full-tilt Seventies style. “It was a black-and-red room, with a sunken pit in the middle where there was a piano, and a big black-velvet bed with Victorian drapes,” she recalled in Blender. “I sat down on the bed with my keyboard in front of me. I found a drum pattern, switched my little cassette player on and wrote ‘Dreams’ in about 10 minutes.” The simple repeated three-chord riff cast a hypnotic spell over an uncharacteristically [.…",
+      "recordRef": null
+    },
+    {
+      "id": "tavily:https://www.asktherightquestion.org/rumours-fleetwood-mac-the-making-of-classic-albums-documentary",
+      "source": "tavily",
+      "sourceTier": "web",
+      "url": "https://www.asktherightquestion.org/rumours-fleetwood-mac-the-making-of-classic-albums-documentary",
+      "title": "Rumours Fleetwood Mac The making of Classic Albums ...",
+      "retrievedAt": "[time]",
+      "excerpt": "Largely recorded in California in 1976, it was produced by the band with Ken Caillat and Richard Dashut. The band wanted to expand on the commercial success of",
+      "recordRef": null
+    },
+    {
+      "id": "musicbrainz:recording/a57592ea-9284-49d2-a158-e1da8a5c2ae4",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/a57592ea-9284-49d2-a158-e1da8a5c2ae4",
+      "title": "Dreams (Autograf Remix) — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Dreams (Autograf Remix)\" by Autograf, first released 2021-04-29.",
+      "recordRef": "recording/a57592ea-9284-49d2-a158-e1da8a5c2ae4"
+    },
+    {
+      "id": "musicbrainz:recording/6260b276-d975-4a8c-8ed1-4cb81a6de334",
+      "source": "musicbrainz",
+      "sourceTier": "primary-record",
+      "url": "https://musicbrainz.org/recording/6260b276-d975-4a8c-8ed1-4cb81a6de334",
+      "title": "Dreams (Mingus Rude edit) — MusicBrainz recording",
+      "retrievedAt": "[time]",
+      "excerpt": "MusicBrainz recording \"Dreams (Mingus Rude edit)\" by Fleetwood Mac, first released 2009-10-08.",
+      "recordRef": "recording/6260b276-d975-4a8c-8ed1-4cb81a6de334"
+    }
+  ],
+  "segments": [
+    {
+      "label": "Intro",
+      "start": 0,
+      "end": 8
+    },
+    {
+      "label": "Verse 1",
+      "start": 8,
+      "end": 25
+    },
+    {
+      "label": "Chorus",
+      "start": 25,
+      "end": 42
+    },
+    {
+      "label": "Verse 2",
+      "start": 42,
+      "end": 58
+    },
+    {
+      "label": "Bridge",
+      "start": 58,
+      "end": 75
+    },
+    {
+      "label": "Chorus",
+      "start": 75,
+      "end": 92
+    },
+    {
+      "label": "Outro",
+      "start": 92,
+      "end": 100
+    }
+  ],
+  "segmentsSource": "template",
+  "samples": [],
+  "factoids": [
+    {
+      "id": "<id 28>",
+      "title": "A song born at the piano",
+      "content": "Stevie Nicks wrote “Dreams” for Fleetwood Mac’s 1977 album Rumours. One account describes her finding a drum pattern while working at a keyboard before writing the song quickly.",
+      "type": "trivia",
+      "entities": [
+        {
+          "id": "<id 29>",
+          "text": "Stevie Nicks",
+          "type": "artist",
+          "searchQuery": "Stevie Nicks"
+        },
+        {
+          "id": "<id 30>",
+          "text": "Rumours",
+          "type": "album",
+          "searchQuery": "Rumours"
+        },
+        {
+          "id": "<id 31>",
+          "text": "1977",
+          "type": "year",
+          "searchQuery": "1977"
+        }
+      ],
+      "claimId": "<id 5>"
+    },
+    {
+      "id": "<id 32>",
+      "title": "A sample in “She”",
+      "content": "WhoSampled identifies Fleetwood Mac’s “Dreams” as sampled in “She” by Sunspot Jonz featuring Mikah Nine.",
+      "type": "sample",
+      "entities": [
+        {
+          "id": "<id 33>",
+          "text": "Sunspot Jonz",
+          "type": "artist",
+          "searchQuery": "Sunspot Jonz"
+        },
+        {
+          "id": "<id 34>",
+          "text": "Mikah Nine",
+          "type": "artist",
+          "searchQuery": "Mikah Nine"
+        },
+        {
+          "id": "<id 35>",
+          "text": "She",
+          "type": "album",
+          "searchQuery": "She"
+        }
+      ],
+      "claimId": "<id 6>"
+    }
+  ],
+  "genealogy": {
+    "nodes": [
+      {
+        "id": "current",
+        "group": 1,
+        "label": "Dreams - 2004 Remaster",
+        "size": 40,
+        "trackTitle": "Dreams - 2004 Remaster",
+        "trackArtist": "Fleetwood Mac",
+        "mbid": "248cc9d1-97ea-493e-84d4-4c5ec718683b",
+        "year": 1977
+      },
+      {
+        "id": "she",
+        "group": 4,
+        "label": "She - Sunspot Jonz feat. Mikah Nine",
+        "size": 22,
+        "trackTitle": "She",
+        "trackArtist": "Sunspot Jonz feat. Mikah Nine"
+      },
+      {
+        "id": "mb-a57592ea-9284-49d2-a158-e1da8a5c2ae4",
+        "group": 4,
+        "label": "Dreams (Autograf Remix) - Autograf",
+        "size": 22,
+        "trackTitle": "Dreams (Autograf Remix)",
+        "trackArtist": "Autograf",
+        "year": 2021,
+        "mbid": "a57592ea-9284-49d2-a158-e1da8a5c2ae4"
+      },
+      {
+        "id": "mb-6260b276-d975-4a8c-8ed1-4cb81a6de334",
+        "group": 4,
+        "label": "Dreams (Mingus Rude edit) - Fleetwood Mac",
+        "size": 22,
+        "trackTitle": "Dreams (Mingus Rude edit)",
+        "trackArtist": "Fleetwood Mac",
+        "year": 2009,
+        "mbid": "6260b276-d975-4a8c-8ed1-4cb81a6de334"
+      }
+    ],
+    "links": [
+      {
+        "source": "current",
+        "target": "she",
+        "value": 1,
+        "type": "sample",
+        "kind": "inferred",
+        "origin": "model",
+        "claimId": "<id 7>",
+        "evidenceIds": [
+          "tavily:https://www.whosampled.com/sample/344889/Sunspot-Jonz-Mikah-Nine-She-Fleetwood-Mac-Dreams"
+        ]
+      },
+      {
+        "source": "current",
+        "target": "mb-a57592ea-9284-49d2-a158-e1da8a5c2ae4",
+        "value": 2,
+        "type": "remix",
+        "kind": "sourced",
+        "origin": "code",
+        "claimId": "<id 8>",
+        "evidenceIds": [
+          "musicbrainz:track/recording/248cc9d1-97ea-493e-84d4-4c5ec718683b/remixed-by/recording/a57592ea-9284-49d2-a158-e1da8a5c2ae4"
+        ]
+      },
+      {
+        "source": "current",
+        "target": "mb-6260b276-d975-4a8c-8ed1-4cb81a6de334",
+        "value": 2,
+        "type": "remix",
+        "kind": "sourced",
+        "origin": "code",
+        "claimId": "<id 9>",
+        "evidenceIds": [
+          "musicbrainz:track/recording/248cc9d1-97ea-493e-84d4-4c5ec718683b/remixed-by/recording/6260b276-d975-4a8c-8ed1-4cb81a6de334"
+        ]
+      }
+    ]
+  },
+  "claims": [
+    {
+      "id": "<id 2>",
+      "text": "MusicBrainz lists Fleetwood Mac’s recording of “Dreams” as first released on February 4, 1977.",
+      "about": "track",
+      "evidenceIds": [
+        "musicbrainz:track/recording/248cc9d1-97ea-493e-84d4-4c5ec718683b"
+      ],
+      "scope": "recording",
+      "kind": "sourced",
+      "origin": "model",
+      "verdict": "supported",
+      "verdictReason": "The MusicBrainz recording excerpt gives February 4, 1977 as its first-release date.",
+      "numericCheck": "n/a",
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 3>",
+      "text": "Stevie Nicks wrote “Dreams” for Fleetwood Mac’s 1977 album Rumours.",
+      "about": "credit",
+      "evidenceIds": [],
+      "scope": "work",
+      "kind": "inferred",
+      "origin": "model",
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 4>",
+      "text": "Sunspot Jonz feat. Mikah Nine’s “She” samples Fleetwood Mac’s “Dreams.”",
+      "about": "sample",
+      "evidenceIds": [
+        "tavily:https://www.whosampled.com/sample/344889/Sunspot-Jonz-Mikah-Nine-She-Fleetwood-Mac-Dreams"
+      ],
+      "scope": "recording",
+      "kind": "sourced",
+      "origin": "model",
+      "verdict": "supported",
+      "verdictReason": "The WhoSampled excerpt says “She” sampled Fleetwood Mac’s “Dreams.”",
+      "numericCheck": "n/a",
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 5>",
+      "text": "Stevie Nicks wrote “Dreams” for Fleetwood Mac’s 1977 album Rumours. One account describes her finding a drum pattern while working at a keyboard before writing the song quickly.",
+      "about": "trivia",
+      "evidenceIds": [],
+      "scope": "work",
+      "kind": "inferred",
+      "origin": "model",
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "factoid": {
+        "title": "A song born at the piano",
+        "type": "trivia",
+        "entities": [
+          {
+            "text": "Stevie Nicks",
+            "type": "artist"
+          },
+          {
+            "text": "Rumours",
+            "type": "album"
+          },
+          {
+            "text": "1977",
+            "type": "year"
+          }
+        ]
+      },
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 6>",
+      "text": "WhoSampled identifies Fleetwood Mac’s “Dreams” as sampled in “She” by Sunspot Jonz featuring Mikah Nine.",
+      "about": "sample",
+      "evidenceIds": [
+        "tavily:https://www.whosampled.com/sample/344889/Sunspot-Jonz-Mikah-Nine-She-Fleetwood-Mac-Dreams"
+      ],
+      "scope": "recording",
+      "kind": "sourced",
+      "origin": "model",
+      "verdict": "supported",
+      "verdictReason": "The WhoSampled excerpt identifies Fleetwood Mac’s “Dreams” as sampled in “She.”",
+      "numericCheck": "n/a",
+      "factoid": {
+        "title": "A sample in “She”",
+        "type": "sample",
+        "entities": [
+          {
+            "text": "Sunspot Jonz",
+            "type": "artist"
+          },
+          {
+            "text": "Mikah Nine",
+            "type": "artist"
+          },
+          {
+            "text": "She",
+            "type": "album"
+          }
+        ]
+      },
+      "numericReason": null,
+      "numericComparison": null
+    },
+    {
+      "id": "<id 7>",
+      "text": "\"She - Sunspot Jonz feat. Mikah Nine\" samples \"Dreams - 2004 Remaster - Fleetwood Mac\".",
+      "about": "sample",
+      "evidenceIds": [
+        "tavily:https://www.whosampled.com/sample/344889/Sunspot-Jonz-Mikah-Nine-She-Fleetwood-Mac-Dreams"
+      ],
+      "scope": "recording",
+      "kind": "inferred",
+      "origin": "model",
+      "verdict": "partial",
+      "verdictReason": "WhoSampled names Fleetwood Mac’s “Dreams,” but not the 2004 Remaster.",
+      "numericCheck": "n/a"
+    },
+    {
+      "id": "<id 8>",
+      "text": "\"Dreams\" by Fleetwood Mac is remixed in \"Dreams (Autograf Remix)\" by Autograf.",
+      "about": "sample",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:track/recording/248cc9d1-97ea-493e-84d4-4c5ec718683b/remixed-by/recording/a57592ea-9284-49d2-a158-e1da8a5c2ae4"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "recording"
+    },
+    {
+      "id": "<id 9>",
+      "text": "\"Dreams\" by Fleetwood Mac is remixed in \"Dreams (Mingus Rude edit)\" by Fleetwood Mac.",
+      "about": "sample",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:track/recording/248cc9d1-97ea-493e-84d4-4c5ec718683b/remixed-by/recording/6260b276-d975-4a8c-8ed1-4cb81a6de334"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "recording"
+    },
+    {
+      "id": "<id 10>",
+      "text": "The work \"Dreams\" is covered by \"Dreams\" by Soul Asylum.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/d0081304-de2e-437c-842e-632a717a72fd"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 11>",
+      "text": "The work \"Dreams\" is covered by \"Dreams (Fleetwood Mac tribute)\" by The Corrs.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/a5735047-a997-479d-a04e-8493f4462a4f"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 12>",
+      "text": "The work \"Dreams\" is covered by \"Dreams\" by The Corrs.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/65195b93-6fe7-4c0f-b455-4f46f61601c4"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 13>",
+      "text": "The work \"Dreams\" is covered by \"Dreams\" by The Corrs feat. Mick Fleetwood.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/0cf895ef-5db8-4155-a79d-883e2a87daf1"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 14>",
+      "text": "The work \"Dreams\" is covered by \"Dreams\" by The Corrs.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/0f225856-c074-4629-a0ee-2e587b53d6b8"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 15>",
+      "text": "The work \"Dreams\" is covered by \"Dreams\" by The Corrs.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/fe6723ee-d8ca-44e0-95bf-7e29b2d55fbf"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 16>",
+      "text": "The work \"Dreams\" is covered by \"Dreams (Modena 09 June 1998)\" by The Corrs.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/4a423dfb-3008-4721-92ee-94df721cf8d6"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 17>",
+      "text": "The work \"Dreams\" is covered by \"Dreams\" by The Corrs.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/5088d070-8dc8-4e1e-b1e6-2aa88dad0f0e"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 18>",
+      "text": "The work \"Dreams\" is covered by \"Dreams\" by The Corrs.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/18e1776d-9449-406a-af30-d2f0a93cda1c"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 19>",
+      "text": "The work \"Dreams\" is covered by \"Dreams\" by The Corrs.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/8b71eb53-827d-4c2d-95ea-87057f561703"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 20>",
+      "text": "The work \"Dreams\" is covered by \"Dreams\" by The Corrs.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/72940e03-0d9d-4f51-9d37-fa907008284d"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 21>",
+      "text": "The work \"Dreams\" is covered by \"Dreams\" by The Corrs.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/a999758e-c190-4783-a2b2-4a4966aa6dab"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 22>",
+      "text": "The work \"Dreams\" is covered by \"Dreams\" by The Corrs.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/742ded01-fe87-4a93-88fe-cdccd8507d57"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 23>",
+      "text": "The work \"Dreams\" is covered by \"Dreams\" by The Corrs.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/560f84fa-724a-4dac-a6ea-c825f840c739"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 24>",
+      "text": "The work \"Dreams\" is covered by \"Dreams\" by The Corrs.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/4538e95a-6b67-4db3-855c-6f8d9da08f6d"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 25>",
+      "text": "The work \"Dreams\" is covered by \"Dreams\" by The Corrs feat. Mick Fleetwood.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/c867dbe4-6abf-461c-b2fe-d3b4e5d4b677"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 26>",
+      "text": "The work \"Dreams\" is covered by \"Dreams\" by The Corrs.",
+      "about": "cover",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:work/bfdea83f-8ee2-3bc5-ae93-06d4a5860e2a/covered-by/recording/4e9bea1d-0fb6-40a1-a5ea-deff76c257c5"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "work"
+    },
+    {
+      "id": "<id 27>",
+      "text": "\"Dreams\" by Fleetwood Mac appears on the official album \"Rumours (super deluxe)\" (2013-01-25).",
+      "about": "track",
+      "kind": "sourced",
+      "origin": "code",
+      "evidenceIds": [
+        "musicbrainz:release/725a7242-21bc-47ec-81e7-327a14bc0130"
+      ],
+      "verdict": null,
+      "verdictReason": null,
+      "numericCheck": "n/a",
+      "scope": "release"
+    }
+  ],
+  "run": {
+    "id": "<id 1>",
+    "analyzerVersion": "2.3.6+essentia.models-5c5c0c7f",
+    "fallback": false,
+    "usage": {
+      "llmCalls": 4,
+      "inputTokens": 16267,
+      "outputTokens": 2435,
+      "reasoningTokens": 328
+    },
+    "verifier": {
+      "judged": 11,
+      "unjudged": 0,
+      "restated": 7
+    },
+    "sourceErrors": [
+      {
+        "source": "discogs",
+        "code": "not_configured",
+        "message": "DISCOGS_TOKEN is not set"
+      },
+      {
+        "source": "secondhandsongs",
+        "code": "unavailable",
+        "message": "secondhandsongs: HTTP 403 (the source refused the request)"
+      }
+    ]
+  },
+  "audio": {
+    "version": 2,
+    "analyzerVersion": "2.3.6+essentia.models-5c5c0c7f",
+    "window": {
+      "kind": "preview-30s",
+      "durationSeconds": 29.986
+    },
+    "gate": {
+      "passed": true,
+      "reason": null
+    },
+    "tempo": {
+      "bpm": 120.16,
+      "confidence": 0.662,
+      "rawConfidence": {
+        "value": 3.522,
+        "range": [
+          0,
+          5.32
+        ]
+      },
+      "method": "essentia.RhythmExtractor2013+beat-regression",
+      "basis": "signal"
+    },
+    "key": null,
+    "loudness": {
+      "rmsMean": 0.173491,
+      "method": "mean frame RMS, 2048-sample frames at 22050 Hz, DC removed",
+      "basis": "signal"
+    },
+    "beats": {
+      "times": [
+        0.546,
+        1.126,
+        1.707,
+        2.229,
+        2.728,
+        3.228,
+        3.727,
+        4.214,
+        4.714,
+        5.213,
+        5.712,
+        6.2,
+        6.699,
+        7.187,
+        7.686,
+        8.173,
+        8.673,
+        9.172,
+        9.683,
+        10.182,
+        10.681,
+        11.169,
+        11.668,
+        12.167,
+        12.666,
+        13.166,
+        13.677,
+        14.176,
+        14.675,
+        15.174,
+        15.673,
+        16.173,
+        16.66,
+        17.16,
+        17.659,
+        18.17,
+        18.657,
+        19.156,
+        19.667,
+        20.167,
+        20.666,
+        21.165,
+        21.676,
+        22.187,
+        22.686,
+        23.185,
+        23.684,
+        24.184,
+        24.671,
+        25.17,
+        25.681,
+        26.18,
+        26.68,
+        27.179,
+        27.678,
+        28.177,
+        28.677,
+        29.176,
+        29.675
+      ],
+      "method": "essentia.RhythmExtractor2013",
+      "basis": "signal"
+    },
+    "energyContour": {
+      "hopSeconds": 0.09288,
+      "values": [
+        0.125848,
+        0.157845,
+        0.234538,
+        0.106826,
+        0.073712,
+        0.102425,
+        0.074604,
+        0.215564,
+        0.250338,
+        0.160162,
+        0.15092,
+        0.159714,
+        0.128977,
+        0.307832,
+        0.104884,
+        0.089862,
+        0.123915,
+        0.063228,
+        0.272014,
+        0.264255,
+        0.159611,
+        0.162758,
+        0.153445,
+        0.194881,
+        0.24486,
+        0.096471,
+        0.106744,
+        0.123983,
+        0.081176,
+        0.285549,
+        0.204891,
+        0.161745,
+        0.146985,
+        0.138801,
+        0.292931,
+        0.16064,
+        0.080634,
+        0.140268,
+        0.122119,
+        0.106234,
+        0.315613,
+        0.16889,
+        0.153268,
+        0.160826,
+        0.15472,
+        0.263725,
+        0.073488,
+        0.087204,
+        0.20196,
+        0.155376,
+        0.288905,
+        0.298146,
+        0.223183,
+        0.208902,
+        0.200298,
+        0.222796,
+        0.237995,
+        0.141742,
+        0.14958,
+        0.160908,
+        0.101593,
+        0.282454,
+        0.194093,
+        0.157105,
+        0.16725,
+        0.164818,
+        0.255117,
+        0.102796,
+        0.071353,
+        0.143305,
+        0.140498,
+        0.171912,
+        0.328043,
+        0.192181,
+        0.183354,
+        0.194164,
+        0.17709,
+        0.286019,
+        0.130784,
+        0.101639,
+        0.159089,
+        0.079626,
+        0.255374,
+        0.226541,
+        0.163867,
+        0.153229,
+        0.156294,
+        0.200031,
+        0.218528,
+        0.10681,
+        0.148148,
+        0.155213,
+        0.102801,
+        0.263447,
+        0.194563,
+        0.159574,
+        0.147962,
+        0.135276,
+        0.227539,
+        0.148765,
+        0.09053,
+        0.11591,
+        0.113182,
+        0.070531,
+        0.341475,
+        0.15112,
+        0.124716,
+        0.114963,
+        0.106764,
+        0.245467,
+        0.101772,
+        0.071734,
+        0.146962,
+        0.086732,
+        0.223978,
+        0.249001,
+        0.158177,
+        0.147922,
+        0.136249,
+        0.135431,
+        0.264661,
+        0.091666,
+        0.114605,
+        0.11817,
+        0.088099,
+        0.332626,
+        0.285119,
+        0.175108,
+        0.154232,
+        0.149185,
+        0.193912,
+        0.232938,
+        0.17229,
+        0.15454,
+        0.173408,
+        0.146225,
+        0.304485,
+        0.183338,
+        0.142445,
+        0.141273,
+        0.152954,
+        0.244384,
+        0.15017,
+        0.10641,
+        0.152626,
+        0.118126,
+        0.094572,
+        0.301275,
+        0.149626,
+        0.144613,
+        0.142789,
+        0.135183,
+        0.255675,
+        0.093819,
+        0.069612,
+        0.108096,
+        0.100944,
+        0.195768,
+        0.269639,
+        0.155731,
+        0.145683,
+        0.134585,
+        0.116571,
+        0.235561,
+        0.091358,
+        0.081706,
+        0.165493,
+        0.097147,
+        0.27084,
+        0.236387,
+        0.155006,
+        0.139072,
+        0.1263,
+        0.123193,
+        0.339231,
+        0.215197,
+        0.26886,
+        0.273718,
+        0.179867,
+        0.340585,
+        0.256188,
+        0.207005,
+        0.2001,
+        0.180345,
+        0.282154,
+        0.145665,
+        0.107869,
+        0.121159,
+        0.115628,
+        0.082032,
+        0.316858,
+        0.166154,
+        0.142436,
+        0.141068,
+        0.147807,
+        0.25625,
+        0.102152,
+        0.071433,
+        0.109075,
+        0.080279,
+        0.176888,
+        0.211304,
+        0.169242,
+        0.153581,
+        0.143555,
+        0.126773,
+        0.257981,
+        0.096773,
+        0.080908,
+        0.144687,
+        0.091959,
+        0.252054,
+        0.227795,
+        0.154257,
+        0.166672,
+        0.155986,
+        0.17141,
+        0.273857,
+        0.146127,
+        0.113315,
+        0.14989,
+        0.088502,
+        0.241317,
+        0.214936,
+        0.148188,
+        0.161295,
+        0.154016,
+        0.22303,
+        0.169874,
+        0.110141,
+        0.12768,
+        0.118643,
+        0.083424,
+        0.293148,
+        0.196368,
+        0.160592,
+        0.156785,
+        0.137711,
+        0.222073,
+        0.142443,
+        0.098052,
+        0.158863,
+        0.1242,
+        0.100194,
+        0.308554,
+        0.190066,
+        0.169768,
+        0.173804,
+        0.180355,
+        0.247794,
+        0.120783,
+        0.099201,
+        0.146172,
+        0.139895,
+        0.226472,
+        0.307843,
+        0.20595,
+        0.205457,
+        0.208295,
+        0.274061,
+        0.253506,
+        0.108149,
+        0.15797,
+        0.200041,
+        0.137843,
+        0.352647,
+        0.294512,
+        0.196904,
+        0.183324,
+        0.158104,
+        0.255828,
+        0.261841,
+        0.239583,
+        0.222956,
+        0.208023,
+        0.1773,
+        0.348637,
+        0.241647,
+        0.175655,
+        0.181834,
+        0.184886,
+        0.221758,
+        0.139576,
+        0.067057,
+        0.254787,
+        0.240956,
+        0.171814,
+        0.326898,
+        0.236272,
+        0.191678,
+        0.1677,
+        0.128065,
+        0.231778,
+        0.131098,
+        0.099256,
+        0.154511,
+        0.09615,
+        0.247028,
+        0.281789,
+        0.175041,
+        0.160066,
+        0.149269,
+        0.130292,
+        0.221918,
+        0.061681,
+        0.09224,
+        0.181511,
+        0.132701,
+        0.31609,
+        0.259127,
+        0.191494,
+        0.152869,
+        0.147678,
+        0.19957,
+        0.20479,
+        0.087089,
+        0.113205,
+        0.125338,
+        0.094112,
+        0.288134,
+        0.185109,
+        0.155425
+      ],
+      "method": "frame RMS, 2048-sample frames at 22050 Hz, DC removed",
+      "basis": "signal"
+    },
+    "sections": {
+      "segments": [
+        {
+          "label": "A",
+          "start": 0,
+          "end": 29.986
+        }
+      ],
+      "method": "novelty-on-beat-chroma",
+      "basis": "signal"
+    },
+    "keyMoments": [
+      {
+        "time": 0.06,
+        "type": "onset",
+        "intensity": 0.844,
+        "description": "Onset"
+      },
+      {
+        "time": 1.25,
+        "type": "onset",
+        "intensity": 0.752,
+        "description": "Onset"
+      },
+      {
+        "time": 2.71,
+        "type": "harmonic_change",
+        "intensity": 0.283,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 4.78,
+        "type": "energy_peak",
+        "intensity": 0.845,
+        "description": "Energy peak"
+      },
+      {
+        "time": 7.19,
+        "type": "onset",
+        "intensity": 0.462,
+        "description": "Onset"
+      },
+      {
+        "time": 8.66,
+        "type": "harmonic_change",
+        "intensity": 0.289,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 10.65,
+        "type": "harmonic_change",
+        "intensity": 0.266,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 11.65,
+        "type": "energy_peak",
+        "intensity": 0.943,
+        "description": "Energy peak"
+      },
+      {
+        "time": 12.65,
+        "type": "harmonic_change",
+        "intensity": 0.266,
+        "description": "Harmonic change"
+      },
+      {
+        "time": 14.18,
+        "type": "onset",
+        "intensity": 1,
+        "description": "Onset"
+      },
+      {
+        "time": 16.67,
+        "type": "energy_peak",
+        "intensity": 0.966,
+        "description": "Energy peak"
+      },
+      {
+        "time": 18.18,
+        "type": "onset",
+        "intensity": 0.866,
+        "description": "Onset"
+      },
+      {
+        "time": 19.15,
+        "type": "onset",
+        "intensity": 0.807,
+        "description": "Onset"
+      },
+      {
+        "time": 22.19,
+        "type": "onset",
+        "intensity": 0.73,
+        "description": "Onset"
+      },
+      {
+        "time": 24.65,
+        "type": "energy_peak",
+        "intensity": 1,
+        "description": "Energy peak"
+      },
+      {
+        "time": 29.18,
+        "type": "onset",
+        "intensity": 0.663,
+        "description": "Onset"
+      }
+    ],
+    "fingerprint": {
+      "styles": {
+        "model": {
+          "id": "discogs-effnet-bs64-1",
+          "licence": "CC BY-NC-SA 4.0"
+        },
+        "top": [
+          {
+            "label": "Rock---Dream Pop",
+            "score": 0.1463
+          },
+          {
+            "label": "Rock---Soft Rock",
+            "score": 0.138
+          },
+          {
+            "label": "Funk / Soul---Soul",
+            "score": 0.1192
+          },
+          {
+            "label": "Electronic---Disco",
+            "score": 0.1107
+          },
+          {
+            "label": "Rock---Indie Rock",
+            "score": 0.1066
+          },
+          {
+            "label": "Funk / Soul---Disco",
+            "score": 0.1047
+          },
+          {
+            "label": "Electronic---Nu-Disco",
+            "score": 0.0922
+          },
+          {
+            "label": "Pop---Indie Pop",
+            "score": 0.0754
+          },
+          {
+            "label": "Rock---Pop Rock",
+            "score": 0.0576
+          },
+          {
+            "label": "Funk / Soul---Contemporary R&B",
+            "score": 0.0556
+          }
+        ],
+        "basis": "model"
+      },
+      "tags": {
+        "model": {
+          "id": "msd-musicnn-1",
+          "licence": "CC BY-NC-SA 4.0"
+        },
+        "scores": [
+          {
+            "label": "soul",
+            "score": 0.2772
+          },
+          {
+            "label": "pop",
+            "score": 0.2355
+          },
+          {
+            "label": "female vocalists",
+            "score": 0.2199
+          },
+          {
+            "label": "jazz",
+            "score": 0.1032
+          },
+          {
+            "label": "chillout",
+            "score": 0.1029
+          },
+          {
+            "label": "electronic",
+            "score": 0.0838
+          },
+          {
+            "label": "rock",
+            "score": 0.0762
+          },
+          {
+            "label": "indie",
+            "score": 0.0714
+          },
+          {
+            "label": "funk",
+            "score": 0.0595
+          },
+          {
+            "label": "rnb",
+            "score": 0.0536
+          },
+          {
+            "label": "dance",
+            "score": 0.0445
+          },
+          {
+            "label": "70s",
+            "score": 0.0426
+          },
+          {
+            "label": "alternative",
+            "score": 0.0376
+          },
+          {
+            "label": "80s",
+            "score": 0.0313
+          },
+          {
+            "label": "electronica",
+            "score": 0.0254
+          },
+          {
+            "label": "female vocalist",
+            "score": 0.0251
+          },
+          {
+            "label": "chill",
+            "score": 0.0243
+          },
+          {
+            "label": "Mellow",
+            "score": 0.0232
+          },
+          {
+            "label": "90s",
+            "score": 0.0218
+          },
+          {
+            "label": "folk",
+            "score": 0.0214
+          },
+          {
+            "label": "indie pop",
+            "score": 0.0207
+          },
+          {
+            "label": "00s",
+            "score": 0.0195
+          },
+          {
+            "label": "instrumental",
+            "score": 0.0168
+          },
+          {
+            "label": "classic rock",
+            "score": 0.0162
+          },
+          {
+            "label": "sexy",
+            "score": 0.0162
+          },
+          {
+            "label": "ambient",
+            "score": 0.0161
+          },
+          {
+            "label": "House",
+            "score": 0.0157
+          },
+          {
+            "label": "beautiful",
+            "score": 0.0155
+          },
+          {
+            "label": "blues",
+            "score": 0.0151
+          },
+          {
+            "label": "easy listening",
+            "score": 0.0147
+          },
+          {
+            "label": "oldies",
+            "score": 0.0143
+          },
+          {
+            "label": "indie rock",
+            "score": 0.0126
+          },
+          {
+            "label": "60s",
+            "score": 0.0124
+          },
+          {
+            "label": "acoustic",
+            "score": 0.0122
+          },
+          {
+            "label": "male vocalists",
+            "score": 0.0118
+          },
+          {
+            "label": "Hip-Hop",
+            "score": 0.0114
+          },
+          {
+            "label": "Progressive rock",
+            "score": 0.0101
+          },
+          {
+            "label": "experimental",
+            "score": 0.0093
+          },
+          {
+            "label": "electro",
+            "score": 0.0082
+          },
+          {
+            "label": "guitar",
+            "score": 0.0072
+          },
+          {
+            "label": "alternative rock",
+            "score": 0.0067
+          },
+          {
+            "label": "sad",
+            "score": 0.0056
+          },
+          {
+            "label": "catchy",
+            "score": 0.0051
+          },
+          {
+            "label": "party",
+            "score": 0.0044
+          },
+          {
+            "label": "happy",
+            "score": 0.0044
+          },
+          {
+            "label": "country",
+            "score": 0.0037
+          },
+          {
+            "label": "punk",
+            "score": 0.0023
+          },
+          {
+            "label": "hard rock",
+            "score": 0.0021
+          },
+          {
+            "label": "metal",
+            "score": 0.0007
+          },
+          {
+            "label": "heavy metal",
+            "score": 0.0007
+          }
+        ],
+        "basis": "model"
+      },
+      "moods": {
+        "danceability": {
+          "value": 0.9994,
+          "range": [
+            0,
+            1
+          ],
+          "model": {
+            "id": "danceability-msd-musicnn-1",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "acoustic": {
+          "value": 0.6109,
+          "range": [
+            0,
+            1
+          ],
+          "model": {
+            "id": "mood_acoustic-discogs-effnet-1",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "instrumental": {
+          "value": 0.0899,
+          "range": [
+            0,
+            1
+          ],
+          "model": {
+            "id": "voice_instrumental-msd-musicnn-1",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "valence": {
+          "value": 5.4903,
+          "range": [
+            1,
+            9
+          ],
+          "model": {
+            "id": "deam-msd-musicnn-2",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        },
+        "arousal": {
+          "value": 5.5344,
+          "range": [
+            1,
+            9
+          ],
+          "model": {
+            "id": "deam-msd-musicnn-2",
+            "licence": "CC BY-NC-SA 4.0"
+          },
+          "basis": "model"
+        }
+      }
+    },
+    "withheld": {
+      "key": {
+        "code": "no_sustained_pitch",
+        "reason": "no sustained pitch"
+      }
+    }
+  },
+  "bpm": 120,
+  "key": null,
+  "energy": 0.614,
+  "valence": 0.561,
+  "danceability": 0.999,
+  "acousticness": 0.611,
+  "keyMoments": [
+    {
+      "time": 0.06,
+      "type": "onset",
+      "intensity": 0.844,
+      "description": "Onset"
+    },
+    {
+      "time": 1.25,
+      "type": "onset",
+      "intensity": 0.752,
+      "description": "Onset"
+    },
+    {
+      "time": 2.71,
+      "type": "harmonic_change",
+      "intensity": 0.283,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 4.78,
+      "type": "energy_peak",
+      "intensity": 0.845,
+      "description": "Energy peak"
+    },
+    {
+      "time": 7.19,
+      "type": "onset",
+      "intensity": 0.462,
+      "description": "Onset"
+    },
+    {
+      "time": 8.66,
+      "type": "harmonic_change",
+      "intensity": 0.289,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 10.65,
+      "type": "harmonic_change",
+      "intensity": 0.266,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 11.65,
+      "type": "energy_peak",
+      "intensity": 0.943,
+      "description": "Energy peak"
+    },
+    {
+      "time": 12.65,
+      "type": "harmonic_change",
+      "intensity": 0.266,
+      "description": "Harmonic change"
+    },
+    {
+      "time": 14.18,
+      "type": "onset",
+      "intensity": 1,
+      "description": "Onset"
+    },
+    {
+      "time": 16.67,
+      "type": "energy_peak",
+      "intensity": 0.966,
+      "description": "Energy peak"
+    },
+    {
+      "time": 18.18,
+      "type": "onset",
+      "intensity": 0.866,
+      "description": "Onset"
+    },
+    {
+      "time": 19.15,
+      "type": "onset",
+      "intensity": 0.807,
+      "description": "Onset"
+    },
+    {
+      "time": 22.19,
+      "type": "onset",
+      "intensity": 0.73,
+      "description": "Onset"
+    },
+    {
+      "time": 24.65,
+      "type": "energy_peak",
+      "intensity": 1,
+      "description": "Energy peak"
+    },
+    {
+      "time": 29.18,
+      "type": "onset",
+      "intensity": 0.663,
+      "description": "Onset"
+    }
+  ],
+  "audioSource": "unavailable",
+  "audioConfidence": "low",
+  "audioUnavailableReason": "not_detected"
+}

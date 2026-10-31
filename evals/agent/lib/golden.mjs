@@ -23,9 +23,10 @@ export const STRATA = [
 export const RELATIONS = ["sample", "interpolation", "cover"];
 
 /**
- * The CI replay subset: six live rows that cover every scored path (documented samples with
+ * The CI replay subset: seven live rows that cover every scored path (documented samples with
  * held-out edges, a no-sample control, an ambiguous title that needs the clarification step, and
- * a non-English title).
+ * a non-English title), plus Stronger, whose result has links between two related recordings
+ * (second-hop samples) and whose preview gave no measurement.
  */
 export const CI_SUBSET = [
   "GBDUW0000053", // One More Time, Daft Punk
@@ -34,6 +35,7 @@ export const CI_SUBSET = [
   "USWB19900178", // Dreams, Fleetwood Mac
   "USDJ20200650", // Hurt, Johnny Cash
   "JPP301900716", // 夜に駆ける, YOASOBI
+  "USUM70741299", // Stronger, Kanye West
 ];
 
 const ISRC_RE = /^[A-Z]{2}[A-Z0-9]{3}\d{7}$/;

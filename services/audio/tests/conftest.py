@@ -60,12 +60,16 @@ class _Handler(BaseHTTPRequestHandler):
                 self.protocol_version = "HTTP/1.1"
                 headers["Transfer-Encoding"] = "chunked"
                 headers["Connection"] = "close"
-            else:
-                # Neither a length nor chunking: the body runs to the connection's close.
-                if framing == "close":
-                    self.protocol_version = "HTTP/1.1"
-                headers["Connection"] = "close"
+            elif framing != "http/1.0":
+                # Neither a length nor chunking: the body runs to the connection's close. An
+                # HTTP/1.0 response says nothing more; an HTTP/1.1 one ("bare") may not either.
+                self.protocol_version = "HTTP/1.1"
+                if framing in ("close", "keep-alive"):
+                    headers["Connection"] = framing
             self._send(200, headers)
+            if framing not in ("length", "chunked"):
+                # Whatever the Connection header says, the body ends when the connection closes.
+                self.close_connection = True
             if framing == "chunked":
                 self._write_chunked(sent, last=len(sent) == len(body))
             else:
@@ -139,9 +143,10 @@ def cdn():
     streamed by /endless.mp3, server.files maps extra paths to bodies, served as audio/mpeg
     unless server.types names another content type for the path (None: no Content-Type).
     server.framing names how an extra path's body is framed: "length" (Content-Length, the
-    default), "chunked", or with neither, "http/1.0" (an HTTP/1.0 response) or "close" (HTTP/1.1
-    with Connection: close). server.cut maps a path to the bytes sent before the connection
-    closes.
+    default), "chunked", or with neither: "http/1.0" (an HTTP/1.0 response with no Connection
+    header), "bare" (HTTP/1.1 with no Connection header), "close" or "keep-alive" (HTTP/1.1 with
+    that Connection header). Unframed bodies always end with the connection's close. server.cut
+    maps a path to the bytes sent before the connection closes.
     """
     server = ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
     server.hits = []

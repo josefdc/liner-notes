@@ -23,6 +23,8 @@ VBR = Path(__file__).parent / "fixtures" / "tone-vbr.mp3"
 # Samples in the 40 frames of tone-vbr.mp3.
 VBR_SAMPLES = 40 * 1152
 UNCHECKED = "length cannot be checked"
+# Bodies with neither a length nor chunking, all of which end with the connection's close.
+UNFRAMED = ["http/1.0", "bare", "close", "keep-alive"]
 PATH = "/api/1/1/a/b/0/preview.mp3"
 
 
@@ -82,7 +84,7 @@ def _never_measured(monkeypatch):
     monkeypatch.setattr(main, "analyze_audio_file", fail)
 
 
-@pytest.mark.parametrize("framing", ["http/1.0", "close"])
+@pytest.mark.parametrize("framing", UNFRAMED)
 def test_an_unframed_body_cut_short_is_refused_and_never_measured(
     client, cdn, temp_dir, monkeypatch, framing
 ):
@@ -106,7 +108,7 @@ def test_an_unframed_body_cut_short_is_refused_and_never_measured(
     assert created == []
 
 
-@pytest.mark.parametrize("framing", ["http/1.0", "close"])
+@pytest.mark.parametrize("framing", UNFRAMED)
 def test_an_unframed_body_that_is_whole_is_refused_too(client, cdn, temp_dir, monkeypatch, framing):
     base, server = cdn
     created = _files_created(monkeypatch)
@@ -120,11 +122,16 @@ def test_an_unframed_body_that_is_whole_is_refused_too(client, cdn, temp_dir, mo
 
 
 @pytest.mark.parametrize("framing", ["length", "chunked"])
-def test_a_framed_body_is_downloaded_and_measured_in_full(client, cdn, temp_dir, framing):
+def test_a_framed_body_is_downloaded_and_measured_in_full(
+    client, cdn, temp_dir, monkeypatch, framing
+):
     base, server = cdn
+    created = _files_created(monkeypatch)
     body = _serve(server, framing)
     path = fetch(f"{base}{PATH}")
     try:
+        # The hook sees the file the body is written to, so an empty list in the tests above means none.
+        assert created == [path]
         assert Path(path).read_bytes() == body
     finally:
         os.remove(path)
@@ -159,7 +166,8 @@ def test_the_header_check_accepts_a_framed_body(framing):
     assert preview._check_headers(response, preview.MAX_PREVIEW_BYTES) == ".mp3"
 
 
-def test_the_header_check_refuses_a_body_with_neither_a_length_nor_chunking():
-    response = httpx.Response(200, headers={"content-type": "audio/mpeg", "connection": "close"})
+@pytest.mark.parametrize("connection", [{}, {"connection": "close"}, {"connection": "keep-alive"}])
+def test_the_header_check_refuses_a_body_with_neither_a_length_nor_chunking(connection):
+    response = httpx.Response(200, headers={"content-type": "audio/mpeg", **connection})
     with pytest.raises(PreviewDownloadError, match=UNCHECKED):
         preview._check_headers(response, preview.MAX_PREVIEW_BYTES)

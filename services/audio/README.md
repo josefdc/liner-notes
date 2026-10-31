@@ -725,13 +725,14 @@ content encoding. It stops at 2 MB (previews are about 0.5 MB). Connect and read
 and 10 s, and the whole download must finish within 20 s. The temporary file is removed after the
 analysis, whatever the outcome.
 
-The body must be framed by a `Content-Length` or by chunked transfer encoding, so a download can
-be told whole: a body that ends before its declared length or its last chunk is a `502`. A body
-with neither runs to the connection's close, and one cut short would be measured as if it were
-the whole preview. Such a body is refused as a `502` before it is read, even when it arrived
-whole, since nothing says so. An HTTP/1.0 response, or an HTTP/1.1 one with `Connection: close`,
-is refused only when it has no `Content-Length` and is not chunked; with a `Content-Length` it is
-accepted.
+The body must be framed by a `Content-Length` or by chunked transfer encoding, so a transfer cut
+short can be noticed: a body that ends before its declared length or its last chunk is a `502`.
+A body with neither runs to the connection's close, and one cut short would be measured as if it
+were the whole preview. Such a body is refused as a `502` before it is read, even when the server
+would have sent it whole, since nothing says so. An HTTP/1.0 response, or an HTTP/1.1 one with
+`Connection: close`, is refused only when it has no `Content-Length` and is not chunked; with a
+`Content-Length` it is accepted. Framing checks only the transfer from the server that answers:
+a cut copy of the file that its server declares complete is still measured (#290).
 
 ## How it works
 

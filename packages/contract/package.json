@@ -32,7 +32,7 @@
     "snapshot:update": "UPDATE_CONTRACT_SNAPSHOT=1 vitest run --root ../.. --project contract snapshot"
   },
   "dependencies": {
-    "zod": "4.6.5"
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "typescript": "~6.0.3"

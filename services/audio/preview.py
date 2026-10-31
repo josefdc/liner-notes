@@ -4,8 +4,9 @@ Preview URL validation and bounded download.
 The service only fetches 30-second previews from the Deezer and Spotify CDNs. A URL is
 accepted when it is an https URL whose parsed host is one of the preview hosts below, with
 no userinfo, no IP literal and no port other than 443. Downloads never follow redirects,
-must declare an audio content type the service decodes, are capped at MAX_PREVIEW_BYTES and
-must finish within DOWNLOAD_DEADLINE_S.
+must declare an audio content type the service decodes and a body framed by a Content-Length or
+chunking (so a cut transfer raises), are capped at MAX_PREVIEW_BYTES and must finish within
+DOWNLOAD_DEADLINE_S.
 """
 
 from __future__ import annotations
@@ -150,10 +151,11 @@ UNSUPPORTED_TYPES = frozenset(
 
 def _check_headers(response: httpx.Response, max_bytes: int) -> str:
     """
-    Refuse anything but a 200 audio response within the cap; return a file suffix. A type the
-    service does not decode raises UnsupportedFormatError, any other refusal
-    PreviewDownloadError, as does a missing or empty content type: saved as .mp3, a body that is
-    not audio (a WebM, say) can hold bytes libsndfile's MP3 decoder reads as a few frames.
+    Refuse anything but a 200 audio response within the cap whose body is framed by a
+    Content-Length or by chunking; return a file suffix. A type the service does not decode
+    raises UnsupportedFormatError, any other refusal PreviewDownloadError, as does a missing or
+    empty content type: saved as .mp3, a body that is not audio (a WebM, say) can hold bytes
+    libsndfile's MP3 decoder reads as a few frames.
     """
     if response.status_code != 200:
         raise PreviewDownloadError(f"unexpected status {response.status_code}")
@@ -168,6 +170,15 @@ def _check_headers(response: httpx.Response, max_bytes: int) -> str:
     declared = response.headers.get("content-length")
     if declared is not None and (not declared.isdigit() or int(declared) > max_bytes):
         raise PreviewDownloadError(f"declared length {declared} over the cap")
+    # h11 raises on a body that ends before its Content-Length or its last chunk, so a framed
+    # download that arrives is whole (no content encoding: the length is the bytes received). A
+    # body with neither runs to the connection's close, and one cut short would be measured as
+    # if whole; it is refused, whole or not.
+    chunked = response.headers.get("transfer-encoding", "").strip().lower() == "chunked"
+    if declared is None and not chunked:
+        raise PreviewDownloadError(
+            "the preview's length cannot be checked: no Content-Length and not chunked"
+        )
     return _SUFFIXES.get(media_type, ".mp3")
 
 

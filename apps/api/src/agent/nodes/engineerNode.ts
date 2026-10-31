@@ -49,6 +49,7 @@ import {
   resolvePreview,
   type TrackPreviewRequest,
 } from "../../sources/audio.js";
+import { cassetteMode } from "../../sources/http.js";
 import { type CachedAudio, getCache, type SonicCache } from "../../store/cache.js";
 import {
   audioConfidence,
@@ -407,7 +408,12 @@ export async function engineerNode(
     // The run's abort signal stops the analysis when the client leaves.
     config.signal?.throwIfAborted();
     const { spotifyPreviewUrl, ...trackRequest } = request;
-    const audioRun: AudioRunContext = { preview: fresh, serviceAvailable: health !== null };
+    const audioRun: AudioRunContext = {
+      preview: fresh,
+      serviceAvailable: health !== null,
+      analyzerVersion: health?.analyzerVersion ?? null,
+      trackId: track.id,
+    };
     const analysisResult = await analyzeAudioPreview.invoke(
       { ...trackRequest, previewUrl: spotifyPreviewUrl },
       { signal: config.signal, configurable: { audioRun } },
@@ -448,9 +454,11 @@ export async function engineerNode(
 
   // Only measurements with a tempo and a key are cached: under the track's own key, and under
   // the key of the Deezer entry when the clip was taken by ISRC. A failed write is logged and the
-  // run continues; nothing reports the result as cached. Nothing is cached for a cancelled run.
+  // run continues; nothing reports the result as cached. Nothing is cached for a cancelled run,
+  // nor a measurement replayed from the audio cassette: the cache dates what it holds as
+  // measured when it was written.
   config.signal?.throwIfAborted();
-  if (cache && measurement.previewMatch) {
+  if (cache && measurement.previewMatch && cassetteMode() !== "replay") {
     try {
       for (const key of audioTrackKeys(measurement.previewMatch, track.id, request.isrc)) {
         cache.putAudio(key, track.id, measurement);

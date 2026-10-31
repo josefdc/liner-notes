@@ -2663,6 +2663,13 @@ export interface SourceRequest {
   recordAs?: (json: unknown) => unknown;
   /** false: never recorded or replayed (local services). */
   cassette?: boolean;
+  /**
+   * The request's cassette entry, in place of the key made from its method, URL and body: for a
+   * request whose URL or body changes from run to run for the same answer (the audio service's
+   * /analyze takes a signed preview URL that expires; sources/audio.ts keys it by the track and
+   * the analyzer). It must hold no credential or media URL: it is written to the cassette as is.
+   */
+  cassetteKey?: string;
 }
 
 function parseRetryAfter(value: string | null): number | undefined {
@@ -3230,7 +3237,7 @@ export async function fetchJson<T>(req: SourceRequest): Promise<T> {
   const url = String(req.url);
   const method = req.method ?? "GET";
   const mode = req.cassette === false ? "off" : cassetteMode();
-  const key = mode === "off" ? "" : cassetteKey(method, url, req.body);
+  const key = mode === "off" ? "" : (req.cassetteKey ?? cassetteKey(method, url, req.body));
 
   if (mode === "replay") {
     const entry = readCassette(req.source).entries[key];

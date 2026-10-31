@@ -1,18 +1,22 @@
 #!/usr/bin/env node
 // Writes the claims a person can label blind, as CSV: the claim, the excerpts it cites and empty
 // columns for the label. It carries no judge verdict and nothing that gives the expected answer
-// away (no construction label, mutation or positive source), and the rows are shuffled at a
-// fixed seed, so a mutated claim does not sit next to the claim it came from. Case ids name the
-// mutation, so the CSV carries `label_id` instead: the first 12 hex digits of the sha256 of the
-// case id (labelId below), which maps each row back to its case.
+// away (no construction label, mutation or positive source). Case ids name the mutation, so each
+// row carries an opaque `label_id` instead: HMAC-SHA256 of the case id under a salt, its first 16
+// hex digits. The rows are shuffled with a seed drawn from the same salt. The salt is random
+// unless given, so the ids and the order cannot be recomputed from the committed set without the
+// key: a JSON file with the salt and every label id's case id, written to `--key`. Keep the key
+// away from the people labelling (and out of the repository next to the CSV): the CLI refuses a
+// key in the CSV's directory.
 //
-//   node evals/agent/export-labels.mjs                    the claim cases of evals/perturb.jsonl
-//   node evals/agent/export-labels.mjs --from recordings  the claims of fixtures/replays/*.json
-//   ... --out labels.csv                                  write a file instead of stdout
+//   node evals/agent/export-labels.mjs --key ~/labels-key.json                the claim cases of evals/perturb.jsonl
+//   node evals/agent/export-labels.mjs --from recordings --key <path>         the claims of fixtures/replays/*.json
+//   ... --out labels.csv                                                      write a file instead of stdout
+//   ... --salt <hex>                                                          a given salt, to write the same CSV again
 
-import { createHash } from "node:crypto";
+import { createHmac, randomBytes } from "node:crypto";
 import { writeFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { readRecordings } from "./make-perturb.mjs";
@@ -29,10 +33,15 @@ export const COLUMNS = [
   "labeller",
   "notes",
 ];
-const SEED = 33;
 
-/** The opaque id a CSV row carries for a case id. */
-export const labelId = (id) => createHash("sha256").update(id).digest("hex").slice(0, 12);
+/** The opaque id a CSV row carries for a case id, under a salt. */
+export const labelId = (salt, id) =>
+  createHmac("sha256", salt).update(id).digest("hex").slice(0, 16);
+
+/** The shuffle seed a salt gives (a 32-bit integer). */
+const seedOf = (salt) => createHmac("sha256", salt).update("order").digest().readUInt32BE(0);
+
+export const randomSalt = () => randomBytes(16).toString("hex");
 
 const csvCell = (v) => {
   const s = String(v ?? "");
@@ -70,33 +79,54 @@ export function labelRows(from = "perturb") {
   throw new Error(`--from: perturb or recordings, not "${from}"`);
 }
 
-export function toCsv(rows, seed = SEED) {
-  const next = rng(seed);
+/** The CSV and its key ({ salt, labels: { label_id: case id } }) for rows, under a salt. */
+export function toCsv(rows, salt) {
+  if (typeof salt !== "string" || salt.length < 16) {
+    throw new Error("a salt of at least 16 characters is needed");
+  }
+  const next = rng(seedOf(salt));
   const order = [...rows];
   for (let i = order.length - 1; i > 0; i--) {
     const j = Math.floor(next() * (i + 1));
     [order[i], order[j]] = [order[j], order[i]];
   }
   const lines = [COLUMNS.join(",")];
+  const labels = {};
   for (const r of order) {
+    const id = labelId(salt, r.id);
+    if (labels[id]) throw new Error(`label id ${id} given twice`);
+    labels[id] = r.id;
     lines.push(
-      [labelId(r.id), r.recording, r.claim, r.excerpts.join("\n"), r.urls.join("\n"), "", "", ""]
+      [id, r.recording, r.claim, r.excerpts.join("\n"), r.urls.join("\n"), "", "", ""]
         .map(csvCell)
         .join(","),
     );
   }
-  return `${lines.join("\n")}\n`;
+  return { csv: `${lines.join("\n")}\n`, key: { salt, labels } };
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2);
   const arg = (flag) => (args.includes(flag) ? args[args.indexOf(flag) + 1] : undefined);
   try {
-    const csv = toCsv(labelRows(arg("--from") ?? "perturb"));
+    const keyPath = arg("--key");
     const out = arg("--out");
+    if (!keyPath) {
+      throw new Error("--key <path> is needed: the key maps label ids back to cases");
+    }
+    if (out && dirname(resolve(out)) === dirname(resolve(keyPath))) {
+      throw new Error(
+        "--key must not be in the CSV's directory: the people labelling must not see it",
+      );
+    }
+    const { csv, key } = toCsv(
+      labelRows(arg("--from") ?? "perturb"),
+      arg("--salt") ?? randomSalt(),
+    );
+    writeFileSync(keyPath, `${JSON.stringify(key, null, 2)}\n`);
     if (out) {
       writeFileSync(out, csv);
-      console.error(`wrote ${out}`);
+      console.error(`wrote ${out} (key: ${keyPath})`);
     } else process.stdout.write(csv);
   } catch (error) {
     console.error(`export-labels: ${error.message}`);

@@ -111,8 +111,9 @@ Field rules:
   `otherDocumentedTargets` with `relation: null`.
 - **Several edges with the same target** are one gold relation backed by
   several sources (for example Wikipedia, a newspaper and MusicBrainz). Score
-  per distinct target, not per edge; the extra edges exist so that held-out
-  credit survives when one source domain is excluded (see below).
+  per distinct target, not per edge; the extra edges record every source that
+  documents the target, and so every site whose citation takes its held-out
+  credit away (see below).
 - **edgesExhaustive / otherDocumentedTargets.** Gold edges are not always
   every relation the sources mention. `otherDocumentedTargets` lists
   relations the cited sources state that gold deliberately does not score
@@ -133,16 +134,25 @@ Field rules:
 - Recall: a gold target counts as found when a proposed edge points to the
   same recording (by ISRC or MusicBrainz id) or to the same title and artist,
   with the gold relation or one of its `relationAlternatives`.
-- Precision: a proposed edge that matches gold is a true positive. A proposed
-  edge that matches an `otherDocumentedTargets` entry is **neither a true nor
-  a false positive**; it is left out of precision. On rows with
-  `edgesExhaustive: true`, every other proposed edge is a false positive. On
-  rows with `edgesExhaustive: false`, the sources may know relations gold does
-  not list, so only proposals that match gold or are clearly unsupported
-  (nothing in the run's evidence or the cited sources backs them) count;
-  anything else is left out.
+- Precision: a gold target gives **one** true positive, however many proposed
+  edges name it (another spelling, a remaster title, an ISRC match); the
+  others are duplicates, left out. When the code and the model both propose
+  it, the code's edge is the one credited, so model precision covers only the
+  edges the code did not also build. A gold target proposed with a relation
+  gold does not accept is a false positive ("right target, wrong relation"),
+  and so is the track proposed as its own sample. A proposed edge that matches
+  an `otherDocumentedTargets` entry is **neither a true nor a false
+  positive**; it is left out of precision. On rows with `edgesExhaustive:
+  true`, every other proposed edge is a false positive. On rows with
+  `edgesExhaustive: false`, the sources may know relations gold does not list,
+  so a proposal is left out only when one sentence of the run's evidence names
+  its title and its artist with a relation; any other is a false positive.
 - On no-sample controls any proposed sample, interpolation or cover is a
   hallucinated relation.
+- The pre-verifier support rate is the share of the model's claims, before the
+  verifier runs, that the judge marks supported; a claim the judge did not
+  reach counts as not supported. It is a rate of the judge's verdicts, not of
+  truth.
 
 ## Strata
 
@@ -237,14 +247,20 @@ held-out: Wikipedia articles, newspapers and magazines, broadcasters,
 interviews, label press releases, liner notes.
 
 Held-out status is decided **per run**, not once. Web search can surface any
-domain, so an edge stops counting as held-out for a given run if that run's
-evidence cites the edge's source domain (for example, a run whose evidence
-includes an `en.wikipedia.org` page loses held-out credit for every
-Wikipedia-sourced edge it finds). The flag in the file is the default; the
-scorer applies the per-run rule. To keep one cited domain from wiping out all
-held-out credit, every documented-samples row has held-out edges from at least
-two different domains (Wikipedia and a newspaper, magazine or broadcaster);
-`summary.mjs` lists the domains.
+domain, so a gold target stops counting as held-out for a given run if that
+run's evidence cites the site of **any** of the target's held-out sources (for
+example, a run whose evidence includes an `en.wikipedia.org` page loses
+held-out credit for every target Wikipedia documents, even one a newspaper
+documents too: the run could have read it there). Sites are registrable
+domains (`de.wikipedia.org` is `wikipedia.org`); an archived or cached copy
+counts as the page it copies, and a cited page whose site cannot be placed (a
+link shortener, an unparseable URL) counts as citing every site. The flag in
+the file is the default; the scorer applies the per-run rule. Every
+documented-samples row has held-out edges from at least two different domains
+(Wikipedia and a newspaper, magazine or broadcaster; `summary.mjs` lists the
+domains), but under this rule a run that cites Wikipedia keeps held-out credit
+only for targets Wikipedia does not document. Runs that cite Wikipedia for
+most rows leave few held-out targets, and the report says so.
 
 ## Changing the set
 

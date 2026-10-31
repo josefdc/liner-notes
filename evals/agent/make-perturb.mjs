@@ -11,15 +11,29 @@
 //   a code-built sourced claim (supported by construction: the app wrote it from the record it
 //   cites) or a model claim that passes the deterministic support check (lib/support.mjs: every
 //   sentence's titles, years and relation verbs are in the excerpts it cites).
-// - Negatives are mutations of a positive that its cited excerpts no longer support: another
-//   real title or artist, another year, the roles swapped (who samples whom), another relation
-//   (sample -> cover), or the claim shown with a real excerpt from another recording.
-// Numeric cases ("kind": "numeric"), for the app's numeric check: tempos stated at the measured
-// value, at true octave equivalents (x2, x1/2) and at false values (x1.25, x0.8), on each
-// recording's measured tempo; and keys stated as the key, its relative key and false keys (a
-// whole tone and a tritone away). No committed recording has a measured key (every one was
-// withheld by the audio service), so the key cases carry a synthetic key block, marked
-// "keySource": "synthetic".
+// - Negatives are mutations of a positive that its cited excerpts do not support: another real
+//   title or artist (from a MusicBrainz excerpt or another recording's own title and artist),
+//   another year, the roles swapped (who samples whom), another relation (sample -> cover), or
+//   the claim shown with a real excerpt from another recording. "Unsupported" means unsupported
+//   by the cited excerpts, not false in the world.
+// Numeric cases ("kind": "numeric"), for the app's numeric check (checkNumbers). Each states the
+// exact result the check must give ("expect": consistent, conflict or contradicted), and has a
+// category:
+// - "equivalent": the measured value restated (exact, within the band, a range around it, a
+//   flat spelling of the key, the key with no mode) is consistent; an octave (x2, x1/2, x1/4,
+//   x4 when it stays under 400 BPM) or the relative key is a conflict, both values shown;
+// - "estimator-error": a value an estimator could have produced instead (x1.5, x2/3, +3 %, the
+//   parallel key, a fifth either way) is a conflict;
+// - "false-caught": a false value the claim gives as the track's own, against a confident
+//   measurement (x1.25, x0.8; a whole tone or a tritone away), is contradicted;
+// - "false-shown-both": a false value the check shows next to the measurement instead of
+//   rejecting it, by design: the claim is not marked as giving the track's own value, or the
+//   measurement is below its estimator's confidence floor.
+// Tempo cases use each recording's measured tempo block unchanged ("synthetic": []), except the
+// confidence-floor cases, which set its confidence and method ("synthetic": ["tempo.confidence",
+// "tempo.method"]). No committed recording has a measured key (the audio service withheld every
+// one), so every key case carries a synthetic key block ("synthetic": ["key"], with
+// "basis": "synthetic").
 
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -44,7 +58,7 @@ const PITCHES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"
 export function readRecordings(dir = RECORDINGS_DIR) {
   return readdirSync(dir)
     .filter((n) => n.endsWith(".json"))
-    .sort()
+    .sort(byCodePoint)
     .map((name) => JSON.parse(readFileSync(join(dir, name), "utf8")));
 }
 
@@ -168,80 +182,178 @@ function mutate(kind, claim, pool, next) {
   throw new Error(`unknown mutation ${kind}`);
 }
 
-/** The material mutations draw on: real titles, artists and excerpts of every recording. */
-function poolOf(claims) {
+/** Code-point order, the same in every locale (localeCompare is not). */
+export const byCodePoint = (x, y) => (x < y ? -1 : x > y ? 1 : 0);
+
+/**
+ * The material mutations draw on: real titles and artists from MusicBrainz excerpts and from
+ * each recording's own title and artist, and every recording's excerpts.
+ */
+function poolOf(claims, recordings) {
   const titles = new Map();
   const artists = new Map();
   const excerpts = new Map();
+  for (const r of recordings) {
+    titles.set(`${r.slug}|${r.analysis.title}`, r.analysis.title);
+    artists.set(`${r.slug}|${r.analysis.artist}`, r.analysis.artist);
+  }
   for (const c of claims) {
     for (const e of c.evidence) {
       excerpts.set(e.id, { ...e, recording: c.recording });
+      if (e.source !== "musicbrainz") continue;
       for (const t of quotedIn(e.excerpt)) titles.set(`${c.recording}|${t}`, t);
       for (const x of artistsIn(e.excerpt)) artists.set(`${c.recording}|${x}`, x);
     }
   }
   const list = (m) =>
     [...m.entries()]
-      .map(([k, value]) => ({ recording: k.split("|")[0], value }))
-      .sort((x, y) => `${x.recording}|${x.value}`.localeCompare(`${y.recording}|${y.value}`));
+      .map(([k, value]) => ({ key: k, recording: k.split("|")[0], value }))
+      .sort((x, y) => byCodePoint(x.key, y.key))
+      .map(({ recording, value }) => ({ recording, value }));
   return {
     titles: list(titles),
     artists: list(artists),
-    excerpts: [...excerpts.values()].sort((x, y) => x.id.localeCompare(y.id)),
+    excerpts: [...excerpts.values()].sort((x, y) => byCodePoint(x.id, y.id)),
   };
 }
 
-/** The numeric cases of one recording. */
-function numericCases(recording, next) {
+const FLATS = { "C#": "Db", "D#": "Eb", "F#": "Gb", "G#": "Ab", "A#": "Bb" };
+const SHARP_TONICS = Object.keys(FLATS);
+const round1 = (x) => Math.round(x * 10) / 10;
+const other = (mode) => (mode === "major" ? "minor" : "major");
+
+/**
+ * The numeric cases of one recording, each with its exact expected result. `first` adds the
+ * confidence-floor cases, which are about the floors, not the recording, so are made once.
+ */
+function numericCases(recording, next, first) {
   const a = recording.analysis;
   const audio = a.audio;
   if (!audio?.gate?.passed || !audio.tempo) return [];
   const context = { title: a.title, artist: a.artist };
   const base = { kind: "numeric", recording: recording.slug, context };
-  const tempoAudio = { version: audio.version, gate: audio.gate, tempo: audio.tempo, key: null };
+  const block = (tempo, key) => ({ version: audio.version, gate: audio.gate, tempo, key });
   const m = audio.tempo.bpm;
-  const tempo = (bpm) => `The track runs at ${Math.round(bpm)} BPM.`;
-  const cases = [
-    ["consistent", "not-rejected", m],
-    ["equivalent-octave", "not-rejected", m * 2],
-    ["equivalent-octave", "not-rejected", m / 2],
-    ["false-tempo", "rejected", m * 1.25],
-    ["false-tempo", "rejected", m * 0.8],
-  ].map(([kind, expect, bpm]) => ({
-    ...base,
-    case: kind,
-    expect,
-    claim: { text: tempo(bpm), field: "tempo" },
-    audio: tempoAudio,
-    keySource: null,
-  }));
-  const tonic = Math.floor(next() * 12);
-  const mode = next() < 0.5 ? "major" : "minor";
-  const key = {
-    tonic: PITCHES[tonic],
-    mode,
-    strength: 0.7,
-    profile: "synthetic",
-    method: "synthetic",
-    basis: audio.tempo.basis,
-  };
-  const keyAudio = { version: audio.version, gate: audio.gate, tempo: null, key };
-  const say = (pc, md) => `The track is in ${PITCHES[(pc + 12) % 12]} ${md}.`;
-  const relative = mode === "major" ? [tonic + 9, "minor"] : [tonic + 3, "major"];
-  for (const [kind, expect, pc, md] of [
-    ["consistent", "not-rejected", tonic, mode],
-    ["equivalent-relative-key", "not-rejected", ...relative],
-    ["false-key", "rejected", tonic + 2, mode],
-    ["false-key", "rejected", tonic + 6, mode],
-  ]) {
+  const band = Math.max(2, 0.02 * m);
+  const bpm = (x) => `The track runs at ${round1(x)} BPM.`;
+  const cases = [];
+  const add = (category, name, expect, text, field, audioBlock, synthetic) =>
     cases.push({
       ...base,
-      case: kind,
+      category,
+      case: name,
       expect,
-      claim: { text: say(pc, md), field: "key" },
-      audio: keyAudio,
-      keySource: "synthetic",
+      claim: { text, field },
+      audio: audioBlock,
+      synthetic,
     });
+  const measured = block(audio.tempo, null);
+  const tempo = (category, name, expect, text, field = "tempo") =>
+    add(category, name, expect, text, field, measured, []);
+  tempo("equivalent", "tempo-measured", "consistent", bpm(m));
+  tempo("equivalent", "tempo-within-band", "consistent", bpm(m + 0.75 * band));
+  tempo(
+    "equivalent",
+    "tempo-range-around",
+    "consistent",
+    `The track runs between ${Math.floor(m - 4)} and ${Math.ceil(m + 4)} BPM.`,
+  );
+  tempo("equivalent", "tempo-octave-x2", "conflict", bpm(m * 2));
+  tempo("equivalent", "tempo-octave-x0.5", "conflict", bpm(m / 2));
+  tempo("equivalent", "tempo-octave-x0.25", "conflict", bpm(m / 4));
+  if (m * 4 < 400) tempo("equivalent", "tempo-octave-x4", "conflict", bpm(m * 4));
+  tempo("estimator-error", "tempo-x1.5", "conflict", bpm(m * 1.5));
+  tempo("estimator-error", "tempo-x2/3", "conflict", bpm((m * 2) / 3));
+  tempo("estimator-error", "tempo-plus-3-percent", "conflict", bpm(m * 1.03));
+  tempo("false-caught", "tempo-x1.25", "contradicted", bpm(m * 1.25));
+  tempo("false-caught", "tempo-x0.8", "contradicted", bpm(m * 0.8));
+  tempo("false-shown-both", "tempo-x1.25-unmarked", "conflict", bpm(m * 1.25), null);
+  if (first) {
+    const floor = [
+      // The librosa floor is 0.3, Essentia's 1.5/5.32 (0.282); an unknown method takes the higher.
+      [
+        "false-shown-both",
+        "tempo-librosa-below-floor",
+        "conflict",
+        "librosa.beat.beat_track",
+        0.29,
+      ],
+      ["false-caught", "tempo-librosa-at-floor", "contradicted", "librosa.beat.beat_track", 0.3],
+      ["false-caught", "tempo-essentia-above-floor", "contradicted", audio.tempo.method, 0.29],
+      ["false-shown-both", "tempo-essentia-below-floor", "conflict", audio.tempo.method, 0.28],
+      ["false-shown-both", "tempo-unknown-method-below-floor", "conflict", "synthetic", 0.29],
+      ["false-shown-both", "tempo-no-confidence", "conflict", audio.tempo.method, null],
+    ];
+    for (const [category, name, expect, method, confidence] of floor) {
+      const changed = block({ ...audio.tempo, method, confidence }, null);
+      add(category, name, expect, bpm(m * 1.25), "tempo", changed, [
+        "tempo.confidence",
+        "tempo.method",
+      ]);
+    }
+  }
+  // A synthetic key with a sharp tonic, so a flat spelling exists.
+  const tonic = PITCHES.indexOf(SHARP_TONICS[Math.floor(next() * SHARP_TONICS.length)]);
+  const mode = next() < 0.5 ? "major" : "minor";
+  const keyBlock = (strength) =>
+    block(null, {
+      tonic: PITCHES[tonic],
+      mode,
+      strength,
+      profile: "synthetic",
+      method: "synthetic",
+      basis: "synthetic",
+    });
+  const confident = keyBlock(0.7);
+  const name = (pc) => PITCHES[(pc + 12) % 12];
+  const say = (pc, md) => `The track is in ${name(pc)} ${md}.`;
+  const key = (category, caseName, expect, text, field = "key", audioBlock = confident) =>
+    add(category, caseName, expect, text, field, audioBlock, ["key"]);
+  key("equivalent", "key-measured", "consistent", say(tonic, mode));
+  key(
+    "equivalent",
+    "key-flat-spelling",
+    "consistent",
+    `The track is in ${FLATS[PITCHES[tonic]]} ${mode}.`,
+  );
+  key("equivalent", "key-no-mode", "consistent", `The track is in the key of ${name(tonic)}.`);
+  key(
+    "equivalent",
+    "key-relative",
+    "conflict",
+    say(tonic + (mode === "major" ? 9 : 3), other(mode)),
+  );
+  key("estimator-error", "key-parallel", "conflict", say(tonic, other(mode)));
+  key("estimator-error", "key-fifth-up", "conflict", say(tonic + 7, mode));
+  key("estimator-error", "key-fourth-up-other-mode", "conflict", say(tonic + 5, other(mode)));
+  key("false-caught", "key-whole-tone", "contradicted", say(tonic + 2, mode));
+  key("false-caught", "key-tritone", "contradicted", say(tonic + 6, mode));
+  key("false-shown-both", "key-whole-tone-unmarked", "conflict", say(tonic + 2, mode), null);
+  key(
+    "false-shown-both",
+    "key-whole-tone-weak",
+    "conflict",
+    say(tonic + 2, mode),
+    "key",
+    keyBlock(0.3),
+  );
+  if (first) {
+    key(
+      "false-caught",
+      "key-whole-tone-at-floor",
+      "contradicted",
+      say(tonic + 2, mode),
+      "key",
+      keyBlock(0.4),
+    );
+    key(
+      "false-shown-both",
+      "key-whole-tone-no-strength",
+      "conflict",
+      say(tonic + 2, mode),
+      "key",
+      keyBlock(null),
+    );
   }
   return cases;
 }
@@ -250,7 +362,7 @@ function numericCases(recording, next) {
 export function buildPerturb(recordings = readRecordings(), seed = SEED) {
   const next = rng(seed);
   const claims = recordings.flatMap(claimsOf);
-  const pool = poolOf(claims);
+  const pool = poolOf(claims, recordings);
   const out = [];
   for (const recording of recordings) {
     const mine = claims.filter((c) => c.recording === recording.slug);
@@ -259,7 +371,7 @@ export function buildPerturb(recordings = readRecordings(), seed = SEED) {
       next,
       mine.filter((c) => positiveSource(c) === "code"),
     ).slice(0, CODE_POSITIVES_PER_RECORDING);
-    const positives = [...model, ...code].sort((x, y) => x.claimId.localeCompare(y.claimId));
+    const positives = [...model, ...code].sort((x, y) => byCodePoint(x.claimId, y.claimId));
     for (const p of positives) {
       const id = `${recording.slug}:${p.claimId.slice(0, 8)}`;
       const shown = {
@@ -295,7 +407,7 @@ export function buildPerturb(recordings = readRecordings(), seed = SEED) {
         });
       }
     }
-    numericCases(recording, next).forEach((c, i) => {
+    numericCases(recording, next, recording === recordings[0]).forEach((c, i) => {
       out.push({ id: `${recording.slug}:numeric-${String(i + 1).padStart(2, "0")}`, ...c });
     });
   }

@@ -9,10 +9,10 @@ of it makes a model call or a network request.
 evals/agent/
   eval.mjs            npm run eval -- --suite agent --mode replay|live --subset ci|all
   report.mjs          npm run eval:table -- --runs <dir>: the report from run records
-  check-report.mjs    checks a report has what #33 asks of it
+  check-report.mjs    renders a report again from its run records and checks it
   make-perturb.mjs    writes evals/perturb.jsonl from fixtures/replays at a fixed seed
   perturb-check.mjs   runs evals/perturb.jsonl through the app's numeric check
-  export-labels.mjs   CSV of claims for blind human labelling, without verdicts
+  export-labels.mjs   CSV of claims to label blind, without verdicts; its key apart
   lib/golden.mjs      golden set: rows, sha256, subsets, gold targets, sites
   lib/score.mjs       edge matching, held-out exclusion, hallucination, pipeline metrics
   lib/support.mjs     the deterministic support check (claim text against cited excerpts)
@@ -26,26 +26,48 @@ evals/agent/
 `lib/score.mjs` implements `evals/README.md` ("Scoring edges", "Held-out gold"). The run record
 it reads is documented at the top of that file. In short:
 
+- **Run records** are checked on reading: an unknown ablation, edge direction (`uses`,
+  `usedBy`), relation (`sample`, `interpolation`, `cover`, `remix`) or origin (`code`, `model`)
+  is an error naming the file and field, never a silently dropped edge.
 - **Edges** are scored per distinct gold target, forward relations only. A target is found when
   a proposed edge names the same recording (ISRC, MusicBrainz id, or title and artist after the
   same normalisation as the coverage check) with the gold relation or one of its
-  `relationAlternatives`. Precision is strict: on exhaustive rows every other proposal is a false
-  positive; a proposal matching `otherDocumentedTargets` is left out; on rows that are not
-  exhaustive, a proposal the run's evidence names is left out and one nothing names is a false
-  positive. Unmatched proposals are listed in the report.
-- **Held-out recall** is decided per run. A gold target counts as held-out in a run only while
-  one of its held-out sources (`sourceQueriedByPipeline: false`) is on a site the run's evidence
-  does not cite. Sites are registrable domains (`en.wikipedia.org` and `de.wikipedia.org` are both
-  `wikipedia.org`), so the rule errs towards excluding. The report gives held-out n before and
-  after the exclusion.
+  `relationAlternatives`. Precision is strict:
+  - one true positive per gold target; other spellings of it (a remaster title, an ISRC-only
+    match) are duplicates, left out. The code's copy is credited first, so **model edge
+    precision** covers only the edges the code did not also build;
+  - a gold target with a relation gold does not accept is a false positive, counted apart as
+    "right target, wrong relation"; so is the track itself;
+  - a proposal matching `otherDocumentedTargets` is left out;
+  - on exhaustive rows every other proposal is a false positive; on rows that are not
+    exhaustive, a proposal is left out ("unresolved") only when one sentence of the run's
+    evidence names its title and its artist as entities, with a relation. "Love" or "Time"
+    somewhere in an excerpt is not enough.
+  Unmatched proposals are listed in the report, with why each counts as it does.
+- **Held-out recall** is decided per run. A gold target counts as held-out in a run only when
+  the run's evidence cites none of the sites of its held-out sources
+  (`sourceQueriedByPipeline: false`). Sites are registrable domains (`en.wikipedia.org` and
+  `de.wikipedia.org` are both `wikipedia.org`); a Wayback Machine, archive.today or Google
+  cache copy counts as the page it copies; a page whose site cannot be placed (a link
+  shortener, a host without a dot, an unparseable URL) counts as citing every site. The rule
+  errs towards excluding. The report gives held-out n before and after the exclusion and the
+  sites that removed targets. Every documented-samples row has a held-out Wikipedia source, and
+  the four committed recordings each cite Wikipedia, so runs like them leave held-out n near
+  zero: the report says so instead of printing a rate.
 - **Hallucinated-sample rate**: the share of no-sample controls with at least one forward sample,
   interpolation or cover edge, and the mean number of such edges per control.
-- **Identity** is scored at recording level (the row's MusicBrainz recording, else its ISRC).
+- **Identity** is scored at recording level: the row's MusicBrainz recording when both the row
+  and the run know it, else the ISRC (another ISRC of the same recording is correct; the same
+  ISRC with another recording is not).
+- **Pre-verifier support rate**: of the model's claims in the before-verifier runs (row c), the
+  share the judge marked supported. A claim the judge did not reach counts as not supported, and
+  the report says how many there were. It measures the judge's verdicts, not truth.
 - **Ablations**: (a) model only, no tools or evidence; (b) deterministic only, no model; (c) the
   pipeline before the verifier; (d) after it, which is what the UI shows. Each run record names
   its row.
 - **Intervals**: 95 % Wilson for proportions; a percentile bootstrap over tracks (10,000
-  resamples, seed 33) for means, medians and p95. A stratum with n < 10 is shown as counts.
+  resamples, seed 33) for means, medians and p95. Any row with n < 10, in any table, is shown
+  as counts ("k/n") or as its per-track values, with no rate and no interval.
 
 ## The report
 
@@ -56,16 +78,25 @@ node evals/agent/report.mjs --runs <dir> --out evals/reports
 node evals/agent/check-report.mjs evals/reports/agent-latest.md
 ```
 
-The report states the dataset and the golden file's sha256, the date, the commit, n and a 95 %
-interval for every value, the clarification rate, ablation rows a-d, and held-out n after the
-exclusion. Gold is described by its sources and their retrieval dates, never as human-labelled.
-A report rendered from records marked `"synthetic": true` says so at the top.
+The report states the dataset and the golden file's sha256, the run records it was rendered
+from, the date, the commit, n and a 95 % interval for every value, the clarification rate,
+ablation rows a-d, and held-out n after the exclusion. Gold is described by its sources and
+their retrieval dates; no label is described as made by people, because none was. A report
+rendered from records marked `"synthetic": true` says so at the top.
 
-`check-report.mjs` exits 1 and names each missing part: a table without n or a CI column, a row
-without an interval, a small stratum shown as a rate, a missing ablation row, no clarification
-rate, held-out numbers that do not add up, or a results file (`agent-<date>.json`) whose
-per-run detail counts a target whose held-out sources are all on cited sites. The broken reports
-in `testdata/` exercise each of these.
+`check-report.mjs` exits 1 and names each problem. It renders the report again from the run
+records and golden file its header names (with its date, commit and subset) and requires the
+Markdown and the results file (`agent-<date>.json`) to match byte for byte; the held-out
+exclusion is re-derived from the runs' evidence, never read from the results file. It also
+checks the structure on its own: a header with the dataset (its sha256 must still match), run
+records, date, commit and results file; Markdown tables at the start of the line (no HTML, no
+indent) with value, n and "95 % CI" columns; every rate's "(k/n)" against its n and its Wilson
+interval recomputed; statistics with a numeric interval, low before high; counts only below
+n = 10; "no data" only at n = 0; ablation rows a-d; the clarification rate; held-out numbers
+that add up; no "human-labelled", "annotators" or the like, in any case; the synthetic banner
+when the records are synthetic, and no synthetic report under `evals/reports`. The broken
+reports in `testdata/` exercise each of these, and the tests show which ones only re-rendering
+catches.
 
 `npm run eval -- --suite agent --mode replay --subset ci|all` scores the records in
 `evals/agent/runs` on the CI subset (six rows, `CI_SUBSET` in `lib/golden.mjs`) or the whole live
@@ -78,25 +109,51 @@ subset; `--runs <dir>` scores another directory. `--mode live` is refused.
 ```sh
 node evals/agent/make-perturb.mjs        # rewrite it (same bytes every time)
 node evals/agent/perturb-check.mjs       # numeric part through checkNumbers; judge part pending
-node evals/agent/export-labels.mjs --out labels.csv   # blind labelling sheet
+node evals/agent/export-labels.mjs --out labels.csv --key ~/labels-key.json
+                                         # blind labelling sheet; the key kept apart
 ```
 
 - **Claim cases.** Positives are code-built sourced claims (supported by construction) or model
-  claims that pass the deterministic support check in `lib/support.mjs` (every sentence's quoted
-  titles, names, years and relation verbs appear in the excerpts it cites). The judge's verdict
-  is never read. Each positive gets two mutations its excerpts do not support: another real title
-  or artist, another year, the roles swapped, another relation (sample to cover), or a real
-  excerpt from another recording.
-- **Numeric cases.** Tempos at the measured value, at octave equivalents (x2, x1/2) and at false
-  values (x1.25, x0.8), on each recording's measured tempo; keys at the key, its relative key and
-  false keys. No committed recording has a measured key, so the key cases carry a synthetic key
-  block (`"keySource": "synthetic"`).
+  claims that pass the deterministic support check in `lib/support.mjs`. The judge's verdict is
+  never read. The check passes a claim only when, for each of its sentences, one sentence of a
+  cited excerpt holds all of it: every quoted title and name as a whole entity, every year as a
+  standalone token (not inside an ISRC such as `USUM71920161`), every decade as a decade, and
+  the same relation with each entity in the same role ("A samples B" and "B is sampled in A"
+  agree; "B samples A" does not). A negated sentence, or one that names nothing, states no year
+  and no relation, or names nothing after its relation, is not supported. Each positive gets
+  two mutations that its excerpts do not support (unsupported by the cited excerpts, which is
+  not the same as false): another real title or artist (from a MusicBrainz excerpt or another
+  recording's own title and artist), another year, the roles swapped, another relation (sample
+  to cover), or a real excerpt from another recording. Every positive passes the check and
+  every mutation fails it; the tests check both.
+- **Numeric cases.** Each states the exact result the app's check must give (`consistent`,
+  `conflict` or `contradicted`), in four categories:
+  - *equivalent*: the measured value restated (exact, within the band, a range around it, a
+    flat spelling of the key, the key with no mode) is consistent; an octave (x2, x1/2, x1/4,
+    x4 under 400 BPM) or the relative key is a conflict, both values shown;
+  - *estimator-error*: x1.5, x2/3, +3 %, the parallel key, a fifth either way: a conflict;
+  - *false-caught*: a false value given as the track's own against a confident measurement
+    (x1.25, x0.8; a whole tone or a tritone away; at and above each estimator's confidence
+    floor): contradicted;
+  - *false-shown-both*: a false value the check shows next to the measurement instead of
+    rejecting, by design: the claim is not marked as giving the track's own value, or the
+    measurement is below its floor (librosa 0.3, Essentia 1.5/5.32, an unknown method the
+    higher; key strength 0.4) or has no confidence.
+  Tempo cases use each recording's measured tempo block unchanged, except the floor cases,
+  which set its confidence and method (`"synthetic": ["tempo.confidence", "tempo.method"]`). No
+  committed recording has a measured key, so every key case carries a synthetic key block
+  (`"synthetic": ["key"]`, `"basis": "synthetic"`) with a sharp tonic, so a flat spelling exists.
 - `perturb-check.mjs` loads the app's own `checkNumbers` from
-  `apps/api/src/agent/verifier/numeric.ts` with tsx (build `packages/contract` first). It prints
-  how many equivalents were rejected (must be 0) and how many false values were caught (must be
-  all), with catch and false-positive rates, and exits 1 otherwise.
-- The CSV from `export-labels.mjs` has no verdict, label or mutation column, opaque ids
-  (`label_id`, a sha256 prefix of the case id) and a shuffled order.
+  `apps/api/src/agent/verifier/numeric.ts` with tsx (build `packages/contract` first), and
+  exits 1 when any case gives another result than it expects. It prints, separately for the
+  measured tempo blocks and the synthetic ones, how many equivalents and estimator errors were
+  rejected (0), how many false values were rejected, and how many were shown both by design.
+- The CSV from `export-labels.mjs` has no verdict, label or mutation column and a shuffled
+  order. Each row's `label_id` is an HMAC-SHA256 of the case id under a salt (random unless
+  `--salt` is given), so ids and order cannot be recomputed from the committed set. The salt
+  and the map from label ids to cases go to the `--key` file, which must not sit next to the
+  CSV (the CLI refuses that); keep it away from whoever labels, and out of the repository.
+- The generator sorts by code point, so its output is the same bytes in every locale.
 
 ## Pending until the live golden run
 
@@ -105,5 +162,5 @@ node evals/agent/export-labels.mjs --out labels.csv   # blind labelling sheet
 - `--mode live`, the model-only baseline (a) and the variance re-runs.
 - The judge's part of `perturb-check.mjs` (a judge recording of the claim cases), and the
   verifier-as-classifier table with false-positive rates per positive source.
-- The human-agreement table: no human labels exist.
+- The agreement table: no labels from people exist yet.
 - A committed `evals/reports/agent-*.md`; only test data is committed today.

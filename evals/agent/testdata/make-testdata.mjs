@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 
 import { CI_SUBSET, goldTargets, liveRows, readGolden } from "../lib/golden.mjs";
 import { scoreAll } from "../lib/score.mjs";
-import { rng } from "../lib/stats.mjs";
+import { rng, wilson } from "../lib/stats.mjs";
 import { renderReport } from "../report.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -146,43 +146,156 @@ export function makeRuns(golden) {
 }
 
 const replaceOnce = (text, from, to) => {
-  if (!text.includes(from)) throw new Error(`make-testdata: "${from}" not in the report`);
+  const hit = typeof from === "string" ? text.includes(from) : from.test(text);
+  if (!hit) throw new Error(`make-testdata: ${from} not in the report`);
   return text.replace(from, to);
 };
 
-/** The broken reports: each misses one part check-report requires. */
+/** The table line that starts with `prefix`, as a regex for replaceOnce. */
+const line = (prefix) =>
+  new RegExp(`^${prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[^\n]*$`, "m");
+
+/** A table line's cells for k of n as the report shows them (with n >= 10). */
+const rateRow = (head, k, n) => {
+  const [lo, hi] = wilson(k, n);
+  const pct = (x) => `${(100 * x).toFixed(1)} %`;
+  return `${head} | ${pct(k / n)} (${k}/${n}) | ${n} | [${pct(lo)}, ${pct(hi)}] |`;
+};
+
+/**
+ * The broken reports: each gets one thing wrong that check-report must reject, and says which in
+ * its name. The `structural` ones fail the structural checks on their own; the others are
+ * consistent on their face and only re-rendering from the run records catches them.
+ */
 export function brokenReports(md, json) {
   const lines = md.split("\n");
-  // No CI: drop the CI column of the pipeline table.
-  const noCi = [];
-  let inPipeline = false;
-  for (const line of lines) {
-    if (line.startsWith("## ")) inPipeline = line.startsWith("## Pipeline");
-    if (inPipeline && line.startsWith("|")) {
-      const cells = line.split(" | ");
-      cells.splice(3, 1);
-      noCi.push(cells.join(" | "));
-    } else noCi.push(line);
-  }
-  const noAblationD = lines.filter((l) => !/^\| d \|/.test(l)).join("\n");
-  const noClarification = lines.filter((l) => !l.startsWith("| clarification rate |")).join("\n");
-  // Held-out not excluded: every held-out target counted, whatever the run cites.
   const data = JSON.parse(json);
-  let heldOutMd = md.replaceAll("report-good.json", "report-heldout-unexcluded.json");
-  for (const [id, h] of Object.entries(data.heldOut)) {
-    for (const run of h.perRun) for (const t of run.targets) t.counted = true;
-    const before = `| ${id} | ${h.gold} | ${h.excluded} | ${h.nAfterExclusion} |`;
+  const out = {};
+  const pipelineLines = (f) => {
+    let inPipeline = false;
+    return lines
+      .map((l) => {
+        if (l.startsWith("## ")) inPipeline = l.startsWith("## Pipeline");
+        return inPipeline && l.startsWith("|") ? f(l) : l;
+      })
+      .join("\n");
+  };
+  // No CI: the pipeline table without its CI column.
+  out["report-no-ci.md"] = pipelineLines((l) => {
+    const cells = l.split(" | ");
+    cells.splice(3, 1);
+    return cells
+      .join(" | ")
+      .replace(/ \|$/, "")
+      .concat(" |")
+      .replace(/\| \|$/, "|");
+  });
+  out["report-no-ablation-d.md"] = lines.filter((l) => !/^\| d \|/.test(l)).join("\n");
+  out["report-no-clarification.md"] = lines
+    .filter((l) => !l.startsWith("| clarification rate |"))
+    .join("\n");
+  // The pipeline table indented (still a table to some renderers) and without n or CI.
+  out["report-indented-no-n.md"] = pipelineLines(
+    (l) => `  ${l.split(" | ").slice(0, 2).join(" | ")} |`,
+  );
+  // An HTML table in place of a row.
+  out["report-html-table.md"] =
+    `${replaceOnce(md, line("| code-built edge coverage |"), "").replace("\n\n|", "\n|")}\n<table><tr><th>metric</th><th>value</th></tr><tr><td>code-built edge coverage</td><td>99.0 %</td></tr></table>\n`;
+  // n and interval that do not belong to the value.
+  out["report-ci-mismatch.md"] = replaceOnce(
+    md,
+    line("| model edge precision |"),
+    "| model edge precision | 66.7 % (4/6) | 600 | [99.0 %, 99.9 %] |",
+  );
+  out["report-ci-not-numeric.md"] = replaceOnce(
+    md,
+    line("| fallback rate |"),
+    "| fallback rate | 4.2 % (1/24) | 24 | [banana, 0.0 %] |",
+  );
+  out["report-ci-reversed.md"] = replaceOnce(
+    md,
+    line("| latency p50 |"),
+    "| latency p50 | 49.4 s | 24 | [51.3 s, 44.4 s] |",
+  );
+  // Made-up ablation numbers whose intervals are not theirs.
+  out["report-fake-ablation.md"] = replaceOnce(
+    replaceOnce(
+      md,
+      line("| d | pipeline after the verifier (what the UI shows) | edge precision"),
+      "| d | pipeline after the verifier (what the UI shows) | edge precision (all proposed edges) | 100.0 % (17/17) | 17 | [99.5 %, 100.0 %] |",
+    ),
+    line("| d | pipeline after the verifier (what the UI shows) | hallucinated-sample rate"),
+    "| d | pipeline after the verifier (what the UI shows) | hallucinated-sample rate | 0.0 % (0/5) | 5 | [0.0 %, 0.1 %] |",
+  );
+  // Made-up numbers with their own correct Wilson interval: only the run records show it.
+  out["report-fake-consistent.md"] = replaceOnce(
+    md,
+    line("| d | pipeline after the verifier (what the UI shows) | edge recall"),
+    rateRow("| d | pipeline after the verifier (what the UI shows) | edge recall", 16, 16),
+  );
+  // Held-out not excluded: every held-out target counted whatever the run cites, in the report
+  // and in its results file alike.
+  let heldOut = md.replaceAll("report-good.json", "report-heldout-unexcluded.json");
+  const unexcluded = JSON.parse(json);
+  for (const [id, h] of Object.entries(unexcluded.heldOut)) {
+    let found = 0;
+    for (const run of h.perRun) {
+      run.citedSites = [];
+      for (const t of run.targets) {
+        t.counted = true;
+        t.excludedBy = [];
+        if (t.found) found++;
+      }
+    }
     h.excluded = 0;
     h.nAfterExclusion = h.gold;
-    heldOutMd = replaceOnce(heldOutMd, before, `| ${id} | ${h.gold} | 0 | ${h.gold} |`);
+    h.found = found;
+    h.excludedBySite = {};
+    const row = rateRow(`| ${id} | ${h.gold} | 0`, found, h.gold);
+    heldOut = replaceOnce(
+      heldOut,
+      line(`| ${id} | ${h.gold} | `),
+      row.replace(/\| (\d+) \| \[/, "| $1 | ["),
+    );
+    heldOut = replaceOnce(
+      heldOut,
+      line(`| ${id} | ${data.ablations[id].what} | held-out edge recall`),
+      rateRow(`| ${id} | ${data.ablations[id].what} | held-out edge recall`, found, h.gold),
+    );
   }
-  return {
-    "report-no-ci.md": noCi.join("\n"),
-    "report-no-ablation-d.md": noAblationD,
-    "report-no-clarification.md": noClarification,
-    "report-heldout-unexcluded.md": heldOutMd,
-    "report-heldout-unexcluded.json": `${JSON.stringify(data, null, 2)}\n`,
-  };
+  out["report-heldout-unexcluded.md"] = heldOut;
+  out["report-heldout-unexcluded.json"] = `${JSON.stringify(unexcluded, null, 2)}\n`;
+  // Labels described as made by people, in the gold line and on a line of their own.
+  out["report-human-labelled.md"] = replaceOnce(
+    md,
+    "none comes from listening.",
+    "none comes from listening. Every edge was Human-labelled by two annotators; hand-labelled where sources disagree.",
+  );
+  out["report-human-elsewhere.md"] = replaceOnce(
+    md,
+    "- **Date**:",
+    "- **Labels**: gold is labelled by the author.\n- **Date**:",
+  );
+  // A stratum with n < 10 shown as a rate, and as a decimal.
+  out["report-stratum-rate.md"] = replaceOnce(
+    md,
+    line("| no-sample-controls | hallucinated-sample rate |"),
+    "| no-sample-controls | hallucinated-sample rate | 20.0 % (1/5) | 5 | [3.6 %, 62.4 %] |",
+  );
+  out["report-stratum-decimal.md"] = replaceOnce(
+    md,
+    line("| no-sample-controls | hallucinated-sample rate |"),
+    "| no-sample-controls | hallucinated-sample rate | rate 0.20 | 5 | counts only (n < 10) |",
+  );
+  // Synthetic runs presented as a measurement.
+  out["report-synthetic-no-banner.md"] = md.replace(/^> .*\n/gm, "").replace(/^\n\n/m, "\n");
+  // "not measured" where the runs have n = 24.
+  out["report-not-measured.md"] = replaceOnce(
+    md,
+    line("| clarification rate |"),
+    "| clarification rate | not measured | 24 | [4.3 %, 31.0 %] |",
+  );
+  return out;
 }
 
 /** Every test-data file, by path relative to evals/agent/testdata. */
@@ -198,6 +311,7 @@ export function testdataFiles() {
     date: TESTDATA_DATE,
     commit: TESTDATA_COMMIT,
     goldenLabel: "evals/golden.jsonl",
+    runsLabel: "evals/agent/testdata/runs",
     jsonName: "report-good.json",
   });
   out["report-good.md"] = md;

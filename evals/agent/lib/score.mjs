@@ -15,7 +15,9 @@
 //     "clarification": { "fired": true, "answer": "top-ranked" } | null,
 //     "preview": { "available": true } | null,
 //     "evidence": [{ "id": "…", "url": "…", "excerpt": "…" }],
-//     "edges": [{ "direction": "uses" | "usedBy", "relation": "sample", "origin": "code",
+//     "edges": [{ "direction": "uses" | "usedBy",
+//                 "relation": "sample" | "interpolation" | "cover" | "remix",
+//                 "origin": "code" | "model",
 //                 "target": { "title": "…", "artist": "…", "isrc"?: "…", "mbid"?: "…" },
 //                 "evidenceIds": ["…"] }],
 //     "claims": [{ "id": "…", "text": "…", "origin": "model", "verdict": "supported" }],
@@ -23,15 +25,23 @@
 //     "usage": { "inputTokens": 16000, "outputTokens": 3000, "usd": 0.012 }
 //   }
 //
-// Only forward edges ("uses": the row's track uses the target) are scored, as gold lists only
-// forward relations.
+// Only forward sample, interpolation and cover edges ("uses": the row's track uses the target) are
+// scored, as gold lists only those. A record with an unknown ablation, direction, relation or
+// origin is an error, never silently dropped.
 
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { goldTargets, otherDocumented, RELATIONS, sameRecording, site } from "./golden.mjs";
+import {
+  ANY_SITE,
+  citedSite,
+  goldTargets,
+  otherDocumented,
+  RELATIONS,
+  sameRecording,
+} from "./golden.mjs";
 import { bootstrap, jaccard, MIN_N_FOR_RATE, mean, quantile, wilson } from "./stats.mjs";
-import { containsWords, normText } from "./support.mjs";
+import { analyse, nameKey, normText, sentences } from "./support.mjs";
 
 export const ABLATIONS = {
   a: "model only, no tools or evidence",
@@ -40,17 +50,45 @@ export const ABLATIONS = {
   d: "pipeline after the verifier (what the UI shows)",
 };
 
+export const EDGE_RELATIONS = [...RELATIONS, "remix"];
+export const DIRECTIONS = ["uses", "usedBy"];
+export const ORIGINS = ["code", "model"];
+
+/** Throws, naming the record and field, when a run record is not in the documented shape. */
+export function validateRun(run, where = "run record") {
+  const fail = (why) => {
+    throw new Error(`${where}${run?.runId ? ` (${run.runId})` : ""}: ${why}`);
+  };
+  if (!run || typeof run !== "object") fail("not an object");
+  if (typeof run.isrc !== "string") fail("isrc missing");
+  if (!ABLATIONS[run.ablation]) fail(`ablation "${run.ablation}" is not a, b, c or d`);
+  if (![0, 1].includes(run.repeat ?? 0)) fail(`repeat ${run.repeat} is not 0 or 1`);
+  for (const [i, e] of (run.edges ?? []).entries()) {
+    if (!DIRECTIONS.includes(e?.direction)) fail(`edge ${i}: direction "${e?.direction}"`);
+    if (!EDGE_RELATIONS.includes(e.relation)) fail(`edge ${i}: relation "${e.relation}"`);
+    if (e.origin !== undefined && !ORIGINS.includes(e.origin)) {
+      fail(`edge ${i}: origin "${e.origin}"`);
+    }
+    if (typeof e.target?.title !== "string" || typeof e.target?.artist !== "string") {
+      fail(`edge ${i}: target needs a title and an artist`);
+    }
+  }
+  for (const [i, c] of (run.claims ?? []).entries()) {
+    if (typeof c?.text !== "string") fail(`claim ${i}: text`);
+    if (c.origin !== undefined && !ORIGINS.includes(c.origin))
+      fail(`claim ${i}: origin "${c.origin}"`);
+  }
+  return run;
+}
+
 /** Reads every *.json file in a directory: each holds one run record or an array of them. */
 export function readRuns(dir) {
   const runs = [];
   for (const name of readdirSync(dir).sort()) {
     if (!name.endsWith(".json")) continue;
     const data = JSON.parse(readFileSync(join(dir, name), "utf8"));
-    for (const run of Array.isArray(data) ? data : [data]) {
-      if (!run || typeof run !== "object" || !run.isrc || !ABLATIONS[run.ablation]) {
-        throw new Error(`${name}: a run record needs isrc and ablation a-d`);
-      }
-      runs.push({ repeat: 0, ...run, file: name });
+    for (const [i, run] of (Array.isArray(data) ? data : [data]).entries()) {
+      runs.push({ repeat: 0, ...validateRun(run, `${name}[${i}]`) });
     }
   }
   return runs;
@@ -61,64 +99,95 @@ const forwardEdges = (run) =>
 
 const edgeKey = (e) => `${normText(e.target.title)}|${normText(e.target.artist)}|${e.relation}`;
 
-/** Proposed edges once per target and relation; a code-built copy wins over a model one. */
+/**
+ * Proposed edges once per spelling of target and relation, code-built copies first: when the
+ * code and the model propose the same edge, the code's copy is the one scored, so model
+ * precision covers only the edges the code did not also build.
+ */
 function distinctEdges(edges) {
   const byKey = new Map();
   for (const e of edges) {
     const prior = byKey.get(edgeKey(e));
     if (!prior || (prior.origin !== "code" && e.origin === "code")) byKey.set(edgeKey(e), e);
   }
-  return [...byKey.values()];
+  const all = [...byKey.values()];
+  return [...all.filter((e) => e.origin === "code"), ...all.filter((e) => e.origin !== "code")];
 }
 
-/** The sites a run's evidence cites. */
-export const citedSites = (run) =>
-  new Set(
-    (run.evidence ?? [])
-      .map((ev) => {
-        try {
-          return site(ev.url);
-        } catch {
-          return null;
-        }
-      })
-      .filter(Boolean),
-  );
+/** The sites a run's evidence cites (golden.mjs citedSite: it fails closed to ANY_SITE). */
+export const citedSites = (run) => new Set((run.evidence ?? []).map((ev) => citedSite(ev.url)));
 
 /**
- * One run against its golden row, with the per-run held-out rule: a gold target stays held-out
- * only while at least one of its held-out sources is on a site the run's evidence does not cite.
+ * Does one sentence of the run's evidence name this proposal as an entity: its title as a quoted
+ * title, its artist as a name, and a relation? Only then may an unmatched proposal on a row
+ * whose gold is not exhaustive be left out of precision.
+ */
+function evidenceNames(run, target) {
+  const title = normText(target.title);
+  const artist = nameKey(target.artist);
+  if (!title || !artist) return false;
+  return (run.evidence ?? []).some((ev) =>
+    sentences(ev.excerpt ?? "").some((sentence) => {
+      const a = analyse(sentence);
+      const titles = new Set(a.entities.filter((e) => e.kind === "title").map((e) => e.key));
+      const names = new Set(a.entities.map((e) => e.key));
+      return a.relation !== null && !a.negated && titles.has(title) && names.has(artist);
+    }),
+  );
+}
+
+/**
+ * One run against its golden row.
+ * - Held-out, per run: a gold target counts as held-out only when the run's evidence cites none
+ *   of the sites of its held-out sources (a page that cannot be placed counts as citing all).
+ * - Precision, strict: one true positive per gold target; another spelling of a target already
+ *   credited (an ISRC match, a remaster title) is a duplicate, left out; a gold target with a
+ *   relation gold does not accept is a false positive ("right target, wrong relation"), and so is
+ *   the track itself. Other proposals: an `otherDocumentedTargets` match is left out; on a row
+ *   whose gold is exhaustive it is a false positive; otherwise it is left out ("unresolved") only
+ *   when one evidence sentence names its title and artist with a relation.
  */
 export function scoreRun(row, run) {
   const proposed = distinctEdges(forwardEdges(run));
   const cited = citedSites(run);
-  const targets = goldTargets(row).map((t) => {
-    const matches = (e) => sameRecording(t.target, e.target) && t.relations.has(e.relation);
-    const heldOutSources = t.sources.filter((s) => s.heldOut);
-    const uncited = heldOutSources.filter((s) => !cited.has(s.site));
-    return {
-      key: t.key,
-      found: proposed.some(matches),
-      foundByCode: proposed.some((e) => e.origin === "code" && matches(e)),
-      heldOutDefault: heldOutSources.length > 0,
-      heldOut: uncited.length > 0,
-      heldOutSites: [...new Set(heldOutSources.map((s) => s.site))],
-    };
-  });
-  const evidenceText = (run.evidence ?? []).map((ev) => ev.excerpt ?? "");
+  const golds = goldTargets(row);
+  const credited = new Set();
+  const self = { title: row.title, artist: row.artist, isrc: row.isrc, mbid: row.mbid };
   const edges = proposed.map((e) => {
-    const target = goldTargets(row).find(
-      (t) => sameRecording(t.target, e.target) && t.relations.has(e.relation),
-    );
-    if (target) return { edge: e, outcome: "tp" };
+    const target = golds.find((t) => sameRecording(t.target, e.target));
+    if (target) {
+      if (!target.relations.has(e.relation)) {
+        return { edge: e, outcome: "fp", why: "right target, wrong relation", target: target.key };
+      }
+      if (credited.has(target.key)) return { edge: e, outcome: "duplicate", target: target.key };
+      credited.add(target.key);
+      return { edge: e, outcome: "tp", target: target.key };
+    }
+    if (sameRecording(self, e.target)) return { edge: e, outcome: "fp", why: "the track itself" };
     if (otherDocumented(row).some((o) => sameRecording(o.target, e.target))) {
       return { edge: e, outcome: "other-documented" };
     }
-    if (row.labels.edgesExhaustive) return { edge: e, outcome: "fp" };
-    // Gold may not list every relation here: only a clearly unsupported proposal counts, one
-    // that nothing in the run's evidence names.
-    const named = evidenceText.some((x) => containsWords(x, e.target.title));
-    return { edge: e, outcome: named ? "unresolved" : "fp" };
+    if (row.labels.edgesExhaustive) return { edge: e, outcome: "fp", why: "not in gold" };
+    if (evidenceNames(run, e.target)) return { edge: e, outcome: "unresolved" };
+    return { edge: e, outcome: "fp", why: "nothing in the run's evidence names it" };
+  });
+  const targets = golds.map((t) => {
+    const heldOutSources = t.sources.filter((s) => s.heldOut);
+    const heldOutSites = [...new Set(heldOutSources.map((s) => s.site))];
+    const citedHeldOut = cited.has(ANY_SITE)
+      ? heldOutSites
+      : heldOutSites.filter((s) => cited.has(s));
+    return {
+      key: t.key,
+      found: credited.has(t.key),
+      foundByCode: edges.some(
+        (x) => x.outcome === "tp" && x.target === t.key && x.edge.origin === "code",
+      ),
+      heldOutDefault: heldOutSources.length > 0,
+      heldOut: heldOutSources.length > 0 && citedHeldOut.length === 0,
+      heldOutSites,
+      excludedBy: citedHeldOut,
+    };
   });
   return {
     isrc: row.isrc,
@@ -139,9 +208,16 @@ function precision(scored, origin) {
   const edges = scored.flatMap((s) =>
     s.edges.filter((e) => origin === undefined || e.edge.origin === origin),
   );
-  const tp = edges.filter((e) => e.outcome === "tp").length;
-  const fp = edges.filter((e) => e.outcome === "fp").length;
-  return rate(tp, tp + fp);
+  const count = (outcome) => edges.filter((e) => e.outcome === outcome).length;
+  const tp = count("tp");
+  const fp = count("fp");
+  return {
+    ...rate(tp, tp + fp),
+    wrongRelation: edges.filter((e) => e.why === "right target, wrong relation").length,
+    duplicates: count("duplicate"),
+    unresolved: count("unresolved"),
+    otherDocumented: count("other-documented"),
+  };
 }
 
 /** The edge metrics of one ablation row: recall, precision, held-out recall, hallucination. */
@@ -180,32 +256,61 @@ export function edgeMetrics(scored) {
       sum(controls, (s) => +s.hallucinated),
       controls.length,
     ),
-    edgesPerControl: {
-      n: perControl.length,
-      value: mean(perControl),
-      ci: bootstrap(perControl, mean),
-    },
+    edgesPerControl: statOf(perControl, mean),
+    excludedBySite: excludedBySite(heldOutDefault),
   };
+}
+
+/** How many held-out targets each cited site took out of held-out recall. */
+function excludedBySite(targets) {
+  const counts = {};
+  for (const t of targets) for (const s of t.excludedBy) counts[s] = (counts[s] ?? 0) + 1;
+  return Object.fromEntries(
+    Object.entries(counts).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+  );
 }
 
 const p50 = (xs) => quantile(xs, 0.5);
 const p95 = (xs) => quantile(xs, 0.95);
-const statOf = (values, f) => ({ n: values.length, value: f(values), ci: bootstrap(values, f) });
+/** A statistic over per-track values; no bootstrap below MIN_N_FOR_RATE (the values are kept). */
+function statOf(values, f) {
+  return {
+    n: values.length,
+    value: values.length ? f(values) : null,
+    ci: values.length >= MIN_N_FOR_RATE ? bootstrap(values, f) : null,
+    values: [...values],
+  };
+}
 const has = (x) => typeof x === "number" && Number.isFinite(x);
 
-/** The pipeline metrics, from the after-verifier runs (row d, first run of each track). */
-export function pipelineMetrics(rowsByIsrc, runs) {
-  const scored = runs.map((run) => scoreRun(rowsByIsrc.get(run.isrc), run));
-  const identityOk = (run) => {
-    const row = rowsByIsrc.get(run.isrc);
-    const id = run.identity;
-    if (!id) return false;
-    if (id.mbid && row.mbid) return id.mbid === row.mbid;
-    return id.isrc === row.isrc;
+/** Identity at recording level: the row's MusicBrainz recording when both know it, else ISRC. */
+export function identityCorrect(row, run) {
+  const id = run.identity;
+  if (!id) return false;
+  if (id.mbid && row.mbid) return id.mbid === row.mbid;
+  return id.isrc === row.isrc;
+}
+
+/**
+ * The pre-verifier support rate: of the model's claims before the verifier (row c), the share
+ * the judge marked supported. A claim the judge did not reach counts as not supported, and how
+ * many there were is kept.
+ */
+export function supportRate(runs) {
+  const claims = runs.flatMap((r) => (r.claims ?? []).filter((c) => c.origin === "model"));
+  return {
+    ...rate(claims.filter((c) => c.verdict === "supported").length, claims.length),
+    unjudged: claims.filter((c) => typeof c.verdict !== "string").length,
   };
-  const judged = runs.flatMap((r) =>
-    (r.claims ?? []).filter((c) => c.origin === "model" && typeof c.verdict === "string"),
-  );
+}
+
+/**
+ * The pipeline metrics, from the after-verifier runs (row d, first run of each track); the
+ * support rate is from the before-verifier runs (row c), when there are any.
+ */
+export function pipelineMetrics(rowsByIsrc, runs, beforeVerifier = []) {
+  const scored = runs.map((run) => scoreRun(rowsByIsrc.get(run.isrc), run));
+  const identityOk = (run) => identityCorrect(rowsByIsrc.get(run.isrc), run);
   const latency = runs.map((r) => r.latencyMs).filter(has);
   const tokens = runs
     .map((r) => (r.usage ? r.usage.inputTokens + r.usage.outputTokens : null))
@@ -228,7 +333,7 @@ export function pipelineMetrics(rowsByIsrc, runs) {
       sum(runs, (r) => +(r.clarification?.fired === true)),
       runs.length,
     ),
-    support: rate(judged.filter((c) => c.verdict === "supported").length, judged.length),
+    support: supportRate(beforeVerifier),
     schemaValid: rate(
       sum(runs, (r) => +(r.schemaValid === true)),
       runs.length,
@@ -276,7 +381,9 @@ export function strata(rowsByIsrc, runs, identityOk) {
 export function variance(runs) {
   const first = new Map();
   const pairs = [];
-  for (const r of runs.filter((x) => x.ablation === "d" && x.repeat === 0)) first.set(r.isrc, r);
+  for (const r of runs.filter((x) => x.ablation === "d" && (x.repeat ?? 0) === 0)) {
+    first.set(r.isrc, r);
+  }
   for (const again of runs.filter((x) => x.ablation === "d" && x.repeat === 1)) {
     const one = first.get(again.isrc);
     if (one) pairs.push([one, again]);
@@ -297,7 +404,8 @@ export function scoreAll(golden, runs, { subset } = {}) {
       `runs for rows that are not live golden rows: ${[...new Set(unknown.map((r) => r.isrc))].join(", ")}`,
     );
   }
-  const first = runs.filter((r) => r.repeat === 0);
+  for (const [i, run] of runs.entries()) validateRun(run, `run ${i}`);
+  const first = runs.filter((r) => (r.repeat ?? 0) === 0);
   const ablations = {};
   for (const id of Object.keys(ABLATIONS)) {
     const list = first.filter((r) => r.ablation === id);
@@ -306,7 +414,8 @@ export function scoreAll(golden, runs, { subset } = {}) {
     ablations[id] = { ...edgeMetrics(scored), scored };
   }
   const d = first.filter((r) => r.ablation === "d");
-  const pipeline = d.length ? pipelineMetrics(rowsByIsrc, d) : null;
+  const c = first.filter((r) => r.ablation === "c");
+  const pipeline = d.length ? pipelineMetrics(rowsByIsrc, d, c) : null;
   return {
     subset: subset ?? null,
     // One synthetic record makes the whole report test data.

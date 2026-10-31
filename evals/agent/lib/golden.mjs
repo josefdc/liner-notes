@@ -85,25 +85,82 @@ export function subsetRows(golden, subset) {
   throw new Error(`unknown subset "${subset}" (ci or all)`);
 }
 
-/** Host name without "www.". */
-export const host = (url) => new URL(url).hostname.toLowerCase().replace(/^www\./, "");
+/** Host name, lower case, without "www." or a trailing dot. */
+export const host = (url) =>
+  new URL(url).hostname
+    .toLowerCase()
+    .replace(/\.+$/, "")
+    .replace(/^www\./, "");
 
 // Second-level labels under a two-letter country code that are not a site of their own
 // (news.bbc.co.uk is bbc.co.uk).
 const SHARED_SECOND_LEVEL = new Set(["co", "com", "org", "net", "ac", "gov", "edu", "ne", "or"]);
 
-/**
- * The site a URL belongs to: its registrable domain (en.wikipedia.org and de.wikipedia.org are
- * both wikipedia.org; news.bbc.co.uk is bbc.co.uk). The held-out rule compares sites, so a run
- * that cites any page of a site loses held-out credit for every edge sourced on that site.
- */
-export function site(url) {
-  const labels = host(url).split(".");
+const siteOfHost = (h) => {
+  const labels = h.split(".");
   if (labels.length <= 2) return labels.join(".");
   const tld = labels.at(-1);
   const second = labels.at(-2);
   const take = tld.length === 2 && SHARED_SECOND_LEVEL.has(second) ? 3 : 2;
   return labels.slice(-take).join(".");
+};
+
+/**
+ * The site a URL belongs to: its registrable domain (en.wikipedia.org and de.wikipedia.org are
+ * both wikipedia.org; news.bbc.co.uk is bbc.co.uk).
+ */
+export const site = (url) => siteOfHost(host(url));
+
+/** What citedSite returns for a page whose site cannot be known offline: it cites every site. */
+export const ANY_SITE = "*";
+const SHORTENERS = new Set(
+  "bit.ly t.co tinyurl.com goo.gl ow.ly buff.ly is.gd lnkd.in rebrand.ly cutt.ly rb.gy tiny.cc shorturl.at".split(
+    " ",
+  ),
+);
+const ARCHIVE_TODAY = new Set(
+  "archive.ph archive.is archive.today archive.li archive.vn archive.md archive.fo".split(" "),
+);
+
+/** The original URL inside an archive or cache URL ("…/web/2020/https://x/…"), or null. */
+function wrapped(u, h) {
+  const inner = `${u.pathname}${u.search}`.match(/(https?):\/\/?(.+)$/i);
+  const unwrap = inner ? `${inner[1]}://${inner[2]}` : null;
+  if (h === "web.archive.org" || h === "archive.org" || h === "wayback.archive.org") return unwrap;
+  if (ARCHIVE_TODAY.has(h)) return unwrap;
+  if (h === "webcache.googleusercontent.com") {
+    const q = u.searchParams
+      .get("q")
+      ?.replace(/^cache:[^:]*:/, "")
+      .replace(/^cache:/, "");
+    return q ? (/^https?:/i.test(q) ? q : `https://${q}`) : null;
+  }
+  return undefined; // not a wrapper
+}
+
+/**
+ * The site a cited page counts as, failing closed for the held-out rule: an archive or cache
+ * copy counts as the page it copies; a URL that cannot be parsed, a host with no dot, a link
+ * shortener, or a wrapper whose original cannot be read offline counts as citing every site
+ * (ANY_SITE).
+ */
+export function citedSite(url) {
+  let u;
+  try {
+    const text = String(url ?? "").trim();
+    u = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(text) ? text : `https://${text}`);
+  } catch {
+    return ANY_SITE;
+  }
+  const h = u.hostname
+    .toLowerCase()
+    .replace(/\.+$/, "")
+    .replace(/^www\./, "");
+  if (!h.includes(".") || SHORTENERS.has(h)) return ANY_SITE;
+  const inner = wrapped(u, h);
+  if (inner === null) return ANY_SITE;
+  if (inner !== undefined) return citedSite(inner);
+  return siteOfHost(h);
 }
 
 /** Do two record descriptions name the same recording (ISRC or MBID, else title and artist)? */
@@ -167,5 +224,7 @@ export function goldSources(rows) {
     for (const e of row.labels.edges) add(e.sourceUrl, e.retrieved);
     for (const s of row.labels.noSampleSources ?? []) add(s.sourceUrl, s.retrieved);
   }
-  return [...bySite.values()].sort((a, b) => b.refs - a.refs || a.site.localeCompare(b.site));
+  return [...bySite.values()].sort(
+    (a, b) => b.refs - a.refs || (a.site < b.site ? -1 : a.site > b.site ? 1 : 0),
+  );
 }

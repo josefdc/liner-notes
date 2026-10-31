@@ -4,36 +4,37 @@
 > (`evals/agent/testdata/make-testdata.mjs`). No number below measures the app.
 
 - **Dataset**: `evals/golden.jsonl`, sha256 `8dd2049c03fa6a53fc74d353f765871cc9aa95f7ff6a8f2a081f341e29f49442`; 45 rows, 24 in the live subset.
-- **Runs scored**: 102 run records over 24 tracks (subset: all).
+- **Run records**: `evals/agent/testdata/runs`; 102 records over 24 tracks (subset: all).
 - **Date**: 2026-10-31
 - **Commit**: `synthetic` (runs recorded at `synthetic`)
 - **Results**: `report-good.json`
-- **Gold** is described by its sources, each read on the date given in the golden file: musicbrainz.org (20 references, read 2026-10-16); wikipedia.org (20 references, read 2026-10-16); rollingstone.com (3 references, read 2026-10-16); theguardian.com (2 references, read 2026-10-16); bbc.co.uk (1 reference, read 2026-10-16); billboard.com (1 reference, read 2026-10-16); ft.com (1 reference, read 2026-10-16); kexp.org (1 reference, read 2026-10-16); latimes.com (1 reference, read 2026-10-16); loudwire.com (1 reference, read 2026-10-16); npr.org (1 reference, read 2026-10-16); seattletimes.com (1 reference, read 2026-10-16). No gold label in this version was made by a person listening; none is human-labelled.
+- **Gold** is described by its sources, each read on the date given in the golden file: musicbrainz.org (20 references, read 2026-10-16); wikipedia.org (20 references, read 2026-10-16); rollingstone.com (3 references, read 2026-10-16); theguardian.com (2 references, read 2026-10-16); bbc.co.uk (1 reference, read 2026-10-16); billboard.com (1 reference, read 2026-10-16); ft.com (1 reference, read 2026-10-16); kexp.org (1 reference, read 2026-10-16); latimes.com (1 reference, read 2026-10-16); loudwire.com (1 reference, read 2026-10-16); npr.org (1 reference, read 2026-10-16); seattletimes.com (1 reference, read 2026-10-16). Every gold label cites one of these sources; none comes from listening.
 
 ## How to read it
 
 - **n** is printed next to every value. Proportions carry a 95 % Wilson score interval; means, medians and p95 carry a 95 % percentile bootstrap over tracks (10,000 resamples, seed 33). Edges and claims of one track are not independent, so pooled intervals are narrower than they should be.
-- A stratum with n < 10 is shown as counts, not as a rate.
-- **Edges** are scored per distinct gold target, forward relations only, strictly against gold (`evals/README.md`, "Scoring edges"). A proposal that matches an `otherDocumentedTargets` entry is left out of precision; on rows whose gold is not exhaustive, a proposal the run's evidence names is left out too.
-- **Held-out recall** counts a gold target as held-out in a run only while one of its held-out sources is on a site the run's evidence does not cite. The held-out table gives n before and after that exclusion.
+- Any row with n < 10, in any table, is shown as counts (or the values themselves), with no rate and no interval.
+- **Edges** are scored per distinct gold target, forward relations only, strictly against gold (`evals/README.md`, "Scoring edges"). One gold target gives one true positive however many spellings propose it; a gold target with a relation gold does not accept is a false positive. A proposal that matches an `otherDocumentedTargets` entry is left out of precision; on rows whose gold is not exhaustive, so is a proposal that one evidence sentence names by title and artist with a relation. **Model edge precision** covers only the edges the code did not also build.
+- **Held-out recall** counts a gold target as held-out in a run only when the run's evidence cites none of the sites of its held-out sources; an archived copy counts as its original, and a page whose site cannot be placed counts as citing every site. The held-out table gives n before and after that exclusion, and which sites removed targets.
+- **Pre-verifier support rate**: of the model's claims before the verifier (row c), the share the judge marked supported; a claim the judge did not reach counts as not supported.
 - **Clarification**: the harness answers the clarification step with the top-ranked candidate, never the gold ISRC; the clarification rate is how often the step fired.
 - **Ablations**: (a) model only, no tools or evidence; (b) deterministic only, no model; (c) pipeline before the verifier; (d) pipeline after the verifier (what the UI shows).
 
 ## Pipeline (row d, after the verifier)
 
-| metric | value | n | 95 % CI | interval |
-| --- | --- | --- | --- | --- |
-| preview coverage | 95.8 % (23/24) | 24 | [79.8 %, 99.3 %] | Wilson |
-| identity accuracy (recording level) | 95.8 % (23/24) | 24 | [79.8 %, 99.3 %] | Wilson |
-| code-built edge coverage | 68.8 % (11/16) | 16 | [44.4 %, 85.8 %] | Wilson |
-| model edge precision | 66.7 % (4/6) | 6 | [30.0 %, 90.3 %] | Wilson |
-| pre-verifier support rate (model claims) | 87.5 % (42/48) | 48 | [75.3 %, 94.1 %] | Wilson |
-| schema-valid rate | 95.8 % (23/24) | 24 | [79.8 %, 99.3 %] | Wilson |
-| fallback rate | 4.2 % (1/24) | 24 | [0.7 %, 20.2 %] | Wilson |
-| latency p50 | 49.4 s | 24 | [44.4 s, 51.3 s] | bootstrap |
-| latency p95 | 58.1 s | 24 | [55.0 s, 58.4 s] | bootstrap |
-| tokens per analysis (mean) | 19069 | 24 | [18610, 19514] | bootstrap |
-| USD per analysis (mean) | USD 0.0129 | 24 | [USD 0.0122, USD 0.0136] | bootstrap |
+| metric | value | n | 95 % CI |
+| --- | --- | --- | --- |
+| preview coverage | 95.8 % (23/24) | 24 | [79.8 %, 99.3 %] |
+| identity accuracy (recording level) | 95.8 % (23/24) | 24 | [79.8 %, 99.3 %] |
+| code-built edge coverage | 68.8 % (11/16) | 16 | [44.4 %, 85.8 %] |
+| model edge precision | 4/6 | 6 | counts only (n < 10) |
+| pre-verifier support rate (row c model claims, 0 not judged) | 87.5 % (42/48) | 48 | [75.3 %, 94.1 %] |
+| schema-valid rate | 95.8 % (23/24) | 24 | [79.8 %, 99.3 %] |
+| fallback rate | 4.2 % (1/24) | 24 | [0.7 %, 20.2 %] |
+| latency p50 | 49.4 s | 24 | [44.4 s, 51.3 s] |
+| latency p95 | 58.1 s | 24 | [55.0 s, 58.4 s] |
+| tokens per analysis (mean) | 19069 | 24 | [18610, 19514] |
+| USD per analysis (mean) | USD 0.0129 | 24 | [USD 0.0122, USD 0.0136] |
 
 ## Ablations
 
@@ -42,32 +43,38 @@
 | a | model only, no tools or evidence | edge recall | 62.5 % (10/16) | 16 | [38.6 %, 81.5 %] |
 | a | model only, no tools or evidence | edge precision (all proposed edges) | 66.7 % (10/15) | 15 | [41.7 %, 84.8 %] |
 | a | model only, no tools or evidence | held-out edge recall | 60.0 % (9/15) | 15 | [35.7 %, 80.2 %] |
-| a | model only, no tools or evidence | hallucinated-sample rate | 20.0 % (1/5) | 5 | [3.6 %, 62.4 %] |
-| a | model only, no tools or evidence | edges per no-sample track (mean) | 0.20 | 5 | [0.00, 0.60] |
+| a | model only, no tools or evidence | hallucinated-sample rate | 1/5 | 5 | counts only (n < 10) |
+| a | model only, no tools or evidence | edges per no-sample track (mean) | values 0.00, 0.00, 0.00, 1.00, 0.00 | 5 | counts only (n < 10) |
 | b | deterministic only, no model | edge recall | 68.8 % (11/16) | 16 | [44.4 %, 85.8 %] |
 | b | deterministic only, no model | edge precision (all proposed edges) | 100.0 % (11/11) | 11 | [74.1 %, 100.0 %] |
-| b | deterministic only, no model | held-out edge recall | 71.4 % (10/14) | 14 | [45.4 %, 88.3 %] |
-| b | deterministic only, no model | hallucinated-sample rate | 0.0 % (0/5) | 5 | [0.0 %, 43.4 %] |
-| b | deterministic only, no model | edges per no-sample track (mean) | 0.00 | 5 | [0.00, 0.00] |
+| b | deterministic only, no model | held-out edge recall | 6/9 | 9 | counts only (n < 10) |
+| b | deterministic only, no model | hallucinated-sample rate | 0/5 | 5 | counts only (n < 10) |
+| b | deterministic only, no model | edges per no-sample track (mean) | values 0.00, 0.00, 0.00, 0.00, 0.00 | 5 | counts only (n < 10) |
 | c | pipeline before the verifier | edge recall | 93.8 % (15/16) | 16 | [71.7 %, 98.9 %] |
 | c | pipeline before the verifier | edge precision (all proposed edges) | 75.0 % (15/20) | 20 | [53.1 %, 88.8 %] |
-| c | pipeline before the verifier | held-out edge recall | 92.9 % (13/14) | 14 | [68.5 %, 98.7 %] |
-| c | pipeline before the verifier | hallucinated-sample rate | 20.0 % (1/5) | 5 | [3.6 %, 62.4 %] |
-| c | pipeline before the verifier | edges per no-sample track (mean) | 0.20 | 5 | [0.00, 0.60] |
+| c | pipeline before the verifier | held-out edge recall | 9/9 | 9 | counts only (n < 10) |
+| c | pipeline before the verifier | hallucinated-sample rate | 1/5 | 5 | counts only (n < 10) |
+| c | pipeline before the verifier | edges per no-sample track (mean) | values 0.00, 0.00, 0.00, 1.00, 0.00 | 5 | counts only (n < 10) |
 | d | pipeline after the verifier (what the UI shows) | edge recall | 93.8 % (15/16) | 16 | [71.7 %, 98.9 %] |
 | d | pipeline after the verifier (what the UI shows) | edge precision (all proposed edges) | 88.2 % (15/17) | 17 | [65.7 %, 96.7 %] |
-| d | pipeline after the verifier (what the UI shows) | held-out edge recall | 92.9 % (13/14) | 14 | [68.5 %, 98.7 %] |
-| d | pipeline after the verifier (what the UI shows) | hallucinated-sample rate | 20.0 % (1/5) | 5 | [3.6 %, 62.4 %] |
-| d | pipeline after the verifier (what the UI shows) | edges per no-sample track (mean) | 0.20 | 5 | [0.00, 0.60] |
+| d | pipeline after the verifier (what the UI shows) | held-out edge recall | 9/9 | 9 | counts only (n < 10) |
+| d | pipeline after the verifier (what the UI shows) | hallucinated-sample rate | 1/5 | 5 | counts only (n < 10) |
+| d | pipeline after the verifier (what the UI shows) | edges per no-sample track (mean) | values 0.00, 0.00, 0.00, 1.00, 0.00 | 5 | counts only (n < 10) |
+
+Proposals outside precision's counts: (a) 0 right target with the wrong relation (counted false); left out: 0 duplicate, 0 other documented, 0 unresolved; (b) 0 right target with the wrong relation (counted false); left out: 0 duplicate, 0 other documented, 0 unresolved; (c) 0 right target with the wrong relation (counted false); left out: 0 duplicate, 0 other documented, 0 unresolved; (d) 0 right target with the wrong relation (counted false); left out: 0 duplicate, 0 other documented, 0 unresolved.
 
 ## Held-out recall after the per-run domain exclusion
 
-| row | held-out gold targets | excluded (run cites the source's site) | n after exclusion | found | recall | 95 % CI |
-| --- | --- | --- | --- | --- | --- | --- |
-| a | 15 | 0 | 15 | 9 | 60.0 % | [35.7 %, 80.2 %] |
-| b | 15 | 1 | 14 | 10 | 71.4 % | [45.4 %, 88.3 %] |
-| c | 15 | 1 | 14 | 13 | 92.9 % | [68.5 %, 98.7 %] |
-| d | 15 | 1 | 14 | 13 | 92.9 % | [68.5 %, 98.7 %] |
+| row | held-out gold targets | excluded (run cites a held-out source's site) | recall (found/n) | n after exclusion | 95 % CI |
+| --- | --- | --- | --- | --- | --- |
+| a | 15 | 0 | 60.0 % (9/15) | 15 | [35.7 %, 80.2 %] |
+| b | 15 | 6 | 6/9 | 9 | counts only (n < 10) |
+| c | 15 | 6 | 9/9 | 9 | counts only (n < 10) |
+| d | 15 | 6 | 9/9 | 9 | counts only (n < 10) |
+
+Targets excluded, by the cited site: (b) wikipedia.org 6; (c) wikipedia.org 6; (d) wikipedia.org 6.
+
+Few held-out targets remain after the exclusion ((b) 9 of 15; (c) 9 of 15; (d) 9 of 15): the runs cite the sites gold's held-out sources are on, so held-out recall rests on the targets that are left.
 
 ## Per stratum (row d)
 
@@ -89,8 +96,8 @@
 
 | metric | value | n | 95 % CI |
 | --- | --- | --- | --- |
-| Jaccard index of claims (mean) | 1.00 | 6 | [1.00, 1.00] |
-| Jaccard index of edges (mean) | 0.94 | 6 | [0.83, 1.00] |
+| Jaccard index of claims (mean) | values 1.00, 1.00, 1.00, 1.00, 1.00, 1.00 | 6 | counts only (n < 10) |
+| Jaccard index of edges (mean) | values 1.00, 1.00, 0.67, 1.00, 1.00, 1.00 | 6 | counts only (n < 10) |
 
 ## Verifier as a classifier
 
@@ -98,9 +105,9 @@ Pending: no judge recording of `evals/perturb.jsonl`. The numeric check's catch 
 
 ## Agreement with human labels
 
-Pending: no human labels. `node evals/agent/export-labels.mjs` writes the claims to label, without verdicts.
+Pending: no labels from people exist. `node evals/agent/export-labels.mjs` writes the claims to label, without verdicts.
 
 ## Unmatched proposed edges (row d)
 
-- `USBB40000359`: "Invented Break" by Nobody In Particular, sample, model: false positive
-- `AUUM71500303`: "Invented Break" by Nobody In Particular, sample, model: false positive
+- `USBB40000359`: "Invented Break" by Nobody In Particular, sample, model: false positive (not in gold)
+- `AUUM71500303`: "Invented Break" by Nobody In Particular, sample, model: false positive (not in gold)

@@ -1,9 +1,10 @@
 # Agent evals, 2026-10-31
 
 - **Dataset**: `evals/golden.jsonl`, sha256 `8dd2049c03fa6a53fc74d353f765871cc9aa95f7ff6a8f2a081f341e29f49442`; 45 rows, 24 in the live subset.
-- **Run records**: `evals/agent/runs/2026-10-31`, sha256 `fc7eda38f73e2f1ea351a41550940d7c85266fa47885e4e090a4d1d2d152834b`; 102 records over 24 tracks (subset: all).
+- **Run records**: `evals/agent/runs/2026-10-31`, sha256 `d50da1f04a8323f58821b92068e7b81730914fe5bbfdbc67c7c55404d96be716`; 102 records over 24 tracks (subset: all).
 - **Date**: 2026-10-31
 - **Commit**: `5fd193fa7a64` (runs recorded at `5fd193fa7a64`)
+- **Provenance**: Every run here, and the judge's record, was recorded at `5fd193fa7a64`, then the head of the branch that added this report, based on `3c5e5b9`; the branch is squashed when merged, so that commit is named for provenance and is not in main's history. After it the branch changed no app code: only the eval harness where it gathers, compares, scores and reports records (its live runs are unchanged), these records and their cassettes, docs, CI, lint settings and two API tests (`apps/api/src/sources/http-readable.test.ts`, `apps/api/src/sources/identity.test.ts`).
 - **Results**: `agent-2026-10-31.json`
 - **Gold** is described by its sources, each read on the date given in the golden file: musicbrainz.org (20 references, read 2026-10-16); wikipedia.org (20 references, read 2026-10-16); rollingstone.com (3 references, read 2026-10-16); theguardian.com (2 references, read 2026-10-16); bbc.co.uk (1 reference, read 2026-10-16); billboard.com (1 reference, read 2026-10-16); ft.com (1 reference, read 2026-10-16); kexp.org (1 reference, read 2026-10-16); latimes.com (1 reference, read 2026-10-16); loudwire.com (1 reference, read 2026-10-16); npr.org (1 reference, read 2026-10-16); seattletimes.com (1 reference, read 2026-10-16). Every gold label cites one of these sources; none comes from listening.
 - **Models**: the pipeline writes on `fast gpt-6-luna`, `main gpt-6-luna` and judges on `gpt-6-sol`; the judge's model writes nothing the judge reads. The model-only baseline (row a) runs on `gpt-6-sol`, the judge's model, so it is never judged: none of its claims is shown as sourced. All of this is read from the spend lines the run records keep.

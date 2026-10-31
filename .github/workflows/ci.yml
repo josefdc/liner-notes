@@ -62,10 +62,8 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-          # The whole history: the parent commit holds the base branch's guard baselines and
-          # contract snapshots, and the published agent eval report names the commit its runs
-          # were recorded at, which check-report must find (with evals/golden.jsonl as it was).
-          fetch-depth: 0
+          # The parent commit holds the base branch's guard baselines and contract snapshots.
+          fetch-depth: 2
       - uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node }}
@@ -133,8 +131,9 @@ jobs:
           test ! -e apps/api/.env || { printf 'apps/api/.env exists\n' >&2; exit 1; }
           NODE_OPTIONS="--import $GITHUB_WORKSPACE/tests/deny-network.mjs" npm run eval -- --suite agent --mode replay --subset ci
       # The published agent eval report, rendered again from its run records and compared byte for
-      # byte, and the verifier's judge replayed on the perturbation set from its cassettes: both
-      # with every outbound connection refused, and no spending.
+      # byte (the golden file and the records are checked by sha256, so no older commit is read),
+      # and the verifier's judge replayed on the perturbation set from its cassettes: both with
+      # every outbound connection refused, and no spending.
       - name: Agent eval report and judge replay
         if: matrix.node == 24
         run: |

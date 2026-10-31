@@ -25,11 +25,14 @@
 //      judge), gives the source-error rate, and has the verifier-as-classifier section with the
 //      false-positive and catch rates per positive source, the model-positive pool and the
 //      audit of the model positives (or says each is pending).
+//    - a published report scores evals/golden.jsonl. Its commits must be well-formed ids but need
+//      not be in the repository: they name the code revision the runs were recorded from, on a
+//      branch a squash merge leaves out of the history. What it scored is checked by content:
+//      the golden file's sha256 and the run records' must equal the working tree's, so a later
+//      edit to either fails until the report is rendered again (or the runs recorded again).
 //
 //   node evals/agent/check-report.mjs evals/reports/agent-latest.md
 
-import { execFileSync } from "node:child_process";
-import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -286,16 +289,11 @@ function firstDifference(expected, actual) {
   return "no line differs";
 }
 
-const gitOk = (args) => {
-  try {
-    execFileSync("git", args, { cwd: REPO_ROOT, stdio: ["ignore", "pipe", "ignore"] });
-    return true;
-  } catch {
-    return false;
-  }
-};
-const commitExists = (c) =>
-  typeof c === "string" && /^[0-9a-f]{7,40}$/.test(c) && gitOk(["cat-file", "-e", `${c}^{commit}`]);
+// A report's commit, and each run's, is provenance: the code revision the runs were recorded
+// from. Runs are recorded on a branch that is squashed when merged, so the commit need not be in
+// the repository's history; what the report scored is checked by content instead (the golden
+// file's and the run records' sha256).
+const wellFormedCommit = (c) => typeof c === "string" && /^[0-9a-f]{7,40}$/.test(c);
 
 /**
  * What a report published in evals/reports must also satisfy. It cannot prove the run records
@@ -311,7 +309,8 @@ function checkPublished({ h, runsPath, runs, result }, problems, reportsDir) {
   }
   for (const c of new Set([h.commit, ...runs.map((r) => r.commit)])) {
     if (c === undefined) problems.push("a run record has no commit");
-    else if (!commitExists(c)) problems.push(`commit ${c} is not in this repository`);
+    else if (!wellFormedCommit(c))
+      problems.push(`commit ${c} is not a commit id (7 to 40 hex digits)`);
   }
 }
 
@@ -347,26 +346,12 @@ export function checkPublishedStatements(md, sections, problems) {
   }
 }
 
-/** A published report's dataset: evals/golden.jsonl, as it was at the report's commit. */
-function checkPinnedGolden(h, goldenPath, sha, problems, where) {
+/** A published report's dataset is evals/golden.jsonl; its sha256 is checked with every report's. */
+function checkPinnedGolden(goldenPath, problems, where) {
   if (goldenPath !== "evals/golden.jsonl") {
     problems.push(
       `a report published in ${where} must score evals/golden.jsonl, not ${goldenPath}`,
     );
-  } else if (commitExists(h.commit)) {
-    let pinned = null;
-    try {
-      pinned = execFileSync("git", ["show", `${h.commit}:evals/golden.jsonl`], {
-        cwd: REPO_ROOT,
-        maxBuffer: 64 * 1024 * 1024,
-        stdio: ["ignore", "pipe", "ignore"],
-      });
-    } catch {
-      problems.push(`evals/golden.jsonl does not exist at commit ${h.commit}`);
-    }
-    if (pinned && createHash("sha256").update(pinned).digest("hex") !== sha) {
-      problems.push(`the dataset's sha256 is not evals/golden.jsonl at commit ${h.commit}`);
-    }
   }
 }
 
@@ -378,7 +363,7 @@ async function checkTruth(h, md, path, sections, problems, reportsDir) {
   const subset = subsetCell === "as recorded" ? undefined : subsetCell;
   if (!relative(reportsDir, resolve(path)).startsWith("..")) {
     const where = relative(REPO_ROOT, reportsDir);
-    checkPinnedGolden(h, goldenPath, sha, problems, where);
+    checkPinnedGolden(goldenPath, problems, where);
     if (subset === undefined) {
       problems.push(
         `a report published in ${where} must be rendered with --subset ci or all, not "as recorded", so no row with no run record is left out`,
@@ -394,7 +379,7 @@ async function checkTruth(h, md, path, sections, problems, reportsDir) {
   }
   if (golden.sha256 !== sha) {
     problems.push(
-      `dataset ${goldenPath} is not the one scored (its sha256 is now ${golden.sha256}): render the report again`,
+      `dataset ${goldenPath} is not the one scored (the report states sha256 ${sha}, the file's is now ${golden.sha256}): a changed golden file needs the report rendered again from its run records, or the runs recorded again if the change is to what they ran (evals/agent/README.md, "The report")`,
     );
     return;
   }
@@ -405,7 +390,7 @@ async function checkTruth(h, md, path, sections, problems, reportsDir) {
   const nowSha = runsSha256(resolve(REPO_ROOT, runsPath));
   if (nowSha !== runsSha) {
     problems.push(
-      `run records ${runsPath} changed since the report (sha256 now ${nowSha}): render it again, or keep each run's records in a directory of its own`,
+      `run records ${runsPath} changed since the report (the report states sha256 ${runsSha}, the records' is now ${nowSha}): render it again, or keep each run's records in a directory of its own`,
     );
     return;
   }

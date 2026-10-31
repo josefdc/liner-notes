@@ -131,16 +131,16 @@ test("check-report needs the results file, the run records and the same golden f
   }
 });
 
-test("a published report: no synthetic or testdata records, commits in git, the pinned dataset", async () => {
+test("a published report: no synthetic or testdata records, well-formed commits", async () => {
   const problems = (
     await checkReport(join(TESTDATA, "report-good.md"), { reportsDir: TESTDATA })
   ).join("\n");
   assert.match(problems, /synthetic run records cannot be published/);
   assert.match(problems, /run records under a testdata directory cannot be published/);
-  assert.match(problems, /commit synthetic is not in this repository/);
+  assert.match(problems, /commit synthetic is not a commit id \(7 to 40 hex digits\)/);
 });
 
-test("a published report must score evals/golden.jsonl as it was at its commit", async () => {
+test("a published report scores evals/golden.jsonl, checked by content, at any commit", async () => {
   const head = spawnSync("git", ["rev-parse", "--short=12", "HEAD"], {
     encoding: "utf8",
     cwd: ROOT,
@@ -196,7 +196,7 @@ test("a published report must score evals/golden.jsonl as it was at its commit",
       if (message) assert.match(problems, message);
       else assert.equal(problems, "");
     }
-    // The header's sha256 changed to the forged file's: not evals/golden.jsonl at that commit.
+    // The header's sha256 changed to the forged file's: not the golden file in the tree.
     const path = join(reports, "agent-latest.md");
     const md = readFileSync(path, "utf8");
     const forgedSha = createHash("sha256").update(readFileSync(forged)).digest("hex");
@@ -207,7 +207,45 @@ test("a published report must score evals/golden.jsonl as it was at its commit",
     const problems = (await checkReport(path, { reportsDir: reports })).join("\n");
     assert.match(
       problems,
-      new RegExp(`the dataset's sha256 is not evals/golden.jsonl at commit ${head}`),
+      /dataset evals\/golden\.jsonl is not the one scored \(the report states sha256 [0-9a-f]{64}, the file's is now [0-9a-f]{64}\): a changed golden file needs the report rendered again/,
+    );
+    // A commit that is in no history (a squashed branch's) is provenance, not a problem; one
+    // that is not an id is.
+    const elsewhere = "5fd193fa7a64";
+    for (const name of [
+      "ablation-a.json",
+      "ablation-b.json",
+      "ablation-c.json",
+      "ablation-d.json",
+    ]) {
+      const file = join(runs, name);
+      const records = JSON.parse(readFileSync(file, "utf8"));
+      writeFileSync(file, JSON.stringify(records.map((r) => ({ ...r, commit: elsewhere }))));
+    }
+    const squashed = join(dir, "squashed");
+    const again = node([
+      "evals/agent/report.mjs",
+      "--runs",
+      runs,
+      "--subset",
+      "all",
+      "--out",
+      squashed,
+      "--date",
+      "2026-10-31",
+      "--commit",
+      "0123456789ab",
+    ]);
+    assert.equal(again.status, 0, again.stderr);
+    const squashedPath = join(squashed, "agent-latest.md");
+    assert.deepEqual(await checkReport(squashedPath, { reportsDir: squashed }), []);
+    writeFileSync(
+      squashedPath,
+      readFileSync(squashedPath, "utf8").replace("`0123456789ab`", "`not-a-commit`"),
+    );
+    assert.match(
+      (await checkReport(squashedPath, { reportsDir: squashed })).join("\n"),
+      /commit not-a-commit is not a commit id/,
     );
     // Rendered "as recorded", a published report could leave out tracks whose runs crashed.
     const loose = join(dir, "loose");
@@ -301,11 +339,35 @@ test("a report whose run records changed since says so", async () => {
     ]);
     assert.equal(out.status, 0, out.stderr);
     assert.deepEqual(await checkReport(join(dir, "agent-latest.md")), []);
+    // The provenance note is part of the records: added, it changes their sha256 until the
+    // report is rendered again, and then it is in the header.
+    writeFileSync(join(runs, "provenance.txt"), "Recorded at a branch's head.\n");
+    assert.match(
+      (await checkReport(join(dir, "agent-latest.md"))).join("\n"),
+      /changed since the report/,
+    );
+    const noted = node([
+      "evals/agent/report.mjs",
+      "--runs",
+      runs,
+      "--out",
+      dir,
+      "--date",
+      "2026-10-31",
+      "--commit",
+      "synthetic",
+    ]);
+    assert.equal(noted.status, 0, noted.stderr);
+    assert.match(
+      readFileSync(join(dir, "agent-latest.md"), "utf8"),
+      /^- \*\*Provenance\*\*: Recorded at a branch's head\.$/m,
+    );
+    assert.deepEqual(await checkReport(join(dir, "agent-latest.md")), []);
     const pilot = join(runs, "variance.json");
     writeFileSync(pilot, readFileSync(pilot, "utf8").replace(/\n$/, " \n"));
     assert.match(
       (await checkReport(join(dir, "agent-latest.md"))).join("\n"),
-      /changed since the report \(sha256 now [0-9a-f]{64}\)/,
+      /changed since the report \(the report states sha256 [0-9a-f]{64}, the records' is now [0-9a-f]{64}\)/,
     );
   } finally {
     rmSync(dir, { recursive: true, force: true });

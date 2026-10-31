@@ -29,7 +29,8 @@ evals/agent/
   lib/api.mjs         starts the API with pinned settings and runs one analysis
   lib/app.mjs         loads the app's TypeScript modules (tsx), one namespace
   lib/inproc.mjs      the app's model layer in this process (baseline, judge)
-  runs/<date>/        the committed run records of a golden run (a-d, d-repeat, perturb/)
+  runs/<date>/        the committed run records of a golden run (a-d, d-repeat, perturb/,
+                      results/, provenance.txt)
   testdata/           synthetic runs and reports for the tests (make-testdata.mjs writes them)
   *.test.mjs          node --test 'evals/**/*.test.mjs'
 ```
@@ -125,17 +126,27 @@ recomputed; statistics with a numeric interval, low before high (marked "all res
 only when every track's value is equal, and only on an interval with no width); counts only below n = 10; "no data" only at n = 0; ablation rows a-d;
 the clarification rate; held-out numbers that add up; no "human-labelled", "annotators" or the
 like, in any case; the synthetic banner when the records are synthetic. A report under
-`evals/reports` must also score `evals/golden.jsonl` with the sha256 that file had at the
-report's commit, name a header commit and run commits that exist in git, be rendered with
-`--subset ci` or `--subset all` (so a track whose run crashed is named, never left out), and come
+`evals/reports` must also score `evals/golden.jsonl`, name a header commit and run commits that
+are well-formed ids, be rendered with `--subset ci` or `--subset all` (so a track whose run crashed is named, never left out), and come
 from records that are neither synthetic nor under a `testdata` directory (`report.mjs` refuses
 to write those there). The broken reports in `testdata/` exercise each of these, and the tests show
 which ones only re-rendering catches.
 
+A commit in a report is provenance: the code revision the runs were recorded from. Runs are
+recorded on a branch, and a branch is squashed when merged, so that commit need not be in the
+repository's history, and nothing is read from it. What a report scored is checked by content:
+the golden file's sha256 and the run records' (every `*.json` of the directory, `perturb/`,
+`results/` and `provenance.txt`) must equal the working tree's. So a later edit to
+`evals/golden.jsonl` or to a run record fails the check, and CI with it. If the golden file has
+to change, render the report again from its run records (`report.mjs`, with the same `--commit`),
+or record the runs again when the change is to what they ran. `provenance.txt`, when a run
+directory keeps one, says in words where its runs were recorded and what changed after; the
+report prints it in its header.
+
 What `check-report.mjs` cannot tell: whether the run records came from real runs. It proves a
 report is what the named records and dataset give. For a published report it refuses records
-marked synthetic, records under a `testdata` path, commits that are not in the repository and a
-dataset other than `evals/golden.jsonl` at the report's commit; nothing more. Records edited
+marked synthetic, records under a `testdata` path, commits that are not well-formed ids and a
+dataset other than `evals/golden.jsonl`; nothing more. Records edited
 together with their report still pass, and so does the test data copied out of `testdata/`
 with its `synthetic` flag removed and a real commit set. Where
 the records come from is shown by the golden run's own trail (its cassettes and spend log), not
@@ -180,9 +191,8 @@ cassettes). The CI subset holds Stronger (`USUM70741299`), whose result links tw
 recordings (second-hop samples) and whose preview gave no measurement.
 
 CI runs, with every outbound connection refused and no spending: the CI subset's replay;
-`check-report.mjs evals/reports/agent-latest.md` (which needs the whole history, so that the
-commit the runs were recorded at and `evals/golden.jsonl` as it was there can be read); and
-`perturb-check.mjs`. `node --test 'evals/**/*.test.mjs'` also scans every committed file under
+`check-report.mjs evals/reports/agent-latest.md`, which reads no older commit, so it passes on
+CI's two-commit checkout and after a squash merge; and `perturb-check.mjs`. `node --test 'evals/**/*.test.mjs'` also scans every committed file under
 `fixtures/cassettes` and `evals/agent/runs` for credential shapes (keys in their services'
 formats, api-key and Authorization headers, bearer tokens and token fields that are not
 `[redacted]`, credentials in a query), preview hosts with or without a scheme, and signed links'

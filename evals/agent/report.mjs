@@ -79,11 +79,28 @@ export const ALL_EQUAL = "(all resamples equal)";
 /** Markdown-escapes text a run record supplies (a proposed title or artist). */
 export const escapeMd = (text) => String(text).replace(/[\\`*_[\]<>#|~]/g, "\\$&");
 
-/** The sha256 of a run-record directory: every *.json file, by name, in code-point order. */
+/**
+ * Where the runs of a record directory were recorded, in words, when the directory keeps it
+ * (`provenance.txt`): the commit the records name is the code revision the runs were recorded
+ * from, which a squash merge leaves out of the repository's history.
+ */
+export const PROVENANCE_FILE = "provenance.txt";
+
+export function readProvenance(dir) {
+  const path = join(dir, PROVENANCE_FILE);
+  if (!existsSync(path)) return null;
+  const text = readFileSync(path, "utf8").replace(/\s+/g, " ").trim();
+  return text || null;
+}
+
+/**
+ * The sha256 of a run-record directory: every *.json file and the provenance note, by name, in
+ * code-point order.
+ */
 export function runsSha256(dir) {
   const hash = createHash("sha256");
   for (const name of readdirSync(dir)
-    .filter((n) => n.endsWith(".json"))
+    .filter((n) => n.endsWith(".json") || n === PROVENANCE_FILE)
     .sort()) {
     hash
       .update(`${name}\0`)
@@ -175,7 +192,16 @@ const sites = (counts) =>
 export function renderReport(
   golden,
   result,
-  { date, commit, goldenLabel, runsLabel, runsSha, jsonName: name, extras = null },
+  {
+    date,
+    commit,
+    goldenLabel,
+    runsLabel,
+    runsSha,
+    jsonName: name,
+    extras = null,
+    provenance = null,
+  },
 ) {
   const jsonName = name ?? `agent-${date}.json`;
   const live = liveRows(golden);
@@ -189,6 +215,7 @@ export function renderReport(
     `- **Run records**: \`${runsLabel}\`, sha256 \`${runsSha}\`; ${result.runs} records over ${result.tracks} tracks (subset: ${result.subset ?? "as recorded"}).`,
     `- **Date**: ${date}`,
     `- **Commit**: \`${commit}\`${result.commits.length ? ` (runs recorded at ${result.commits.map((c) => `\`${c}\``).join(", ")})` : ""}`,
+    ...(provenance ? [`- **Provenance**: ${provenance}`] : []),
     `- **Results**: \`${jsonName}\``,
     `- **Gold** is described by its sources, each read on the date given in the golden file: ${sources
       .map(
@@ -217,6 +244,7 @@ export function renderReport(
     version: 1,
     date,
     commit,
+    ...(provenance ? { provenance } : {}),
     synthetic: result.synthetic,
     golden: { path: goldenLabel, sha256: golden.sha256, rows: golden.rows.length },
     runRecords: { path: runsLabel, sha256: runsSha },
@@ -696,6 +724,7 @@ export async function buildReport(opts) {
       runsSha: runsSha256(runsPath),
       jsonName: opts.jsonName,
       extras,
+      provenance: readProvenance(runsPath),
     }),
   };
 }

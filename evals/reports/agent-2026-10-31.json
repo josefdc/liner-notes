@@ -2,6 +2,7 @@
   "version": 1,
   "date": "2026-10-31",
   "commit": "5fd193fa7a64",
+  "provenance": "Every run here, and the judge's record, was recorded at `5fd193fa7a64`, then the head of the branch that added this report, based on `3c5e5b9`; the branch is squashed when merged, so that commit is named for provenance and is not in main's history. After it the branch changed no app code: only the eval harness where it gathers, compares, scores and reports records (its live runs are unchanged), these records and their cassettes, docs, CI, lint settings and two API tests (`apps/api/src/sources/http-readable.test.ts`, `apps/api/src/sources/identity.test.ts`).",
   "synthetic": false,
   "golden": {
     "path": "evals/golden.jsonl",
@@ -10,7 +11,7 @@
   },
   "runRecords": {
     "path": "evals/agent/runs/2026-10-31",
-    "sha256": "fc7eda38f73e2f1ea351a41550940d7c85266fa47885e4e090a4d1d2d152834b"
+    "sha256": "d50da1f04a8323f58821b92068e7b81730914fe5bbfdbc67c7c55404d96be716"
   },
   "subset": "all",
   "runs": 102,

@@ -219,7 +219,7 @@ test("perturb-check prints both sets of blocks, nothing unexpected, and the repl
   assert.doesNotMatch(out.stdout, /UNEXPECTED/);
   assert.match(
     out.stdout,
-    /verdicts as in evals\/agent\/runs\/\d{4}-\d{2}-\d{2}\/perturb\/judge\.json: yes; spend lines 0/,
+    /every case as in evals\/agent\/runs\/\d{4}-\d{2}-\d{2}\/perturb\/judge\.json: yes; spend lines 0/,
   );
   assert.match(out.stdout, /false-positive rate \(positives rejected\): \d+\/\d+/);
   assert.match(out.stdout, /catch rate \(mutations rejected\): \d+\/\d+/);

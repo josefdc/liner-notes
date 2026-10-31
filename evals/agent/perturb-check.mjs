@@ -9,16 +9,17 @@
 //   equivalents and estimator errors rejected (must be 0), false values caught, and false values
 //   shown next to the measurement instead (by the check's design: unmarked, or below the floor).
 // - Judge part: the claim cases go through the app's judge again, answered from its recording
-//   (fixtures/cassettes/llm/perturb; no network, no spending), and the verdicts must be the ones
-//   in the judge record of the newest run-record directory (evals/agent/runs/<date>/perturb/
-//   judge.json). It prints the false-positive rate (positives rejected) and the catch rate
-//   (mutations rejected), overall, per positive source and per mutation. With no judge record
+//   (fixtures/cassettes/llm/perturb; no network, no spending), and every field of every case
+//   (verdict, reason, shown as sourced…) must be the one in the judge record of the newest
+//   run-record directory (evals/agent/runs/<date>/perturb/judge.json). It prints the
+//   false-positive rate (positives rejected) and the catch rate (mutations rejected), overall,
+//   per positive source and per mutation. With no judge record
 //   it prints "pending: no judge recording", which is not a failure.
 //
 //   node evals/agent/perturb-check.mjs [--perturb <path>]
 //
-// Exits 1 when any numeric case gives another result than it expects, or when the replayed
-// verdicts differ from the record, a replayed call would spend, or the record was made on
+// Exits 1 when any numeric case gives another result than it expects, or when a replayed case
+// differs from the record, a replayed call would spend, or the record was made on
 // another perturbation set. Needs the contract package built (npm run build -w
 // packages/contract), as the API does.
 
@@ -200,11 +201,19 @@ async function judgePart(perturbPath) {
       console.log = log;
     }
     const problems = [];
-    const recorded = new Map(judge.cases.map((c) => [c.id, c.verdict]));
-    const differ = cases.filter((c) => recorded.get(c.id) !== c.verdict);
+    // Every field the record keeps per case (the verdict, its reason, shown as sourced, whether it
+    // states a relation, its label, source and mutation, the batch's run id), not the verdict alone.
+    const recorded = new Map(judge.cases.map((c) => [c.id, c]));
+    const differ = cases.flatMap((c) => {
+      const was = recorded.get(c.id);
+      if (!was) return [`${c.id}: not in the record`];
+      const keys = [...new Set([...Object.keys(was), ...Object.keys(c)])];
+      const fields = keys.filter((k) => JSON.stringify(was[k]) !== JSON.stringify(c[k]));
+      return fields.length ? [`${c.id}: ${fields.join(", ")}`] : [];
+    });
     if (differ.length || cases.length !== judge.cases.length) {
       problems.push(
-        `${differ.length} replayed verdict(s) differ from ${where}/perturb/judge.json (${cases.length} cases replayed, ${judge.cases.length} recorded)`,
+        `${differ.length} replayed case(s) differ from ${where}/perturb/judge.json (${cases.length} cases replayed, ${judge.cases.length} recorded)${differ.length ? `: ${differ.slice(0, 5).join("; ")}` : ""}`,
       );
     }
     const spent = readFileSync(spendLog, "utf8")
@@ -213,7 +222,7 @@ async function judgePart(perturbPath) {
     if (spent) problems.push(`${spent} spend line(s) from a replay`);
     const c = classifier({ ...judge, cases });
     console.log(
-      `  the app's judge (${c.judge.deployments.join(", ")}), replayed from ${relative(REPO_ROOT, JUDGE_RECORDINGS)}: ${cases.length} cases, ${c.unjudged} not judged; verdicts as in ${where}/perturb/judge.json: ${differ.length ? "no" : "yes"}; spend lines ${spent}`,
+      `  the app's judge (${c.judge.deployments.join(", ")}), replayed from ${relative(REPO_ROOT, JUDGE_RECORDINGS)}: ${cases.length} cases, ${c.unjudged} not judged; every case as in ${where}/perturb/judge.json: ${differ.length ? "no" : "yes"}; spend lines ${spent}`,
     );
     const both = (label, b) => {
       console.log(`  ${label}`);

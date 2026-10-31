@@ -360,7 +360,29 @@ def test_a_truncated_preview_is_refused_over_http(client, cdn, monkeypatch, temp
     )
     response = client.post("/analyze", json={"preview_url": f"{base}/api/1/1/a/b/0/preview.mp3"})
     assert response.status_code == 422, response.text
-    assert response.json() == {"detail": f"The preview is not analysable audio: {TRUNCATED}"}
+    # The detail as before, with the code a client reads instead of the words.
+    assert response.json() == {
+        "detail": f"The preview is not analysable audio: {TRUNCATED}",
+        "code": "decode_incomplete",
+    }
+    assert list(temp_dir.iterdir()) == []
+
+
+def test_a_preview_whose_second_read_fails_is_refused_over_http_with_the_code(
+    client, cdn, monkeypatch, temp_dir
+):
+    base, server = cdn
+    server.files["/api/1/1/a/b/0/preview.mp3"] = VBR.read_bytes()
+    monkeypatch.setattr(preview, "validate_preview_url", lambda url: None)
+    monkeypatch.setattr(
+        main, "_decode_through_pipe", lambda data: (np.zeros((0, 1), np.float32), True)
+    )
+    response = client.post("/analyze", json={"preview_url": f"{base}/api/1/1/a/b/0/preview.mp3"})
+    assert response.status_code == 422, response.text
+    assert response.json() == {
+        "detail": f"The preview is not analysable audio: {READ_FAILED}",
+        "code": "decode_incomplete",
+    }
     assert list(temp_dir.iterdir()) == []
 
 

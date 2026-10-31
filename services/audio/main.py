@@ -45,6 +45,7 @@ import numpy as np  # noqa: E402
 import soundfile as sf  # noqa: E402
 from fastapi import FastAPI, HTTPException, Request  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
+from fastapi.responses import JSONResponse  # noqa: E402
 from pydantic import BaseModel, Field  # noqa: E402
 
 import fingerprint  # noqa: E402
@@ -202,7 +203,11 @@ class HealthResponse(BaseModel):
 class InvalidAudioError(ValueError):
     """The preview cannot be analysed: in a format the service does not decode, not decodable,
     or non-finite or absurd samples. The message is one of a fixed set (no paths or decoder
-    output) and is returned with the 422."""
+    output) and is returned with the 422, with ``code`` beside it when the refusal has one."""
+
+    def __init__(self, message: str, code: str | None = None):
+        super().__init__(message)
+        self.code = code
 
 
 # Why an MP4 (M4A) or AAC preview is refused, when the host declared it as such or sniff.py
@@ -216,6 +221,11 @@ UNSUPPORTED_FORMAT = "it is an MP4 (M4A) or AAC file, a format the service does 
 # read fails: it is not measured, nor gated as too short, on that part of the preview.
 TRUNCATED_MP3 = "the MP3 decodes to less audio than its MPEG audio frames hold"
 MP3_READ_FAILED = "the MP3 could not be decoded to the end of its MPEG audio frames"
+# The code a 422 carries beside its detail for a refusal of what the file is, so a client need
+# not match the words: UNSUPPORTED_FORMAT, and either MP3 refusal (the file does not decode to
+# the audio its frames hold). Other refusals carry no code.
+UNSUPPORTED_FORMAT_CODE = "unsupported_format"
+DECODE_INCOMPLETE_CODE = "decode_incomplete"
 
 
 # Why the gate measured nothing, for each block it leaves null (v2.withheld).
@@ -495,7 +505,7 @@ def _whole_mpeg_stream(raw: bytes, data: np.ndarray, sr: int) -> np.ndarray:
     try:
         whole, failed = _decode_through_pipe(raw[stream.start :])
     except (sf.LibsndfileError, RuntimeError, EOFError, OSError) as e:
-        raise InvalidAudioError(MP3_READ_FAILED) from e
+        raise InvalidAudioError(MP3_READ_FAILED, DECODE_INCOMPLETE_CODE) from e
     logger.info(
         "The MP3 decoded to %.2f s of the %.2f s its %d frames hold; decoded again to %.2f s",
         len(data) / sr,
@@ -504,7 +514,9 @@ def _whole_mpeg_stream(raw: bytes, data: np.ndarray, sr: int) -> np.ndarray:
         len(whole) / sr,
     )
     if _short_of(len(whole), stream):
-        raise InvalidAudioError(MP3_READ_FAILED if failed else TRUNCATED_MP3)
+        raise InvalidAudioError(
+            MP3_READ_FAILED if failed else TRUNCATED_MP3, DECODE_INCOMPLETE_CODE
+        )
     return whole
 
 
@@ -525,7 +537,7 @@ def decode(file_path: str | BinaryIO) -> Signals:
     downmix (antiphase stereo), the loudest channel is analysed instead.
     """
     if sniff.is_mp4_or_aac(file_path):
-        raise InvalidAudioError(UNSUPPORTED_FORMAT)
+        raise InvalidAudioError(UNSUPPORTED_FORMAT, UNSUPPORTED_FORMAT_CODE)
     reread = _rereader(file_path)
     try:
         with sf.SoundFile(file_path) as f:
@@ -570,7 +582,7 @@ async def analyze_preview_url(url: str) -> dict:
     except UnsupportedFormatError as e:
         # Refused by its declared type before the body was read: a format, not a download,
         # failure.
-        raise InvalidAudioError(UNSUPPORTED_FORMAT) from e
+        raise InvalidAudioError(UNSUPPORTED_FORMAT, UNSUPPORTED_FORMAT_CODE) from e
     try:
         loop = asyncio.get_running_loop()
         work = loop.run_in_executor(executor, analyze_audio_file, file_path)
@@ -608,6 +620,8 @@ async def analyze_preview(request: AnalyzeRequest, http_request: Request):
 
     Returns {"v2": the AudioFeatures v2 block}, with why each null value is null in
     `v2.withheld`. Only https URLs on the preview CDNs (p.scdn.co, *.dzcdn.net) are accepted.
+    A preview refused for what the file is gets a 422 with `code` beside its `detail`
+    (UNSUPPORTED_FORMAT_CODE, DECODE_INCOMPLETE_CODE).
     """
     slots: AnalysisSlots = http_request.app.state.analysis_slots
     try:
@@ -634,9 +648,11 @@ async def analyze_preview(request: AnalyzeRequest, http_request: Request):
         raise HTTPException(status_code=504, detail="Audio analysis timed out") from None
     except InvalidAudioError as e:
         logger.warning("Preview not analysable: %s", e)
-        raise HTTPException(
-            status_code=422, detail=f"The preview is not analysable audio: {e}"
-        ) from None
+        detail = f"The preview is not analysable audio: {e}"
+        if e.code is not None:
+            # The same detail, with the refusal's code beside it.
+            return JSONResponse(status_code=422, content={"detail": detail, "code": e.code})
+        raise HTTPException(status_code=422, detail=detail) from None
     except Exception:
         logger.exception("Audio analysis failed")
         raise HTTPException(status_code=500, detail="Audio analysis failed") from None

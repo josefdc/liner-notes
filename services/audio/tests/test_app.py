@@ -92,6 +92,7 @@ def test_analysis_errors_do_not_leak_details(client, monkeypatch, tmp_path):
     response = client.post("/analyze", json={"preview_url": DEEZER_URL})
     # Not audio: a 422 whose detail names no path and no decoder output.
     assert response.status_code == 422
+    # A refusal without a code of its own: the detail alone, as before.
     assert response.json() == {
         "detail": "The preview is not analysable audio: the file could not be decoded as audio"
     }

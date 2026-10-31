@@ -18,9 +18,10 @@
 // (their ids replaced by the judge's own c1, c2…) and the cited excerpts, with each item's id,
 // source and scope as the recording holds it. Labels, mutation kinds and case ids never reach it.
 //
-// A case is "shown as sourced" by the app's rule (verifier/index.ts applyVerdicts): `supported`,
-// or `partial` for a statement that asserts no relation (a relation is stated whole). The
-// verdicts are the judge's; the labels come from how the case was built, never from a verdict.
+// A case is "shown as sourced" by the app's own rule, `verdictSources` in verifier/index.ts,
+// called here: `supported`, or `partial` for a statement that asserts no relation (a relation is
+// stated whole). The verdicts are the judge's; the labels come from how the case was built,
+// never from a verdict.
 
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
@@ -206,7 +207,7 @@ export async function judgeAll({ mode, cassetteDir, spendLog, perturbPath = PERT
         runId,
         verdict,
         reason: judged?.reason ?? null,
-        shownAsSourced: verdict === "supported" || (verdict === "partial" && !relation),
+        shownAsSourced: verifier.verdictSources(verdict, relation),
       });
     }
     const failure = result.failure

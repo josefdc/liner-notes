@@ -2097,6 +2097,10 @@ describe("configured values written decoded, paths without a scheme, and the sha
   const PEM =
     "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEF\nAASCBKcwggSjAgEAAoIBAQC7\n-----END PRIVATE KEY-----";
   const CREDENTIAL = "T9zB8yC7xD6wE5vF4uG3";
+  const MULTI = "M1xM2xM3x\nM4xM5xM6x";
+  const BRACKET = "Br[ck]{t}|Zq77x";
+  /** A value of letters only, which can be a host name's last label. */
+  const LETTERS = "QzWkXvTnRbPmLs";
   const configure = () =>
     configureLogger({
       DISCOGS_TOKEN: TOKEN,
@@ -2104,12 +2108,20 @@ describe("configured values written decoded, paths without a scheme, and the sha
       SPACED_SECRET: SPACED,
       WINDOWS_PASSWORD: BACKSLASHED,
       PEM_PRIVATE_KEY: PEM,
+      MULTI_TOKEN: MULTI,
+      BRACKET_SECRET: BRACKET,
+      HOST_TOKEN: LETTERS,
     });
   const log = logger("test");
   const base64 = (text: string) => Buffer.from(text).toString("base64");
   const decimal = (text: string) => [...text].map((c) => `&#${c.codePointAt(0)};`).join("");
   const hexHalf = (text: string) =>
     [...text].map((c, i) => (i % 2 ? `&#x${c.codePointAt(0)?.toString(16)};` : c)).join("");
+  /** Each character as a decimal entity with leading zeros, which HTML reads. */
+  const zeroPadded = (text: string) =>
+    [...text].map((c) => `&#00000000${c.codePointAt(0)};`).join("");
+  /** BRACKET with its marks written under the names WHATWG gives them besides the usual ones. */
+  const bracketNames = "Br&lbrack;ck&rbrack;&lbrace;t&rbrace;&VerticalLine;Zq77x";
   const named = (text: string) =>
     text.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   /** What each path writes for `text`: scrub, a log line, a cut log text, a source's error, a reason. */
@@ -2167,6 +2179,10 @@ describe("configured values written decoded, paths without a scheme, and the sha
     ],
     ["a + for a space", `q=${encodeURIComponent(SPACED).replace(/%20/g, "+")} x`, SPACED],
     ["only the quotes escaped", `{"m":"${BACKSLASHED.replace('"', '\\"')}"}`, BACKSLASHED],
+    ["entities with leading zeros", `bad key ${zeroPadded(TOKEN)} here`, TOKEN],
+    ["the WHATWG entity names of a value's marks", `bad ${bracketNames} refused`, BRACKET],
+    ["NewLine", `token ${MULTI.replace("\n", "&NewLine;")} refused`, MULTI],
+    ["NonBreakingSpace", "open&NonBreakingSpace;sesame&NonBreakingSpace;42Zx refused", SPACED],
   ])("hides a configured value written as %s, on every path", (_name, text, value) => {
     configure();
     expect(showing(written(text), [value, text.slice(text.length / 4, -text.length / 4)])).toEqual(
@@ -2186,8 +2202,19 @@ describe("configured values written decoded, paths without a scheme, and the sha
         "GET api.discogs.com/database/[redacted]/x?q=1 failed",
       ],
       ["GET localhost:3001/v1/Zq9Wk3Xv7Tn5Rb/x", "GET localhost:3001/v1/[redacted]/x"],
-      ["GET /a/xxZq9Wk3Xv7Tn5Rbyy/b x", "GET /a/[redacted]/b x"],
-      ["GET ~/a/Zq9Wk3Xv7Tn5Rb.sig/b x", "GET ~/a/[redacted]/b x"],
+      // Glued to more of its segment, a value takes the rest of the token: a signature after it
+      // can hold a "/" of its own (`<key>.<signature>`).
+      ["GET /a/xxZq9Wk3Xv7Tn5Rbyy/b x", "GET /a/[redacted] x"],
+      ["GET ~/a/Zq9Wk3Xv7Tn5Rb.sig/b x", "GET ~/a/[redacted] x"],
+      ["GET /a/Zq9Wk3Xv7Tn5Rb.sig+Part/More9==/c", "GET /a/[redacted]"],
+      ["GET /a/xxZq9Wk3Xv7Tn5Rb/b x", "GET /a/[redacted]/b x"],
+      // In a host name, it is no path's: the whole token, as on main.
+      [
+        "upstream rejected Zq9Wk3Xv7Tn5Rb.sig/AbCdEfGh+12Wx== now",
+        "upstream rejected [redacted] now",
+      ],
+      ["token Zq9Wk3Xv7Tn5Rb.hmac/Q2xpZW50U2lnbmF0dXJlMTIz rejected", "token [redacted] rejected"],
+      ["see api.QzWkXvTnRbPmLs/AbCdEfGh+12Wx== now", "see [redacted] now"],
       // Not a path: no "/" or host first. The whole token, as before.
       ["GET a/b/Zq9Wk3Xv7Tn5Rb/c x", "GET [redacted] x"],
       // A value's base64 form takes its whole token, a "/" of base64 too.
@@ -2215,6 +2242,21 @@ describe("configured values written decoded, paths without a scheme, and the sha
       `GET https://h.example/x?token=abcBearer ${CREDENTIAL} failed`,
     ],
     ["Bearer and a comma after an Authorization name", `x authorization: Bearer, ${CREDENTIAL} y`],
+    [
+      "Bearer and a comma after a quoted Authorization name",
+      `"Authorization": Bearer, ${CREDENTIAL}`,
+    ],
+    ["Bearer and a comma after a line break", `x Authorization:\nBearer, ${CREDENTIAL} y`],
+    ["Bearer, a comma and a line break", `x Authorization: Bearer,\n${CREDENTIAL} y`],
+    [
+      "a nested pair whose name is in backticks, its value on the next line",
+      `x token: \`password\`:\n${CREDENTIAL} y`,
+    ],
+    ["a nested pair whose name is in two backticks", `x token: \`\`password\`\`: ${CREDENTIAL} y`],
+    [
+      "a credential after an empty secret parameter, then a comma",
+      `GET https://h.example/x?password= ${CREDENTIAL}, then`,
+    ],
   ])("hides %s, on every path to a log line or a client", (_name, text) => {
     configure();
     const outs = written(text);
@@ -2239,8 +2281,128 @@ describe("configured values written decoded, paths without a scheme, and the sha
         "GET https://h.example/x?token=[redacted] 404 Not Found",
       ],
       ["x token: `password`: must be set", "x token: [redacted] must be set"],
+      // After a secret parameter with a value of its own, what follows is the text's.
+      [
+        "GET https://h.example/x?token=abc 0123456789abcdef0123456789abcdef 200",
+        "GET https://h.example/x?token=[redacted] 0123456789abcdef0123456789abcdef 200",
+      ],
+      [
+        "GET https://h.example/x?key=abc req_8f3kL2mN9pQ1 503",
+        "GET https://h.example/x?key=[redacted] req_8f3kL2mN9pQ1 503",
+      ],
+      // A pair after an empty parameter is the pair rule's: its name stays.
+      [
+        "GET https://h.example/x?token= password=T9zB8yC7xD6wE5vF4uG3",
+        "GET https://h.example/x?token=[redacted] password=[redacted]",
+      ],
+      [
+        "x Authorization:\nBearer, then the client retries",
+        "x Authorization:\n[redacted], then the client retries",
+      ],
+      ["x token: ``password``: must be set", "x token: [redacted] must be set"],
+      // No entity: the names of an object's prototype are not entity names.
+      ["a &valueOf; b &constructor; c &toString; d", undefined],
     ] as const) {
       expect(scrub(text)).toBe(expected ?? text);
+    }
+  });
+
+  it("reads util.inspect's pieces whatever quote each is in", () => {
+    configure();
+    // util.inspect quotes each piece by itself: one that holds a "'" in double quotes.
+    for (const text of [
+      inspect({
+        detail: `upstream rejected the value ${MULTI} because it isn't valid any more, retry with another one`,
+      }),
+      inspect({ detail: `the upstream's check rejected the value ${MULTI} for good, retry later` }),
+      inspect(`it's ${MULTI}, and "that" is all there is to it, really`),
+    ]) {
+      const outs = written(text);
+      const shown = Object.entries(outs).filter(([, out]) => /M[1-6]xM[1-6]x/.test(out));
+      expect(
+        shown.map(([path]) => path),
+        text,
+      ).toEqual([]);
+    }
+  });
+
+  it("reads the WHATWG names as they are written, and no other", () => {
+    // `&tilde;` is U+02DC and `&dash;` U+2010, not "~" and "-".
+    configureLogger({ TILDE_TOKEN: "Tq9~Wk3-Xv7Tn5R" });
+    expect(scrub("x Tq9&#126;Wk3&#45;Xv7Tn5R y")).toBe("x [redacted] y");
+    expect(scrub("x Tq9&tilde;Wk3&dash;Xv7Tn5R y")).toBe("x Tq9&tilde;Wk3&dash;Xv7Tn5R y");
+    expect(scrub("x Tq9&tilde;Wk3&hyphen;Xv7Tn5R y")).toBe("x Tq9&tilde;Wk3&hyphen;Xv7Tn5R y");
+  });
+
+  it.each([
+    // A value found decoded starts an Authorization credential: masked first, it left the rest.
+    [`Basic ${base64(`u:${TOKEN}`)}?M003xT9zB8yC7xD6wE5v`, "M003xT9zB8yC7xD6wE5v"],
+    [`Bearer api.h.example/v1/${hexHalf(TOKEN)}?M003xT9zB8yC7xD6wE5v`, "M003xT9zB8yC7xD6wE5v"],
+    [`Bearer api.h.example/v1/a/b/${decimal(TOKEN)}=\\/M002xQWxhZGRp'`, "M002xQWxhZGRp"],
+    // And as it came, which main showed too.
+    [`Bearer ${TOKEN}?M003xT9zB8yC7xD6wE5v`, "M003xT9zB8yC7xD6wE5v"],
+  ])("hides an Authorization credential a value starts, on the source paths: %s", (text, rest) => {
+    configure();
+    const outs = written(text);
+    expect(Object.entries(outs).filter(([, out]) => out.includes(rest.slice(0, 12)))).toEqual([]);
+    // The scheme word holds no secret, and stays.
+    expect(describeError(new Error(text))).toMatch(/^(?:Basic|Bearer) \[redacted\]/);
+  });
+
+  it.each([
+    // A value found decoded before a pair's name, and another glued to its value.
+    `${encodeURIComponent(PASSWORD)}authorization:Zq7Wk3Xv7Tn5RbéC:\\temp"Zq81x`,
+    `${encodeURIComponent(PASSWORD)}authorization: Zq7Wk3Xv7Tn5RbéC:\\temp"Zq81x`,
+    `see ${encodeURIComponent(PASSWORD)}token:Zq7Wk3Xv7Tn5RbéC:\\temp"Zq81x now`,
+    // And as it came, which main showed too.
+    `${PASSWORD}authorization:Zq7Wk3Xv7Tn5RbéC:\\temp"Zq81x`,
+  ])("hides a pair's value that a value glued to it cut short, on the source paths: %s", (text) => {
+    configureLogger({ DB_PASSWORD: PASSWORD, WINDOWS_PASSWORD: BACKSLASHED });
+    const outs = written(text);
+    expect(Object.entries(outs).filter(([, out]) => out.includes("Zq7Wk3Xv7Tn5"))).toEqual([]);
+  });
+
+  it.each([
+    [
+      "a Deezer preview link's hdnea",
+      "GET https://cdnt-preview.dzcdn.net/api/1/1/2/3/4/abc.mp3?hdnea=exp=1730000000~acl=/api/1/1/2/3/4/abc.mp3*~data=user_id=0,application_id=42~hmac=5f2e9c0a1b3d4e5f60718293a4b5c6d7 failed",
+      ["exp=1730000000", "5f2e9c0a1b3d4e5f"],
+    ],
+    [
+      "S3's X-Amz- parameters",
+      "GET https://bucket.s3.amazonaws.com/k?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAEXAMPLE%2F20261031&X-Amz-Signature=0123456789abcdef0123&X-Amz-Security-Token=FQoGZXIvYXdzEXAMPLE 403",
+      ["AKIAEXAMPLE", "0123456789abcdef", "FQoGZXIvYXdz"],
+    ],
+    [
+      "Last.fm's api_sig",
+      "GET https://ws.audioscrobbler.com/2.0/?method=auth.getSession&api_sig=0123456789abcdef0123456789abcdef 400",
+      ["0123456789abcdef"],
+    ],
+    ["a sig", "GET https://h.example/x?sig=Qm9ndXNTaWduYXR1cmU 403", ["Qm9ndXNTaWdu"]],
+  ])("hides %s on every path", (_name, text, parts) => {
+    configure();
+    const outs = written(text);
+    const shown = Object.entries(outs).filter(([, out]) =>
+      parts.some((part) => out.includes(part)),
+    );
+    expect(shown.map(([path]) => path)).toEqual([]);
+  });
+
+  it.each([
+    "GET https://u:p@h.example/x?sig={`\u201cbearer  \nK9jL0kY2@yN2nJ8iE4eP3p== ",
+    "x https://h.example/x?token=&sig=`\u2018Basic\n\u000bR5rY2yN2n!K9jX1xT7tS6s*) ",
+    "https://h.example/x?token=&sig=`x-api-key:  A0aJ8iD3:dR5rD3dH7hF5f== ",
+    "https://u:p@h.example/x?sig=`\u2019token:  \nV9vZ3zT7tB%2F1bR5rW0wL0k; ",
+  ])("leaves the logger the scheme or the name after a signed link's value: %s", (text) => {
+    // A signed parameter's value ends where a link does, so what follows it is still read.
+    configureLogger({});
+    const credential = (text.match(/[A-Z]\d[a-z][A-Z]\d[a-z][A-Z0-9][A-Za-z0-9]+/) ?? [""])[0];
+    for (const out of [
+      scrub(`Error: ${describeError(new Error(text))}`),
+      scrub(new SourceError("discogs", "http", text).message),
+      scrub(scrubText(text)),
+    ]) {
+      expect(out).not.toContain(credential.slice(0, 8));
     }
   });
 
@@ -2271,7 +2433,7 @@ describe("configured values written decoded, paths without a scheme, and the sha
     expect(shown).toEqual([]);
   });
 
-  it("keeps hidden what main's value, pair and Authorization rules hid, in paths too (generated texts)", () => {
+  it("keeps hidden what main's value, pair and Authorization rules hid, in paths too (a lower bound: 908cc14's rules, generated texts)", () => {
     // main's rules, frozen as a lower bound: the configured value replaced where it appears, a
     // link's secret parameters, then a pair's value and an Authorization credential (908cc14's
     // expressions, which main kept).
@@ -2351,6 +2513,15 @@ describe("configured values written decoded, paths without a scheme, and the sha
 
   it("finds in scrubbedSpans what scrub hides of a value written decoded (generated texts)", () => {
     configure();
+    // The text with scrubbedSpans' spans masked reads as scrub writes it, exactly, once both are
+    // written alike: each label as one mask, the scheme words and quotes next to a mask (scrub
+    // writes them again, the spans take them), masks side by side as one, and the "]" a pair's
+    // value can end at after a link's mask (`token: https://h/x?token=[redacted]]`, as on main).
+    const alike = (text: string) =>
+      text
+        .replace(/\[(?:redacted|preview link|provider endpoint)\]\]?/g, "¤")
+        .replace(/(?:(?:Bearer|Basic|Discogs)\s+|["'`])*¤(?:["'`]*¤)*["'`]*/g, "¤")
+        .replace(/¤+/g, "¤");
     const parts = [
       decimal(TOKEN),
       hexHalf(TOKEN),
@@ -2364,8 +2535,11 @@ describe("configured values written decoded, paths without a scheme, and the sha
       "/a/",
       "api.example.org/",
       "token: ",
+      "authorization: ",
       "Bearer ",
+      "Basic ",
       "https://h.example/x?token=t1 ",
+      "?password= ",
       "&",
       "%",
       "+",
@@ -2373,22 +2547,18 @@ describe("configured values written decoded, paths without a scheme, and the sha
       "\\",
       " ",
       "x",
+      "T9zB8yC7xD6wE5vF4uG3",
     ];
-    // scrub replaces nothing outside the spans: every part of the text between them is written,
-    // in order, quotes and scheme words aside.
-    const bare = (text: string) => text.replace(/["']|(?:Bearer|Basic|Discogs)\s+/g, "");
-    for (const text of randomStrings(parts, 3_000, 8, 2374)) {
-      const out = bare(scrub(text));
+    const differ = randomStrings(parts, 3_000, 8, 2374).filter((text) => {
+      let masked = "";
       let at = 0;
-      let kept = 0;
-      for (const [start, end] of [...scrubbedSpans(text), [text.length, text.length]]) {
-        const part = bare(text.slice(kept, start));
-        const found = out.indexOf(part, at);
-        expect(found, `${JSON.stringify(text)}: ${JSON.stringify(part)}`).not.toBe(-1);
-        at = found + part.length;
-        kept = end;
+      for (const [start, end] of scrubbedSpans(text)) {
+        masked += `${text.slice(at, start)}[redacted]`;
+        at = end;
       }
-    }
+      return alike(masked + text.slice(at)) !== alike(scrub(text));
+    });
+    expect(differ.slice(0, 3)).toEqual([]);
   });
 
   /** `piece` repeated to about `size` characters, between `head` and `tail`. */
@@ -2419,6 +2589,23 @@ describe("configured values written decoded, paths without a scheme, and the sha
     ["empty secret parameters", filled("https://h.example/x?token= T9zB8yC7xD6wE5vF4uG3 ")],
     ["nested names in backticks", filled("token: `password`: ")],
     ["schemes and commas after a name", filled("authorization: Bearer, ")],
+    ["joints in mixed quotes", filled("'a\\n' +\n    \"")],
+    ["joints with long white space", filled(`' +${" ".repeat(200)}`)],
+    ["entities with leading zeros", filled("&#0000000")],
+    ["long entity names", filled("&NonBreakingSpac")],
+    ["values in host names", filled("Zq9Wk3Xv7Tn5Rb.sig/")],
+    ["values glued in path segments", filled("/aZq9Wk3Xv7Tn5Rbb")],
+    [
+      "secret parameters with values",
+      filled("https://h.example/x?token=abc 0123456789abcdef0123 "),
+    ],
+    ["signed links", filled("https://h.example/x?hdnea=exp=1~acl=/*~hmac=ab ")],
+    ["schemes and commas after a line break", filled("authorization:\nBearer,\n")],
+    ["nested names in two backticks", filled("token: ``password``: ")],
+    [
+      "credentials a value starts",
+      filled(`Basic ${Buffer.from("u:Zq9Wk3Xv7Tn5Rb").toString("base64")}?M003x `),
+    ],
   ])(
     "reads the decoded forms and paths in linear time, up to 1 MB: %s",
     (_name, make) => {

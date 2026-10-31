@@ -3146,9 +3146,9 @@ describe("text redaction against the rules before #202", { timeout: 30_000 }, ()
   // Since #237, a scheme or a secret key glued to the word before it (`failedBearer v`,
   // `xtoken=v`), a scheme a pair's value ends in (`token=x=Bearer v`) and a pair for a secret
   // after other text on its line (`… password= v`) are read too: text with one of them redacts
-  // more.
+  // more. So does a signed link's parameter (`?hdnea=…`, `sig=`, `X-Amz-Signature=`).
   const readSince237 =
-    /[A-Za-z0-9_](?:Bearer|Basic)[ \t]|[:=]\S*(?:Bearer|Basic)[ \t]|[A-Za-z0-9_](?:key|token|secret|password)[ \t]*[:=]|(?:key|token|secret|password)[ \t]*[:=][ \t]+\S|(?:key|token|secret|password)["']?[ \t]*[:=][ \t]*["']?[A-Za-z0-9._~+/=-]{12}/i;
+    /\b(?:api_?sig|sig|signature|hdnea|hdnts|hmac|x-amz-signature|x-amz-credential|x-amz-security-token)=|[A-Za-z0-9_](?:Bearer|Basic)[ \t]|[:=]\S*(?:Bearer|Basic)[ \t]|[A-Za-z0-9_](?:key|token|secret|password)[ \t]*[:=]|(?:key|token|secret|password)[ \t]*[:=][ \t]+\S|(?:key|token|secret|password)["']?[ \t]*[:=][ \t]*["']?[A-Za-z0-9._~+/=-]{12}/i;
 
   it("reads text without a quoted secret key or an escaped slash exactly as before", () => {
     const plain = corpus.filter(

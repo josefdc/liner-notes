@@ -110,6 +110,14 @@ function withCredentials<T>(run: () => T): T {
 /** Names of a `name=value` pair whose value is a secret (a query parameter, an attribute). */
 const SECRET_PARAM_NAMES =
   "api_?key|key|token|access_token|refresh_token|client_secret|password|secret";
+/**
+ * Names of a signed link's parameters (Last.fm's `api_sig`, a CDN's `sig`, `hdnea` and `hdnts`,
+ * an `hmac`, S3's `X-Amz-` ones): their values are hidden after the other rules (signedHides), so
+ * a media link the rules for a cassette's text remove goes whole. Only text redacted for a log or
+ * an error reads them; a link a source returns is used as it came.
+ */
+const SIGNED_PARAM_NAMES =
+  "api_?sig|sig|signature|hdnea|hdnts|hmac|x-amz-signature|x-amz-credential|x-amz-security-token";
 
 /**
  * A part of a text being redacted: its characters from `from` to `to`, kept, or a mask written in
@@ -305,12 +313,18 @@ function secretPieces(
   start: Piece[] = wholeText(text),
   asBefore = false,
 ): Piece[] {
-  if (asBefore) return runSteps(text, [...secretSteps(rawSecretSteps()), ...steps], start);
-  const pieces = runSteps(text, [...secretSteps([secretHides]), ...steps], start);
+  if (asBefore) {
+    return runSteps(text, [...secretSteps(rawSecretSteps()), ...steps, signedHides], start);
+  }
+  const pieces = runSteps(text, [...secretSteps([secretHides]), ...steps, signedHides], start);
   const known = knownSecretSpans(text);
   if (known.length === 0) return pieces;
   const before: Span[] = [];
-  for (const piece of runSteps(text, [...secretSteps(rawSecretSteps()), ...steps], start)) {
+  for (const piece of runSteps(
+    text,
+    [...secretSteps(rawSecretSteps()), ...steps, signedHides],
+    start,
+  )) {
     if (piece.mask !== undefined && piece.to > piece.from) before.push([piece.from, piece.to]);
   }
   return maskSource(pieces, mergeSpans(known, before));
@@ -320,6 +334,19 @@ function secretPieces(
 const BEARER = /\b(Bearer|Basic) [A-Za-z0-9._~+/=-]{12,}/g;
 // An unquoted value; a quoted one is read by quotedParamSpans.
 const SECRET_PARAM = new RegExp(`\\b(${SECRET_PARAM_NAMES})=([^&\\s"'<>]+)`, "gi");
+// A signed link's parameter and its value, a mask the rules before wrote in it too. The value
+// ends where a link does (a backtick, a curly quote, a "#" or a backslash), as in the logger's
+// link rule: what follows (a scheme word, a pair's name) is the logger's to read.
+const SIGNED_PARAM_VALUE = new RegExp(
+  `\\b(${SIGNED_PARAM_NAMES})=([^&#\\s"'\`<>\\\\\u2018-\u201f]+)`,
+  "gi",
+);
+/** The value of each signed link's parameter (SIGNED_PARAM_VALUE). */
+const signedHides: HideStep = (text) =>
+  hidesOf(text, SIGNED_PARAM_VALUE, (m) => [
+    m.index + (m[1] ?? "").length + 1,
+    m.index + m[0].length,
+  ]);
 const TAVILY_KEY = /\btvly-[A-Za-z0-9_-]+/g;
 // Spotify access tokens (any other long mixed-case token-like run: tokenRunHides).
 const SPOTIFY_TOKEN = /\bBQ[A-Za-z0-9_-]{40,}/g;
@@ -1700,6 +1727,11 @@ function keyValuePieces(
   // the other rules hide in the text they leave, once and twice more, stays hidden too.
   const again = redactedAgain(text, other);
   let added = again.length > 0 ? maskableUnion(extra, again) : extra;
+  // With a credential in the text, also what the logger's rules hide in it as it came: masked
+  // first (found decoded, or glued to a pair's name), a credential can start an Authorization
+  // value or a pair's value, which those rules then refuse, leaving the rest of it; and a log
+  // line hides them again, so lostToLog does not count them, though a client sees this text.
+  if (known) added = maskableUnion(added, asCameSpans(text));
   let pieces = maskedPieces(text, steps, added, more);
   // With a credential in the text, also what a log line hid when only the credentials as they came
   // were masked (maskedPieces asBefore): one masked escaped or folded can start a token or a value
@@ -1718,6 +1750,24 @@ function keyValuePieces(
   }
   return pieces;
 }
+
+/**
+ * What the logger's rules hide in `text` as it came (scrubbedSpans), each without the word Basic
+ * that starts it: scrub writes that word again, and it holds no secret.
+ */
+function asCameSpans(text: string): Span[] {
+  const spans: Span[] = [];
+  for (const [start, end] of scrubbedSpans(text)) {
+    BASIC_WORD.lastIndex = start;
+    const word = BASIC_WORD.exec(text);
+    const from = word && word.index === start ? start + word[0].length : start;
+    if (from < end) spans.push([from, end]);
+  }
+  return spans;
+}
+
+/** The word Basic and the white space after it, where a span starts. */
+const BASIC_WORD = /Basic\s+/iy;
 
 /** True when two lists of spans hold the same spans. */
 const sameSpans = (a: readonly Span[], b: readonly Span[]) =>

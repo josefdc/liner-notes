@@ -900,5 +900,7 @@ describe("the step on lists, in any order", () => {
     }
     // The check reads lists that go, not only ones that stay.
     expect(left).toBeGreaterThan(100);
-  });
+    // 400 trials take about 2 s alone and up to 5.6 s inside the full API run on a loaded machine,
+    // past the 5 s default; 30 s leaves a wide margin without dropping trials.
+  }, 30_000);
 });

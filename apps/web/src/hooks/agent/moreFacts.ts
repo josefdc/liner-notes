@@ -12,7 +12,11 @@
  */
 
 import type { Claim } from '@liner-notes/contract';
-import { FIRST_FACTOID_ROUND, factoidRoundsLeft } from '@liner-notes/contract/factoids';
+import {
+  FACTOIDS_PER_ROUND,
+  FIRST_FACTOID_ROUND,
+  factoidRoundsLeft,
+} from '@liner-notes/contract/factoids';
 import type { Factoid, TrackData } from '../../types';
 import { resultModeOf } from '../../utils/recording';
 import type { RunToken } from './apiClient';
@@ -98,13 +102,65 @@ export interface MoreFactsAnswer {
   runId: string | null;
   /** How many facts it sent, new or not. */
   facts: number;
-  /** How many facts it could not write (errors with an index). */
-  failed: number;
   /**
    * The API could not write facts now: an error for the whole answer, or a code that says live
    * calls are unavailable (its rate limit, a paused budget, live calls switched off).
    */
   refused: boolean;
+  /** The angles of the round it asked, by index (askedAngles). */
+  asked: number[];
+  /** The angles whose fact it sent (a fact's `index`), in the order they came. */
+  written: number[];
+  /** How many facts it sent with no index (an older API): their angles are not known. */
+  unplaced: number;
+  /** The angles it could not write (errors with an index), in the order they came. */
+  failedAt: number[];
+  /** It sent an error with no index: one for the whole answer. */
+  wholeError: boolean;
+}
+
+/** Every angle of a round, by index. */
+const EVERY_ANGLE = Array.from({ length: FACTOIDS_PER_ROUND }, (_angle, index) => index);
+
+/** The angles the next request asks: the ones named to ask again, else every angle of the round. */
+export function askedAngles(moreFacts: MoreFacts): number[] {
+  return moreFacts.failedIndexes.length > 0 ? [...moreFacts.failedIndexes] : [...EVERY_ANGLE];
+}
+
+/**
+ * The angles of the round an answer leaves to ask again, by index, in order: of the angles it
+ * asked, the ones it did not write.
+ * - An answer that ended (`done`) with no error for the whole answer said what became of every
+ *   angle it asked: the ones it names as failed are left. A fact it did not send (nothing
+ *   documented, or a repeat) is an answer too, and an angle an older API answered without being
+ *   asked (it asks every angle) is not one this request asked.
+ * - An answer that stopped before its end (a stream that broke or was left), or that sent an
+ *   error for the whole answer, may not have said: every angle it asked and did not write is left.
+ *   When it sent facts with no index (an older API), which angles they answer is not known: the
+ *   ones named as failed are left, or every angle asked when none was.
+ */
+export function anglesLeft(answer: MoreFactsAnswer, ended: boolean): number[] {
+  const { asked, written, failedAt } = answer;
+  if ((ended && !answer.wholeError) || (answer.unplaced > 0 && failedAt.length > 0)) {
+    return asked.filter((index) => failedAt.includes(index));
+  }
+  if (answer.unplaced > 0) return asked;
+  return asked.filter((index) => !written.includes(index));
+}
+
+/** The request's `failedIndexes` for these angles: none when they are the whole round. */
+const toAskAgain = (angles: number[]) => (angles.length === EVERY_ANGLE.length ? [] : angles);
+
+/** The round moved on to `nextRound`: it is asked whole. */
+function movedOn(moreFacts: MoreFacts, answer: MoreFactsAnswer & { nextRound: number }) {
+  const roundsLeft = answer.roundsLeft ?? factoidRoundsLeft(answer.nextRound);
+  return {
+    ...moreFacts,
+    nextRound: answer.nextRound,
+    finished: !roundsLeft,
+    failedIndexes: [],
+    runId: answer.runId,
+  };
 }
 
 /**
@@ -115,24 +171,31 @@ export interface MoreFactsAnswer {
  * (recorded facts) leaves it too. Whether rounds are left is the API's word when it says
  * (`roundsLeft`), else the contract's count. `runId` is the run the facts were checked against.
  *
- * A round left to ask again is asked again only for the facts that failed (`failedIndexes`): the
- * indexes of this answer's failures (`moreFacts.failed`, cleared when it started). An answer that
- * failed as a whole, or was refused before it named a failed fact, wrote nothing, so the angles
- * left to ask are the ones they were. A round that moves on is asked whole.
+ * A round left to ask again is asked again only for the angles the answer left (anglesLeft,
+ * `failedIndexes`); when it left none, every angle it asked was written, and the round moves on.
+ * A round that moves on is asked whole, and so is the round of a recorded answer.
  */
 export function withAnswer(moreFacts: MoreFacts, answer: MoreFactsAnswer): MoreFacts {
   const { nextRound, runId } = answer;
   if (nextRound === undefined) return { ...moreFacts, failedIndexes: [], runId };
-  const unwritten = answer.refused || (answer.facts === 0 && answer.failed > 0);
-  if (unwritten) {
-    const named = moreFacts.failed.length > 0 && !moreFacts.answerFailed;
-    const failedIndexes = named
-      ? [...new Set(moreFacts.failed.map((failure) => failure.index))].sort((a, b) => a - b)
-      : moreFacts.failedIndexes;
-    return { ...moreFacts, failedIndexes, runId };
+  const unwritten = answer.refused || (answer.facts === 0 && answer.failedAt.length > 0);
+  const left = anglesLeft(answer, true);
+  if (unwritten && left.length > 0) return { ...moreFacts, failedIndexes: toAskAgain(left), runId };
+  return movedOn(moreFacts, { ...answer, nextRound });
+}
+
+/**
+ * Once an answer stopped before its end (a stream that broke, stopped responding or was left):
+ * its round is asked again for the angles it left (anglesLeft), so a fact it sent is not asked
+ * for again. When it left none (every angle it asked was written before it stopped), the round
+ * it named moves on.
+ */
+export function withStoppedAnswer(moreFacts: MoreFacts, answer: MoreFactsAnswer): MoreFacts {
+  const left = anglesLeft(answer, false);
+  if (left.length === 0 && answer.nextRound !== undefined) {
+    return movedOn(moreFacts, { ...answer, nextRound: answer.nextRound });
   }
-  const roundsLeft = answer.roundsLeft ?? factoidRoundsLeft(nextRound);
-  return { ...moreFacts, nextRound, finished: !roundsLeft, failedIndexes: [], runId };
+  return { ...moreFacts, failedIndexes: toAskAgain(left) };
 }
 
 /**
@@ -148,6 +211,8 @@ export type MoreFactsAction =
   | { type: 'factFailed'; result: TrackData; failure: FailedFact }
   /** The answer ended (`done`). */
   | { type: 'answerEnded'; result: TrackData; answer: MoreFactsAnswer }
+  /** The answer stopped before its end: the stream broke, stopped responding or was left. */
+  | { type: 'answerStopped'; result: TrackData; answer: MoreFactsAnswer }
   /** The answer failed as a whole: an error for all of it, or a stream that broke. */
   | { type: 'answerFailed'; result: TrackData }
   /** No answer could be asked for: no run token was given. */
@@ -165,6 +230,8 @@ export function moreFactsReducer(moreFacts: MoreFacts | null, action: MoreFactsA
       return withFailure(kept, action.failure);
     case 'answerEnded':
       return withAnswer(kept, action.answer);
+    case 'answerStopped':
+      return withStoppedAnswer(kept, action.answer);
     case 'answerFailed':
       return { ...kept, answerFailed: true };
     case 'tokenRefused':

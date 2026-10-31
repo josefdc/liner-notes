@@ -9,13 +9,17 @@
  * The round moves on only once an answer has ended (withAnswer): an answer whose every fact
  * failed, or that the API could not write now (a paused budget, an error for the whole answer),
  * leaves the round to ask again, and so does a stream that broke or was left before its end.
- * The API asks the round sent, as it is. When the last answer for it named the facts it could
- * not write, only those angles are asked again (`failedIndexes`), so a fact already kept from the
- * round is not asked for again and cannot come back in other words (the client sends ids, not
- * texts); otherwise every angle of the round is asked, and a fact of it the client already shows
- * (the same text, up to case, spacing and punctuation) is not sent again. An answer that failed
- * as a whole, or a stream that broke or stopped responding, sets `moreFacts.answerFailed`, so the
- * Player can say so.
+ * The API asks the round sent, as it is. When the last answer for the round wrote some of its
+ * angles, only the others are asked again (`failedIndexes`, anglesLeft): the angles it asked
+ * less the ones whose fact it sent (each live fact names its angle, `index`), or, once it ended,
+ * the ones it named as failed. So an angle whose fact this client was sent is not asked again,
+ * and its answer cannot come back in other words; another angle can still state that fact in
+ * other words (the API knows the client's facts by id only). Otherwise every angle of the
+ * round is asked, and a fact the client already shows (the same text, up to case, spacing and
+ * punctuation) is not sent again; one in other words is not recognised (the client sends ids,
+ * not texts). An API that ignores `failedIndexes` (older) asks every angle again, and a fact it
+ * sends with no index is not placed. An answer that failed as a whole, or a stream that broke or
+ * stopped responding, sets `moreFacts.answerFailed`, so the Player can say so.
  */
 
 import type { Factoid, TrackData } from '../../types';
@@ -23,6 +27,7 @@ import { type RunToken, RunTokenError } from './apiClient';
 import { newRunEvents, parseFactoidEvent, streamGuard } from './events';
 import type { WaitKeeper } from './failure';
 import {
+  askedAngles,
   isNewFact,
   type MoreFactsAction,
   type MoreFactsAnswer,
@@ -69,7 +74,8 @@ export function streamMoreFacts(
 
     const open = (token: RunToken) => {
       // What this result already has; another result's facts are let go.
-      const url = moreFactsUrl(result, moreFactsOf(result, moreFacts()), token);
+      const before = moreFactsOf(result, moreFacts());
+      const url = moreFactsUrl(result, before, token);
       change({ type: 'answerStarted', result });
 
       const eventSource = new EventSource(url);
@@ -77,7 +83,18 @@ export function streamMoreFacts(
       const accept = streamGuard(events);
       const added: Factoid[] = [];
       // What the answer says and does until `done` (withAnswer).
-      const answer: Omit<MoreFactsAnswer, 'runId'> = { facts: 0, failed: 0, refused: false };
+      const answer: Omit<MoreFactsAnswer, 'runId'> = {
+        facts: 0,
+        refused: false,
+        asked: askedAngles(before),
+        written: [],
+        unplaced: 0,
+        failedAt: [],
+        wholeError: false,
+      };
+      // The answer stopped before its end: the angles it did not write are asked again.
+      const stopped = () =>
+        change({ type: 'answerStopped', result, answer: { ...answer, runId: events.runId } });
       let active = true;
 
       const stop = () => {
@@ -89,6 +106,8 @@ export function streamMoreFacts(
       };
       const onAbort = () => {
         stop();
+        // A new analysis or a reset lets the facts go: nothing is kept for this result then.
+        if (!runSignal.aborted) stopped();
         reject(abortError());
       };
       // The answer failed as a whole: the Player says so, and the round is asked again.
@@ -96,6 +115,7 @@ export function streamMoreFacts(
       const watchdog = inactivityWatchdog(() => {
         stop();
         answerFailed();
+        stopped();
         reject(new Error('Factoid stream stopped responding'));
       });
       runSignal.addEventListener('abort', onAbort, { once: true });
@@ -118,6 +138,8 @@ export function streamMoreFacts(
           case 'factoid': {
             const factoid = data.data as Factoid;
             answer.facts++;
+            if (data.index !== undefined) answer.written.push(data.index);
+            else answer.unplaced++;
             // A fact already kept (by id) is not added again.
             if (isNewFact(moreFacts(), result, factoid)) added.push(factoid);
             change({ type: 'factReceived', result, factoid, claim: data.claim });
@@ -138,16 +160,19 @@ export function streamMoreFacts(
             // One fact that failed (an index) is kept as failed; the stream goes on, and
             // the other facts are kept. The rate limit, a paused budget, live calls switched
             // off and a recording no longer served are also reported to the caller, which
-            // says why; other failures of the whole request are logged. Either way the
-            // answer did not write what it asked for, so its round is asked again.
+            // says why; other failures of the whole request are logged. A refusal, or an
+            // answer that wrote none of its facts, leaves its round to ask again (withAnswer).
+            // A fact that failed with `failed` beside facts written does not: that code is
+            // what is left once the provider layer has retried what is worth retrying, and
+            // includes failures the same prompt meets again (a content filter, a refusal).
             if (data.index !== undefined) {
-              answer.failed++;
+              answer.failedAt.push(data.index);
               change({
                 type: 'factFailed',
                 result,
                 failure: { index: data.index, code: data.code },
               });
-            }
+            } else answer.wholeError = true;
             // A refusal that says how long to wait: nothing is sent before then.
             if (data.retryAfterMs !== undefined && data.retryAfterMs > 0) {
               waits.holdOff(data.retryAfterMs, data.error, data.code);
@@ -176,6 +201,7 @@ export function streamMoreFacts(
       eventSource.onerror = () => {
         stop();
         answerFailed();
+        stopped();
         tokens.drop(token);
         reject(new Error('Factoid stream connection failed'));
       };

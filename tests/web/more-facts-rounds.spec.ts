@@ -132,3 +132,80 @@ test("a click whose every fact failed does not use up its round", async ({ page 
   expect(rounds).toEqual(["0", "0"]);
   expect(problems).toEqual([]);
 });
+
+test("a round asked again asks only the angles that failed, and shows each fact once", async ({
+  page,
+}) => {
+  const problems = collectProblems(page);
+  const at = (id: string, title: string, index: number) => ({ ...fact(id, title), index });
+  const busy = (index: number) => ({ type: "error", code: "rate_limited", error: "Busy.", index });
+  await useMockApi(page, {
+    ...fixture,
+    streams: {
+      "/api/analyze/stream": withRun(fixture.streams["/api/analyze/stream"]),
+      [MORE]: {
+        opens: [
+          [
+            { type: "connected", nextRound: 1, roundsLeft: true },
+            at("fc-aaaaaaaaaaaa", "Angle Zero", 0),
+            busy(1),
+            busy(2),
+            { type: "done" },
+          ],
+          [
+            { type: "connected", nextRound: 1, roundsLeft: true },
+            at("fc-bbbbbbbbbbbb", "Angle One", 1),
+            busy(2),
+            { type: "done" },
+          ],
+          [
+            { type: "connected", nextRound: 1, roundsLeft: true },
+            at("fc-cccccccccccc", "Angle Two", 2),
+            { type: "done" },
+          ],
+          [{ type: "connected", nextRound: 2, roundsLeft: false }, { type: "done" }],
+        ],
+      },
+    },
+  });
+  await analyzeAndOpenDashboard(page, "Bright Lines");
+  await openPlayer(page);
+
+  const insights = page.locator("#panel-context");
+  const more = insights.getByRole("button", { name: "Find more facts", exact: true });
+  // The rate limit is said as such while an angle waits on it; the facts written are kept.
+  for (const [click, busyNow] of [
+    [1, true],
+    [2, true],
+    [3, false],
+    [4, false],
+  ] as const) {
+    await expect(more).toBeEnabled();
+    await more.click();
+    await expect
+      .poll(async () => (await streamLog(page)).filter((e) => e === `${MORE} done`))
+      .toHaveLength(click);
+    if (busyNow) await expect(insights).toContainText("More facts unavailable");
+    else await expect(insights).not.toContainText("More facts unavailable");
+  }
+  const reveal = insights.getByRole("button", { name: /^Show \d+ more facts?$/ });
+  if (await reveal.count()) await reveal.click();
+
+  // The round's three facts, each once, in the order of their angles.
+  const text = await insights.innerText();
+  const titles = ["Angle Zero", "Angle One", "Angle Two"];
+  expect(titles.map((title) => text.split(title).length - 1)).toEqual([1, 1, 1]);
+  const order = titles.map((title) => text.indexOf(title));
+  expect([...order].sort((a, b) => a - b)).toEqual(order);
+
+  const asked = (await apiRequests(page))
+    .filter((entry) => entry.startsWith(`stream ${MORE}?`))
+    .map((entry) => new URLSearchParams(entry.slice(entry.indexOf("?") + 1)));
+  expect(asked.map((query) => [query.get("round"), query.get("failedIndexes")])).toEqual([
+    ["0", null],
+    ["0", "1,2"],
+    ["0", "2"],
+    ["1", null],
+  ]);
+  expect(problems).toEqual([]);
+});

@@ -99,11 +99,11 @@ export interface MoreFacts {
   /** The facts of the latest answer that could not be written, by index; the others are kept. */
   failed: FailedFact[];
   /**
-   * The angles of `nextRound` to ask again, by index (the stream's `error.index`): the facts an
-   * answer for that round could not write, when it left the round to ask again. Only those are
-   * asked (the request's `failedIndexes`), so a fact already kept from the round is not asked for
-   * again and cannot come back reworded. Empty when the whole round is to be asked: a new round,
-   * or an answer that named no fact that failed.
+   * The angles of `nextRound` to ask again, by index (a fact's or an error's `index`): the ones
+   * the last answer for that round left (anglesLeft), when it left the round to ask again. Only
+   * those are asked (the request's `failedIndexes`), so the angles it wrote are not asked for
+   * again. Empty when the whole round is to be asked: a new round, or a round none of whose
+   * answers wrote or named a fact.
    */
   failedIndexes: number[];
   /**

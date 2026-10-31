@@ -1301,8 +1301,12 @@ describe('useAgent factoid stream', () => {
     async function partlyFailed(hook: { current: UseAgentReturn }) {
       const [first] = await ask(hook, result());
       expect(query(lastStream()).has('failedIndexes')).toBe(false);
-      answer(lastStream(), 1, { type: 'factoid', data: factoid('fc-a') }, busy(1), busy(2));
+      answer(lastStream(), 1, factAt('fc-a', 0), busy(1), busy(2));
       await first;
+    }
+    /** A live fact, sent for angle `index` of its round. */
+    function factAt(id: string, index: number) {
+      return { type: 'factoid', data: factoid(id), index };
     }
 
     it('names the angles that failed after a partly failed answer', async () => {
@@ -1376,6 +1380,108 @@ describe('useAgent factoid stream', () => {
       const [third] = await ask(hook, result());
       expect(query(lastStream()).get('round')).toBe('0');
       expect(query(lastStream()).get('failedIndexes')).toBe('1,2');
+      answer(lastStream(), 1);
+      await third;
+    });
+
+    it('leaves out an angle whose fact came before the stream broke', async () => {
+      const { result: hook } = renderHook(() => useAgent());
+      await partlyFailed(hook);
+      const [second] = await ask(hook, result());
+      expect(query(lastStream()).get('failedIndexes')).toBe('1,2');
+      lastStream().send({ type: 'connected', nextRound: 1 });
+      lastStream().send(factAt('fc-b', 1));
+      lastStream().fail();
+      await expect(second).rejects.toThrow();
+      expect(hook.current.moreFacts?.factoids.map((fact) => fact.id)).toEqual(['fc-a', 'fc-b']);
+
+      const [third] = await ask(hook, result());
+      expect(query(lastStream()).get('round')).toBe('0');
+      expect(query(lastStream()).get('failedIndexes')).toBe('2');
+      answer(lastStream(), 1, factAt('fc-c', 2));
+      await third;
+    });
+
+    it('leaves out an angle whose fact came before the caller left', async () => {
+      const { result: hook } = renderHook(() => useAgent());
+      const controller = new AbortController();
+      const [first] = await ask(hook, result(), { signal: controller.signal });
+      lastStream().send({ type: 'connected', nextRound: 1 });
+      lastStream().send(factAt('fc-a', 0));
+      act(() => controller.abort());
+      await expect(first).rejects.toMatchObject({ name: 'AbortError' });
+      expect(hook.current.moreFacts?.answerFailed).toBe(false);
+
+      const [second] = await ask(hook, result());
+      expect(query(lastStream()).get('round')).toBe('0');
+      expect(query(lastStream()).get('failedIndexes')).toBe('1,2');
+      answer(lastStream(), 1);
+      await second;
+    });
+
+    it('names every angle not written after failures and then an error for the whole answer', async () => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const { result: hook } = renderHook(() => useAgent());
+      const [first] = await ask(hook, result());
+      answer(lastStream(), 1, factAt('fc-a', 0), busy(1), {
+        type: 'error',
+        code: 'failed',
+        error: 'Not written.',
+      });
+      await first;
+
+      const [second] = await ask(hook, result());
+      expect(query(lastStream()).get('round')).toBe('0');
+      expect(query(lastStream()).get('failedIndexes')).toBe('1,2');
+      answer(lastStream(), 1);
+      await second;
+    });
+
+    it('asks again only the angles it asked that failed, after an API that asked every angle', async () => {
+      const { result: hook } = renderHook(() => useAgent());
+      await partlyFailed(hook);
+      // An older API ignores failedIndexes, asks every angle, and names no fact's angle: angle 0
+      // comes back in other words, angle 1 is written, angle 2 fails again.
+      const [second] = await ask(hook, result());
+      expect(query(lastStream()).get('failedIndexes')).toBe('1,2');
+      answer(
+        lastStream(),
+        1,
+        { type: 'factoid', data: factoid('fc-a2') },
+        { type: 'factoid', data: factoid('fc-b') },
+        busy(2),
+      );
+      await second;
+
+      const [third] = await ask(hook, result());
+      expect(query(lastStream()).get('round')).toBe('0');
+      expect(query(lastStream()).get('failedIndexes')).toBe('2');
+      // That API now fails angle 0, which this client did not ask again: the round moves on.
+      answer(lastStream(), 1, { type: 'factoid', data: factoid('fc-c') }, busy(0));
+      await third;
+      const [fourth] = await ask(hook, result());
+      expect(query(lastStream()).get('round')).toBe('1');
+      expect(query(lastStream()).has('failedIndexes')).toBe(false);
+      answer(lastStream(), 2);
+      await fourth;
+    });
+
+    it('asks again only the angle named as failed when an older API sent facts with no index and then an error for the whole answer', async () => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const { result: hook } = renderHook(() => useAgent());
+      await partlyFailed(hook);
+      const [second] = await ask(hook, result());
+      expect(query(lastStream()).get('failedIndexes')).toBe('1,2');
+      answer(lastStream(), 1, { type: 'factoid', data: factoid('fc-b') }, busy(2), {
+        type: 'error',
+        code: 'failed',
+        error: 'Not written.',
+      });
+      await second;
+
+      const [third] = await ask(hook, result());
+      expect(query(lastStream()).get('round')).toBe('0');
+      expect(query(lastStream()).get('failedIndexes')).toBe('2');
       answer(lastStream(), 1);
       await third;
     });

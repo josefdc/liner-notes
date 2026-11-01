@@ -5,6 +5,7 @@ import { useRef, useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { moreFactsOf } from '../hooks/agent/moreFacts';
 import type { FailedFact, MoreFacts, MoreFactsOptions } from '../hooks/agent/types';
+import { colors } from '../styles/theme';
 import type { Factoid, TrackData } from '../types';
 import { audioBlock, measuredTrack } from './measured/testing';
 import Player from './Player';
@@ -27,7 +28,7 @@ const missingTrack = {
   valence: null,
   danceability: null,
   acousticness: null,
-  segments: [{ label: 'Main', start: 0, end: 100, color: '#1F2937' }],
+  segments: [{ label: 'Main', start: 0, end: 100, color: colors.gray[800] }],
   segmentsSource: 'template',
   samples: [],
   factoids: [],

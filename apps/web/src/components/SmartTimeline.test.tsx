@@ -1,5 +1,6 @@
 import { cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { colors } from '../styles/theme';
 import SmartTimeline from './SmartTimeline';
 
 afterEach(() => {
@@ -8,9 +9,9 @@ afterEach(() => {
 });
 
 const template = [
-  { label: 'Intro', start: 0, end: 10, color: '#374151' },
-  { label: 'Main', start: 10, end: 90, color: '#1F2937' },
-  { label: 'Outro', start: 90, end: 100, color: '#374151' },
+  { label: 'Intro', start: 0, end: 10, color: colors.gray[700] },
+  { label: 'Main', start: 10, end: 90, color: colors.gray[800] },
+  { label: 'Outro', start: 90, end: 100, color: colors.gray[700] },
 ];
 
 describe('SmartTimeline', () => {
@@ -209,8 +210,8 @@ describe('SmartTimeline', () => {
     render(
       <SmartTimeline
         segments={[
-          { label: 'Chorus', start: 0, end: 50, color: '#00F0FF' },
-          { label: 'Chorus', start: 50, end: 100, color: '#00F0FF' },
+          { label: 'Chorus', start: 0, end: 50, color: colors.cyber },
+          { label: 'Chorus', start: 50, end: 100, color: colors.cyber },
         ]}
         segmentsSource="inferred"
         durationSeconds={240}
@@ -249,8 +250,8 @@ describe('SmartTimeline', () => {
     render(
       <SmartTimeline
         segments={[
-          { label: 'Verse', start: 0, end: 40, color: '#FFB000' },
-          { label: 'Chorus', start: 40, end: 100, color: '#00F0FF' },
+          { label: 'Verse', start: 0, end: 40, color: colors.analog },
+          { label: 'Chorus', start: 40, end: 100, color: colors.cyber },
         ]}
         segmentsSource="inferred"
       />,
@@ -285,10 +286,10 @@ describe('SmartTimeline', () => {
       return [marker.getAttribute('aria-label'), shape.style.color, shape.dataset.shape];
     });
     expect(drawn).toEqual([
-      ['Sample: Old record (time inferred by the model)', '#c4a4fc', 'diamond'],
-      ['Beat transition (measured at 0:04 in the preview)', '#00f0ff', 'diamond'],
-      ['Key change (measured at 0:08 in the preview)', '#00f0ff', 'circle'],
-      ['Peak (measured at 0:12 in the preview)', '#00f0ff', 'up'],
+      ['Sample: Old record (time inferred by the model)', colors.prov.inferred, 'diamond'],
+      ['Beat transition (measured at 0:04 in the preview)', colors.prov.measured, 'diamond'],
+      ['Key change (measured at 0:08 in the preview)', colors.prov.measured, 'circle'],
+      ['Peak (measured at 0:12 in the preview)', colors.prov.measured, 'up'],
     ]);
     // Their words are in a text colour, not the marker's.
     for (const marker of markers) {
@@ -441,7 +442,7 @@ describe('the measured layers of the preview', () => {
     expect(beats.getAttribute('viewBox')).toBe('0 0 20 1');
     const ticks = [...beats.querySelectorAll('line')];
     expect(ticks.map((tick) => tick.getAttribute('x1'))).toEqual(['0.5', '5', '10']);
-    expect(beats.getAttribute('stroke')).toBe('#00f0ff');
+    expect(beats.getAttribute('stroke')).toBe(colors.prov.measured);
 
     // The energy line: one point per hop, at the middle of its frame, up to the window's end.
     const energy = within(lane).getByRole('img', { name: /^Energy/ });
@@ -450,7 +451,7 @@ describe('the measured layers of the preview', () => {
     expect(points).toHaveLength(20);
     expect(points[0]).toBe('0.5,1');
     expect(points[2]).toBe('2.5,0.3333');
-    expect(energy.querySelector('polyline')?.getAttribute('stroke')).toBe('#00f0ff');
+    expect(energy.querySelector('polyline')?.getAttribute('stroke')).toBe(colors.prov.measured);
 
     // Neutral sections, cut at the window's end, in tints of the measured colour.
     const sections = within(lane).getByRole('list', { name: 'Sections measured in the preview' });
@@ -524,8 +525,8 @@ describe('the measured layers of the preview', () => {
     render(
       <SmartTimeline
         segments={[
-          { label: 'Verse', start: 0, end: 40, color: '#00F0FF' },
-          { label: 'Chorus', start: 40, end: 100, color: '#00F0FF' },
+          { label: 'Verse', start: 0, end: 40, color: colors.cyber },
+          { label: 'Chorus', start: 40, end: 100, color: colors.cyber },
         ]}
         segmentsSource="inferred"
         previewSeconds={20}

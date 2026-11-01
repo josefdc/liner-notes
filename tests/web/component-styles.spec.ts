@@ -48,7 +48,7 @@ test.describe("the connected-track card", () => {
 
   test("animates its lift", async ({ page }) => {
     const card = page.getByRole("button", { name: /Older Record/ });
-    const lifted = card.locator("> div").first();
+    const lifted = card.locator("> span").first();
     const transition = await lifted.evaluate((element) => getComputedStyle(element).transition);
     expect(transition).toContain("translate 0.25s");
   });
@@ -543,7 +543,7 @@ for (const fixture of ["measured-v2", "partly-measured-v2", "gated-v2"]) {
 // The genealogy's words: the connected-track cards' relation badges and provenance lines on the
 // Dashboard; the legend, the link list and a focused link's detail in the Player.
 const GENEALOGY_TEXT = {
-  dashboard: "span[data-link-kind], p[data-link-relation], p[data-link-provenance]",
+  dashboard: "span[data-link-kind], span[data-link-relation], span[data-link-provenance]",
   player: [
     '[aria-label="Link legend"] li',
     '[data-testid="links-hidden"]',

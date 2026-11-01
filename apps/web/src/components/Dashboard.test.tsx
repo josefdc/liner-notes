@@ -436,8 +436,8 @@ describe('Dashboard connected tracks', () => {
     renderDashboard(track);
     const shown = await cards();
     const named = shown.map((card) => ({
-      title: card.querySelector('h3')?.textContent,
-      artist: card.querySelector('h3 + p')?.textContent ?? null,
+      title: card.querySelector('[data-card-title]')?.textContent,
+      artist: card.querySelector('[data-card-artist]')?.textContent ?? null,
     }));
     expect(named).toEqual([
       { title: 'Older Record (2003 Remaster)', artist: 'Someone & The Band' },
@@ -461,8 +461,8 @@ describe('Dashboard connected tracks', () => {
     let shown = await cards();
     const names = () =>
       shown.map((card) => [
-        card.querySelector('h3')?.textContent,
-        card.querySelector('h3 + p')?.textContent ?? null,
+        card.querySelector('[data-card-title]')?.textContent,
+        card.querySelector('[data-card-artist]')?.textContent ?? null,
       ]);
     expect(names()).toEqual([
       ['Older Record', null],

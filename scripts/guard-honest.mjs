@@ -526,9 +526,10 @@ export const DEFAULT_PALETTE_CLASS = new RegExp(
 );
 // In web tests a palette shade counts wherever it is named, not only as a utility: a fixture
 // value or an expected class (gray-800, 'text-gray-400', swatch-gray-500). A token that names a
-// shade (var(--color-gray-700)) and the theme.ts scale (colors.gray[700]) are not literals.
+// shade (var(--color-gray-700)) and the theme.ts scale (colors.gray[700]) are not literals, nor
+// is a number that is not a Tailwind shade (node-blue-12).
 export const PALETTE_SHADE = new RegExp(
-  `(?<![A-Za-z0-9])(?<!--color-)(?:${PALETTES})-\\d{2,3}(?![\\w-])`,
+  `(?<![A-Za-z0-9])(?<!--color-)(?:${PALETTES})-(?:50|[1-9]00|950)(?![\\w-])`,
   "g",
 );
 

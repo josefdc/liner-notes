@@ -300,6 +300,8 @@ describe("colour-literals-web-tests", () => {
     ["a palette class in a comment", "// was text-gray-400"],
     ["an element id in url()", 'fill="url(#fade)"'],
     ["an anchor", 'href="#add"'],
+    ["an id with a number that is not a shade", "const id = 'node-blue-12';"],
+    ["a label with a number that is not a shade", "const label = 'red-10';"],
   ])("ignores %s", (_name, line) => {
     expect(count("colour-literals-web-tests", line, test)).toBe(0);
   });

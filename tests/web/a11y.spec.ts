@@ -14,13 +14,18 @@ import {
 } from "./mock";
 import { offline } from "./offline";
 
-// An automated accessibility check of every view at a phone's, a tablet's and a desktop's width:
-// axe-core's WCAG 2.0 and 2.1 A and AA rules and its best practices find no serious or critical
-// violation, and any lesser one is listed below with the reason it stays. axe rates some of what
-// matters most to keyboard and screen-reader users as moderate, so those are checked by hand
-// too: one main landmark per view, a skip link that is the first Tab stop and moves the focus
-// into it, no picture-role Tab stops on the timeline, and connected-track cards that are real
-// buttons, reached and pressed from the keyboard. A screen-reader pass is a manual check.
+// An automated accessibility check of every view at a phone's, a tablet's and a desktop's width
+// (on a phone, each of the Player's tabs): axe-core's WCAG 2.0 and 2.1 A and AA rules and its
+// best practices find no serious or critical violation, with no exception, and any lesser one is
+// listed below with the reason it stays. axe rates some of what matters most to keyboard and
+// screen-reader users as moderate, so those are checked by hand too: one main landmark per view,
+// a skip link that is the first Tab stop and moves the focus into it, no Tab stop with a
+// picture's role (on the timeline or the map), and connected-track cards that are real buttons,
+// reached and pressed from the keyboard. A screen-reader pass is a manual check.
+//
+// What axe cannot decide (its "incomplete" results: mostly colour contrast over a gradient, an
+// image or a translucent layer) is logged, not failed. The theme's colour pairs are checked by
+// `npm run check:contrast` instead, within the limits that script states.
 
 const ANALYZE = "/api/analyze/stream";
 const TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "best-practice"];
@@ -35,23 +40,6 @@ const WIDTHS = [
  * here that no longer fires on any view should be removed; one not listed fails the test.
  */
 const KNOWN: Record<string, string> = {};
-
-/**
- * Serious findings that stay, each only on the elements `where` matches, with the reason. Any
- * other element the rule fires on fails the test, as does any other serious finding.
- */
-const ACCEPTED: Array<{ id: string; where: string; reason: string }> = [
-  {
-    id: "label-content-name-mismatch",
-    where:
-      "[data-map-view] g.nodes > g[role='button'], #panel-genealogy g.nodes > g[role='button']",
-    reason:
-      "A map card is named by its whole track (title, artist and year, then its link), as its " +
-      "detail box and panel name it; the card draws a title cut to fit and its words on separate " +
-      "SVG lines, which axe reads run together. A name built from the drawn words would cut the " +
-      "title for screen readers. A design decision for the map, left to its own change.",
-  },
-];
 
 /** The recorded demo run's track (One More Time), stored as a replayed run. */
 const OMT = "0DiWol3AO6WpXZgp0goxAV";
@@ -119,7 +107,12 @@ type View = {
   open: (page: Page) => Promise<void>;
   /** What shows that the view is still the one checked, at each width. */
   shown: (page: Page) => ReturnType<Page["locator"]>;
+  /** The Player: on a phone it shows one tab at a time, so each tab is checked. */
+  tabs?: boolean;
 };
+
+/** The Player's phone tabs, in their order. */
+const PLAYER_TABS = ["Analysis", "Player", "Connections"];
 
 const VIEWS: View[] = [
   {
@@ -219,6 +212,7 @@ const VIEWS: View[] = [
       await openPlayer(page);
     },
     shown: (page) => page.getByRole("button", { name: /Back to summary/ }),
+    tabs: true,
   },
   {
     name: "the Player with missing values",
@@ -228,6 +222,20 @@ const VIEWS: View[] = [
       await openPlayer(page);
     },
     shown: (page) => page.getByRole("button", { name: /Back to summary/ }),
+    tabs: true,
+  },
+  {
+    // The two Player views above draw the compact row of cards: this one draws the map.
+    name: "the Player of the replayed showcase, with its map",
+    open: async (page) => {
+      await useMockApi(page, storedApi());
+      await page.goto(`/t/${OMT}`);
+      await expect(dashboardHeading(page)).toBeVisible();
+      await openPlayer(page);
+      await expect(page.locator("#panel-genealogy g.nodes > g").first()).toBeAttached();
+    },
+    shown: (page) => page.getByRole("button", { name: /Back to summary/ }),
+    tabs: true,
   },
   {
     name: "the map",
@@ -299,48 +307,34 @@ type Found = {
   targets: string[];
   /** axe's own words for the first node that fails, and that node's markup. */
   first: string;
-  /** Whether every node it fires on is one ACCEPTED lists for it. */
-  accepted: boolean;
 };
 
-/** axe's violations on the page as it is, each with its impact and where it fires. */
-async function violations(page: Page): Promise<Found[]> {
+/**
+ * axe's violations on the page as it is, each with its impact and where it fires, and what it
+ * could not decide ("needs review"), by rule.
+ */
+async function violations(page: Page): Promise<{ found: Found[]; review: string[] }> {
   const results = await new AxeBuilder({ page }).withTags(TAGS).analyze();
-  const found: Found[] = [];
-  for (const violation of results.violations) {
-    const targets = violation.nodes.map((node) => node.target.join(" "));
-    const where = ACCEPTED.find((entry) => entry.id === violation.id)?.where;
-    const accepted =
-      where !== undefined &&
-      (await page.evaluate(
-        ({ targets, where }) =>
-          targets.every((target) => document.querySelector(target)?.matches(where) === true),
-        { targets, where },
-      ));
-    found.push({
-      id: violation.id,
-      impact: violation.impact ?? "unknown",
-      nodes: violation.nodes.length,
-      targets: targets.slice(0, 5),
-      first: `${violation.nodes[0]?.failureSummary ?? ""} | ${violation.nodes[0]?.html.slice(0, 300) ?? ""}`,
-      accepted,
-    });
-  }
-  return found;
+  const found = results.violations.map((violation) => ({
+    id: violation.id,
+    impact: violation.impact ?? "unknown",
+    nodes: violation.nodes.length,
+    targets: violation.nodes.slice(0, 5).map((node) => node.target.join(" ")),
+    first: `${violation.nodes[0]?.failureSummary ?? ""} | ${violation.nodes[0]?.html.slice(0, 300) ?? ""}`,
+  }));
+  const review = results.incomplete.map(
+    (item) => `${item.id} (${item.impact ?? "unknown"}, ${item.nodes.length})`,
+  );
+  return { found, review };
 }
 
-/**
- * Counts of failing elements by impact, as "critical 0 · serious 0 · moderate 0 · minor 0", and
- * the accepted ones (ACCEPTED) apart.
- */
+/** Counts of failing elements by impact, as "critical 0 · serious 0 · moderate 0 · minor 0". */
 function counts(found: Found[]) {
-  const sum = (items: Found[]) => items.reduce((total, item) => total + item.nodes, 0);
   const by = (impact: string) =>
-    sum(found.filter((item) => item.impact === impact && !item.accepted));
-  return [
-    ...["critical", "serious", "moderate", "minor"].map((impact) => `${impact} ${by(impact)}`),
-    `accepted ${sum(found.filter((item) => item.accepted))}`,
-  ].join(" · ");
+    found.filter((item) => item.impact === impact).reduce((total, item) => total + item.nodes, 0);
+  return ["critical", "serious", "moderate", "minor"]
+    .map((impact) => `${impact} ${by(impact)}`)
+    .join(" · ");
 }
 
 /** The first element of the document that Tab reaches, as the browser orders it. */
@@ -377,34 +371,38 @@ for (const view of VIEWS) {
     for (const [width, height] of WIDTHS) {
       await page.setViewportSize({ width, height });
       await expect(view.shown(page)).toBeVisible();
-      await animationsSettled(page);
-      const found = await violations(page);
-      console.log(`[axe] ${view.name} at ${width} px: ${counts(found)}`);
-      for (const item of found) {
-        const line = `${width} px: ${item.id} (${item.impact}, ${item.nodes}${item.accepted ? ", accepted" : ""}) at ${item.targets.join(", ")}`;
-        console.log(`[axe]   ${view.name}, ${line}`);
-        const allowed =
-          item.accepted ||
-          ((item.impact === "moderate" || item.impact === "minor") && item.id in KNOWN);
-        if (!allowed) {
-          failures.push(line);
-          console.log(`[axe]     ${view.name}: ${item.first.replace(/\s+/g, " ")}`);
+      // On a phone the Player shows one tab at a time: each is checked, the last one open last.
+      const phoneTabs = view.tabs && width < 768 ? PLAYER_TABS : [null];
+      for (const tab of phoneTabs) {
+        if (tab) await page.getByRole("tab", { name: tab }).click();
+        await animationsSettled(page);
+        const at = tab ? `${width} px, ${tab} tab` : `${width} px`;
+        const { found, review } = await violations(page);
+        console.log(`[axe] ${view.name} at ${at}: ${counts(found)}`);
+        if (review.length > 0)
+          console.log(`[axe]   ${view.name}, ${at}, needs review: ${review.join(", ")}`);
+        for (const item of found) {
+          const line = `${at}: ${item.id} (${item.impact}, ${item.nodes}) at ${item.targets.join(", ")}`;
+          console.log(`[axe]   ${view.name}, ${line}`);
+          if (!((item.impact === "moderate" || item.impact === "minor") && item.id in KNOWN)) {
+            failures.push(line);
+            console.log(`[axe]     ${view.name}: ${item.first.replace(/\s+/g, " ")}`);
+          }
         }
+        // axe rates a missing or doubled main landmark as moderate: checked here.
+        await expect.soft(page.getByRole("main"), `one main landmark at ${at}`).toHaveCount(1);
+        // No Tab stop with a picture's role: not on the timeline, not on the map.
+        await expect
+          .soft(page.locator('[role="img"][tabindex]'), `no picture-role Tab stop at ${at}`)
+          .toHaveCount(0);
       }
-      // axe rates a missing or doubled main landmark as moderate: checked here.
-      await expect.soft(page.getByRole("main"), `one main landmark at ${width} px`).toHaveCount(1);
-      // No marker of the timeline is a Tab stop with a picture's role.
-      await expect
-        .soft(
-          page.locator('[aria-label="Song structure"] [role="img"][tabindex]'),
-          `no picture-role Tab stop on the timeline at ${width} px`,
-        )
-        .toHaveCount(0);
     }
     expect(failures, `${view.name}: violations`).toEqual([]);
 
-    // The skip link is the first Tab stop, and following it puts the focus in the main landmark.
+    // The skip link is the first Tab stop, and following it puts the focus in the main landmark,
+    // which is not focusable otherwise (a click on words leaves the focus on the page's body).
     expect(await firstTabStop(page)).toBe("a #main-content");
+    await expect(page.getByRole("main")).not.toHaveAttribute("tabindex");
     await page.getByRole("link", { name: "Skip to content" }).focus();
     await page.keyboard.press("Enter");
     await expect(page.getByRole("main")).toBeFocused();
@@ -441,9 +439,11 @@ test("the skip link is the first Tab stop of the landing, and Enter moves the fo
     outline.style === "none" || outline.colour === "rgba(0, 0, 0, 0)",
     JSON.stringify(outline),
   ).toBe(true);
-  // The next Tab goes on from inside main, not back to the top of the page.
+  // The next Tab goes on from inside main, not back to the top of the page; main, left, is no
+  // longer focusable.
   await page.keyboard.press("Tab");
   expect(await page.evaluate(() => !!document.activeElement?.closest("main"))).toBe(true);
+  await expect(main).not.toHaveAttribute("tabindex");
 });
 
 test("the timeline's markers and sections are buttons Tab reaches, never a picture-role stop", async ({

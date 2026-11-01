@@ -771,11 +771,11 @@ const App: React.FC = () => {
       footer={link !== null || phase !== AppPhase.MAP}
     >
       {/* The page's one main landmark, around whichever screen is shown: the skip link's
-          target, so it takes the focus (tabIndex -1, out of the Tab order) without an outline,
-          as the screens' headings do; forced-colors mode draws one, inside its edges. */}
+          target. Only while the skip link has given it the focus is it focusable (Layout); it
+          shows no outline then, as the screens' headings do, except in forced-colors mode,
+          which draws one inside its edges. */}
       <main
         id="main-content"
-        tabIndex={-1}
         className="flex-1 min-h-0 w-full flex flex-col focus-visible:outline-hidden forced-colors:focus-visible:-outline-offset-2"
       >
         {/* The tracks explored in this chain, above the result's view */}

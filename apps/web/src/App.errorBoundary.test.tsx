@@ -30,7 +30,8 @@ describe('the screen error boundary', () => {
     render(<App />);
     const main = screen.getByRole('main');
     expect(main.id).toBe('main-content');
-    expect(main.tabIndex).toBe(-1);
+    // Not focusable at rest: a click on words leaves the focus on the page's body.
+    expect(main.hasAttribute('tabindex')).toBe(false);
     expect(screen.getAllByRole('main')).toHaveLength(1);
     const headings = screen.getAllByRole('heading', { level: 1 });
     expect(headings.map((heading) => heading.textContent)).toEqual([

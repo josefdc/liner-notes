@@ -13,6 +13,24 @@ interface LayoutProps {
 }
 
 /**
+ * Follows the skip link: the main landmark takes the focus, so the next Tab goes on from inside
+ * it. It is focusable (tabindex -1) only until the focus leaves it: kept focusable, a click on
+ * words that are not a control would put the focus on it instead of on the page's body, and the
+ * keys that act when nothing is focused (Escape) would no longer see "nothing focused".
+ */
+function followSkipLink(event: React.MouseEvent<HTMLAnchorElement>) {
+  // A click with a modifier (a new tab or window) is left to the browser.
+  if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+    return;
+  const main = document.getElementById('main-content');
+  if (!main) return;
+  event.preventDefault();
+  main.setAttribute('tabindex', '-1');
+  main.addEventListener('blur', () => main.removeAttribute('tabindex'), { once: true });
+  main.focus();
+}
+
+/**
  * The page: the screen (the search, the progress, a result) above a footer that links to the
  * app's source code. The screen fills the window above the footer and scrolls inside itself.
  */
@@ -20,8 +38,10 @@ const Layout: React.FC<LayoutProps> = ({ children, footerFromMd = false, footer 
   return (
     <div className="h-[100dvh] flex flex-col bg-void text-white font-sans antialiased overflow-hidden selection:bg-cyber/30 selection:text-cyber">
       {/* P0:8 Skip-to-content link */}
+      {/* biome-ignore lint/a11y/useValidAnchor: an in-page link, and it stays one: the click only makes its target focusable while it is followed (followSkipLink) */}
       <a
         href="#main-content"
+        onClick={followSkipLink}
         className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[100] focus:bg-cyber focus:text-void focus:font-mono focus:text-sm focus:tracking-widest focus:rounded"
       >
         Skip to content

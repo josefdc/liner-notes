@@ -524,6 +524,13 @@ export const DEFAULT_PALETTE_CLASS = new RegExp(
   `(?<![\\w-])${COLOUR_UTILITY}-(?:${PALETTES})-(?:50|[1-9]00|950)(?:\\/(?:\\d+|\\[[^\\]\\s]+\\]))?(?![\\w-])`,
   "g",
 );
+// In web tests a palette shade counts wherever it is named, not only as a utility: a fixture
+// value or an expected class (gray-800, 'text-gray-400', swatch-gray-500). A token that names a
+// shade (var(--color-gray-700)) and the theme.ts scale (colors.gray[700]) are not literals.
+export const PALETTE_SHADE = new RegExp(
+  `(?<![A-Za-z0-9])(?<!--color-)(?:${PALETTES})-\\d{2,3}(?![\\w-])`,
+  "g",
+);
 
 // The design system's own code: the token sheet's neighbours in styles/ (not the tokens or the
 // theme generated from them) and the provenance, measured-value and shared UI components. Its
@@ -653,6 +660,15 @@ export const rules = [
     files: (p) =>
       p.startsWith("apps/web/src/") && /\.([cm]?[jt]sx?|css)$/.test(p) && !isTestSupport(p),
     pattern: DEFAULT_PALETTE_CLASS,
+    scan: "code",
+  },
+  {
+    id: "colour-literals-web-tests",
+    owner: "#38",
+    description:
+      "Colour literals in web component tests (apps/web/src *.tsx tests and test helpers): hex, colour functions, named colours as a colour value and Tailwind palette shades. Take an expected colour from styles/theme.ts",
+    files: (p) => p.startsWith("apps/web/src/") && p.endsWith(".tsx") && isTestSupport(p),
+    pattern: [...COLOUR_LITERALS, PALETTE_SHADE],
     scan: "code",
   },
   {

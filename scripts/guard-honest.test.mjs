@@ -265,6 +265,82 @@ describe("default-palette-utilities", () => {
   });
 });
 
+describe("colour-literals-web-tests", () => {
+  const test = "apps/web/src/components/Thing.test.tsx";
+  it.each([
+    ["a hex in a fixture", "segments: [{ label: 'Main', start: 0, end: 100, color: '#1F2937' }],"],
+    ["an expected hex", "expect(beats.getAttribute('stroke')).toBe('#00f0ff');"],
+    ["an expected hex in a table", "['Peak (measured at 0:12)', '#00f0ff', 'up'],"],
+    ["rgb()", "expect(el.style.color).toBe('rgb(0, 240, 255)');"],
+    ["rgba()", "const c = 'rgba(0, 0, 0, 0.5)';"],
+    ["a named colour in a style object", "style={{ color: 'red' }}"],
+    ["a palette class", "expect(el.className).toContain('text-gray-400');"],
+    ["a palette shade on its own", "const shade = 'gray-800';"],
+    ["a palette shade with an opacity", "'bg-zinc-800/50'"],
+    ["a palette shade in a test id", 'data-testid="swatch-gray-500"'],
+  ])("counts %s", (_name, line) => {
+    expect(count("colour-literals-web-tests", line, test)).toBe(1);
+  });
+
+  it.each([
+    [
+      "a theme.ts value",
+      "segments: [{ label: 'Main', start: 0, end: 100, color: colors.gray[800] }],",
+    ],
+    [
+      "an expected theme.ts value",
+      "expect(beats.getAttribute('stroke')).toBe(colors.prov.measured);",
+    ],
+    ["a token class", "expect(el.className).toContain('bg-prov-inferred/');"],
+    ["a token that names a shade", "expect(el.style.fill).toBe('var(--color-gray-700)');"],
+    [
+      "an issue number in a comment",
+      "// stored before the API wrote such a claim as inferred (#191)",
+    ],
+    ["a palette class in a comment", "// was text-gray-400"],
+    ["an element id in url()", 'fill="url(#fade)"'],
+    ["an anchor", 'href="#add"'],
+  ])("ignores %s", (_name, line) => {
+    expect(count("colour-literals-web-tests", line, test)).toBe(0);
+  });
+
+  it("counts an issue number in a string, as in shipped copy, unless the line is marked", () => {
+    expect(
+      count("colour-literals-web-tests", "describe('the first view (#240)', () => {", test),
+    ).toBe(1);
+    expect(
+      count(
+        "colour-literals-web-tests",
+        "describe('the first view (#240)', () => { // guard-allow: colour-literals-web-tests — an issue number",
+        test,
+      ),
+    ).toBe(0);
+  });
+
+  it("scans web .tsx tests and test helpers, not shipped source, script tests or other packages", () => {
+    const { files } = rule("colour-literals-web-tests");
+    expect(files("apps/web/src/components/Thing.test.tsx")).toBe(true);
+    expect(files("apps/web/src/components/Thing.spec.tsx")).toBe(true);
+    expect(files("apps/web/src/components/testing/Harness.tsx")).toBe(true);
+    expect(files("apps/web/src/components/Thing.tsx")).toBe(false);
+    expect(files("apps/web/src/components/genealogy/links.test.ts")).toBe(false);
+    expect(files("apps/api/src/a.test.tsx")).toBe(false);
+    expect(files("tests/web/layout.spec.ts")).toBe(false);
+  });
+
+  it("leaves shipped source to colour-literals-design-system, so no literal counts twice", () => {
+    const shipped = rule("colour-literals-design-system").files;
+    const tests = rule("colour-literals-web-tests").files;
+    for (const path of [
+      "apps/web/src/components/Thing.tsx",
+      "apps/web/src/components/Thing.test.tsx",
+      "apps/web/src/components/testing/Harness.tsx",
+    ]) {
+      expect(shipped(path) && tests(path), path).toBe(false);
+    }
+  });
+});
+
 describe("unmeaning-hues-design-system", () => {
   const path = "apps/web/src/components/ui/Badge.tsx";
   it.each([
@@ -859,6 +935,7 @@ describe("baselines", { timeout: 60_000 }, () => {
       "tailwind-v3-variable-classes": 0,
       "colour-literals-design-system": 0,
       "default-palette-utilities": 0,
+      "colour-literals-web-tests": 0,
       "unmeaning-hues-design-system": 0,
       "near-violet-outside-inference": 0,
       "tiny-text-web": 0,
@@ -942,6 +1019,7 @@ describe("baselines", { timeout: 60_000 }, () => {
         "tailwind-v3-variable-classes": 0,
         "colour-literals-design-system": 0,
         "default-palette-utilities": 0,
+        "colour-literals-web-tests": 0,
         "unmeaning-hues-design-system": 0,
         "near-violet-outside-inference": 0,
         "tiny-text-web": 0,
@@ -969,6 +1047,19 @@ describe("baselines", { timeout: 60_000 }, () => {
     expect(result.status).toBe(1);
     expect(result.stdout).toMatch(/prototype-copy\s+1 \/ 0\s+ABOVE BASELINE/);
     expect(result.stdout).toMatch(/emoji-in-progress\s+1 \/ 0\s+ABOVE BASELINE/);
+  });
+
+  it("fails when a colour literal is added to a web component test", () => {
+    repo({}, "export const a = 1;\n");
+    const test = join(dir, "apps/web/src/components/Thing.test.tsx");
+    mkdirSync(dirname(test), { recursive: true });
+    writeFileSync(test, "const stroke = colors.prov.measured;\n");
+    expect(run().status).toBe(0);
+    writeFileSync(test, "const stroke = '#00f0ff';\n");
+    const result = run("--base", "HEAD");
+    expect(result.status).toBe(1);
+    expect(result.stdout).toMatch(/colour-literals-web-tests\s+1 \/ 0\s+ABOVE BASELINE/);
+    expect(result.stdout).toContain("  + apps/web/src/components/Thing.test.tsx:1  #00f0ff\n");
   });
 
   it("marks the occurrences that are not at --base, even when lines moved", () => {

@@ -23,7 +23,12 @@ import {
   withoutPageTokens,
 } from "./recorder.js";
 import { DEFAULT_REPLAY_DIR, loadReplays } from "./records.js";
-import { PINNED_DIR, readRecording, recordingSlugs } from "./testing/recordings.js";
+import {
+  PINNED_DIR,
+  PREVIOUS_SHOWCASES_DIR,
+  readRecording,
+  recordingSlugs,
+} from "./testing/recordings.js";
 
 const check = { secrets: [], typedQuery: "", publicTexts: [] };
 
@@ -823,8 +828,11 @@ describe("the committed recordings, scanned with these rules", () => {
       ...recordingSlugs(PINNED_DIR).map(
         (slug) => [`pinned/${slug}`, readRecording(slug, PINNED_DIR)] as const,
       ),
+      ...recordingSlugs(PREVIOUS_SHOWCASES_DIR).map(
+        (slug) => [`previous/${slug}`, readRecording(slug, PREVIOUS_SHOWCASES_DIR)] as const,
+      ),
     ];
-    expect(records.length).toBe(5);
+    expect(records.length).toBe(recordingSlugs().length + 1 + 4);
     for (const [name, record] of records) {
       expect(ReplayRecord.safeParse(record).success, name).toBe(true);
       const issues = recordIssues(record, {
@@ -835,7 +843,7 @@ describe("the committed recordings, scanned with these rules", () => {
       });
       expect(issues, name).toEqual([]);
     }
-    for (const dir of [DEFAULT_REPLAY_DIR, PINNED_DIR]) {
+    for (const dir of [DEFAULT_REPLAY_DIR, PINNED_DIR, PREVIOUS_SHOWCASES_DIR]) {
       const set = loadReplays(dir);
       expect(set.problems, dir).toEqual([]);
       expect(set.records.length, dir).toBe(recordingSlugs(dir).length);
@@ -846,7 +854,9 @@ describe("the committed recordings, scanned with these rules", () => {
     timeout: 60_000,
   }, () => {
     const juicy = ReplayRecord.parse(
-      JSON.parse(readFileSync(join(DEFAULT_REPLAY_DIR, "juicy-the-notorious-big.json"), "utf8")),
+      JSON.parse(
+        readFileSync(join(PREVIOUS_SHOWCASES_DIR, "juicy-the-notorious-big.json"), "utf8"),
+      ),
     );
     // A record with one more web page whose link is `url`, checked as the recorder checks it.
     const call = (url: string) => {

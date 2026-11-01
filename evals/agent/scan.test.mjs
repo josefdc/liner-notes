@@ -1,4 +1,5 @@
-// The secret-shape and preview-link scan of the committed cassettes, run records and reports
+// The secret-shape and preview-link scan of the committed cassettes, run records, reports and
+// recordings
 // (lib/scan.mjs): the committed tree passes, and every planted sample is caught, in a file of a
 // scanned directory as well as on its own. The samples are built from parts, so no credential
 // shape is written here whole. Run with: node --test 'evals/**/*.test.mjs'
@@ -46,7 +47,7 @@ const PLANTED = [
   ],
 ];
 
-test("the committed cassettes, run records and reports hold no secret shape and no preview link", () => {
+test("the committed cassettes, run records, reports and recordings hold no secret shape and no preview link", () => {
   const found = scanCommitted();
   assert.deepEqual(
     found.map((f) => `${f.file}: ${f.rules.join(", ")}`),
@@ -81,8 +82,14 @@ function cleanRoot() {
   return root;
 }
 
-test("the scan covers the cassettes, the run records and the reports", () => {
-  assert.deepEqual(SCANNED_DIRS, ["fixtures/cassettes", "evals/agent/runs", "evals/reports"]);
+test("the scan covers the cassettes, the run records, the reports and the recordings", () => {
+  assert.deepEqual(SCANNED_DIRS, [
+    "fixtures/cassettes",
+    "evals/agent/runs",
+    "evals/reports",
+    "fixtures/replays",
+    "fixtures/pinned",
+  ]);
 });
 
 test("a planted file in a scanned directory is named with its rule, whatever its kind", () => {
@@ -93,6 +100,7 @@ test("a planted file in a scanned directory is named with its rule, whatever its
     writeFileSync(join(deep, "judge.json"), JSON.stringify({ excerpt: PLANTED[16][1] }));
     writeFileSync(join(root, SCANNED_DIRS[2], "agent-latest.md"), `- ${PLANTED[15][1]}\n`);
     writeFileSync(join(root, SCANNED_DIRS[1], "2026-01-01", "provenance.txt"), PLANTED[8][1]);
+    writeFileSync(join(root, SCANNED_DIRS[3], "a-showcase.json"), JSON.stringify(PLANTED[17][1]));
     assert.deepEqual(scanCommitted(root), [
       {
         file: join(SCANNED_DIRS[1], "2026-01-01", "perturb", "judge.json"),
@@ -100,6 +108,7 @@ test("a planted file in a scanned directory is named with its rule, whatever its
       },
       { file: join(SCANNED_DIRS[1], "2026-01-01", "provenance.txt"), rules: ["a Tavily key"] },
       { file: join(SCANNED_DIRS[2], "agent-latest.md"), rules: ["a Deezer preview host"] },
+      { file: join(SCANNED_DIRS[3], "a-showcase.json"), rules: [PLANTED[17][0]] },
     ]);
   } finally {
     rmSync(root, { recursive: true, force: true });

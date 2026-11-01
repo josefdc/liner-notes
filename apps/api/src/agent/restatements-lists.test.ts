@@ -1,5 +1,6 @@
 /**
- * withoutRestatements on the showcase recordings' own words: a model claim, or a fact card, that
+ * withoutRestatements on the showcase recordings' own words (the four served before the golden run's,
+ * fixtures/pinned/9971adea845d): a model claim, or a fact card, that
  * lists records whose relations the code already builds ("“Juicy” is sampled in A, B and C"), or
  * states one record in a wording of its own ("MusicBrainz documents X as a source sampled in this
  * recording"), is left out; a claim that adds a record, another relation, a doubt or anything
@@ -9,7 +10,7 @@
 
 import type { Claim } from "@liner-notes/contract";
 import { describe, expect, it } from "vitest";
-import { readRecording } from "../replay/testing/recordings.js";
+import { previousShowcase } from "../replay/testing/recordings.js";
 import { withoutRestatements } from "./restatements.js";
 
 const JUICY = "juicy-the-notorious-big";
@@ -18,7 +19,7 @@ const BSS = "bitter-sweet-symphony-the-verve";
 const HUNG_UP = "hung-up-madonna";
 
 const recordings = new Map(
-  [JUICY, OMT, BSS, HUNG_UP].map((slug) => [slug, readRecording(slug).analysis]),
+  [JUICY, OMT, BSS, HUNG_UP].map((slug) => [slug, previousShowcase(slug).analysis]),
 );
 const showcase = (slug: string) => {
   const analysis = recordings.get(slug);

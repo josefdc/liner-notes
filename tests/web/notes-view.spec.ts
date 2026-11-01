@@ -2,8 +2,10 @@ import { expect, type Page, test } from "@playwright/test";
 import {
   analyzeAndOpenDashboard,
   collectProblems,
+  DEMO_SLUG,
   loadFixture,
   openPlayer,
+  PREVIOUS_SHOWCASES,
   replayedRecording,
   showcaseRecordings,
   useMockApi,
@@ -17,8 +19,10 @@ import { offline } from "./offline";
 // hedged ("Possible sample") unless a source supports it; each claim cites its sources beside it.
 // A section with nothing to list says so in a sentence: nothing is made up to fill it.
 //
-// Two showcases: the recorded run (fixtures/replays/one-more-time-daft-punk.json) for samples,
-// covers, connections and the recording label. It has no history claims and no credit: its one
+// Two showcases: the recorded run as recorded before the golden run
+// (fixtures/pinned/9971adea845d/one-more-time-daft-punk.json, whose exact text this pins) for samples,
+// covers, connections and the recording label; the same checks of order and relations run on the
+// demo as the golden run recorded it (fixtures/replays), and each showcase is checked on its own. It has no history claims and no credit: its one
 // "credit" was the album the track appears on, a release fact the model filed as a credit, and
 // the replay leaves it out with the other model claims that restate a code-built claim. So the
 // provenance mock stands in for credits and history. The genealogy-kinds mock holds the samples
@@ -56,8 +60,13 @@ function listed(page: Page, section: string) {
     );
 }
 
-async function openRecording(page: Page, slug?: string, query = "One More Time Daft Punk") {
-  const { events } = replayedRecording(slug);
+async function openRecording(
+  page: Page,
+  slug?: string,
+  query = "One More Time Daft Punk",
+  dir?: string,
+) {
+  const { events } = replayedRecording(slug, undefined, dir);
   await useMockApi(page, {
     suggestions: [],
     eventGapMs: 0,
@@ -93,7 +102,8 @@ test("the recorded run's notes: sections in order, its samples and covers with t
 }) => {
   const problems = collectProblems(page);
   await page.setViewportSize({ width: 1440, height: 900 });
-  await openRecording(page);
+  // One More Time as recorded before the golden run, whose exact claims and cards this pins.
+  await openRecording(page, DEMO_SLUG, undefined, PREVIOUS_SHOWCASES);
 
   // The h1 is the track; the notes' sections are h2s, in the liner notes' order.
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("One More Time");
@@ -200,30 +210,131 @@ test("the recorded run's notes: sections in order, its samples and covers with t
   expect(problems).toEqual([]);
 });
 
-// Each showcase recording: every relation its records document is listed once in the notes, by
-// its record, and never named "Possible" there or on a card. The model's claims and cards that
-// only restated records are left out (Juicy's lists of the tracks that sample it, its two sample
-// cards, the Coldplay cover of Bitter Sweet Symphony stated as a claim and as a card); a card
-// that says more than its record stays, named as the record names the relation. Each fact is
-// found by its other track's artist: the map's second hop lists other tracks that sample the
-// same records, by title alone.
-const DOCUMENTED: Record<string, { facts: RegExp[]; cards: RegExp[] }> = {
-  "bitter-sweet-symphony-the-verve": {
-    facts: [/Andrew Oldham/, /Coldplay (feat\.|featuring) Richard Ashcroft/],
-    // Its second sentence adds detail "around that sample": named "Sample", not "Possible sample".
-    cards: [/^SAMPLE: .*The Last Time.*around that sample/i],
-  },
+test("the demo's notes as served now: sections in order, each relation by its record", async ({
+  page,
+}) => {
+  const problems = collectProblems(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  // One More Time as the golden run recorded it (fixtures/replays), the demo the page opens.
+  await openRecording(page, DEMO_SLUG);
+
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("One More Time");
+  expect(await sectionHeadings(page)).toEqual([
+    "H2:Facts",
+    "H2:Credits",
+    "H2:Samples and covers",
+    "H2:History",
+    "H2:More claims",
+    "H2:Data from",
+  ]);
+  // Each relation its MusicBrainz records document: named as what it is, sourced, its record
+  // beside it, the Eddie Johns sample first.
+  const samples = page.getByRole("region", { name: "Samples and covers" });
+  const rows = await listed(page, "Samples and covers");
+  expect(rows).toHaveLength(13);
+  expect(rows[0]).toBe(
+    'Sample"One More Time" by Daft Punk samples "More Spell on You" by Eddie Johns.',
+  );
+  for (const row of rows) expect(row).toMatch(/^(Sample|Remix|Cover)[^ ]/);
+  const items = samples.getByRole("listitem").filter({ has: page.locator(":scope > p") });
+  await expect(items).toHaveCount(13);
+  for (const item of await items.all()) {
+    await expect(item.locator('a[data-source="musicbrainz"]')).toHaveCount(1);
+    await expect(item).toContainText("Sourced");
+  }
+  await expect(
+    items
+      .filter({ hasText: '"More Spell on You" by Eddie Johns.' })
+      .first()
+      .locator('a[data-source="musicbrainz"]'),
+  ).toHaveAttribute(
+    "href",
+    "https://musicbrainz.org/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7",
+  );
+  const everyClaim = await everyClaimListed(page);
+  for (const claim of everyClaim) expect(claim).not.toMatch(/^possible (sample|cover|remix)/i);
+  for (const fact of [/More Spell on You/, /Circo Loco/, /London Elektricity/]) {
+    expect(
+      everyClaim.filter((claim) => fact.test(claim)),
+      String(fact),
+    ).toHaveLength(1);
+  }
+  // Two cards, each with one badge: the sample card (which restates the Eddie Johns record in
+  // words the reader does not know yet) and the album card, partly supported and shown so.
+  const cards = await shownCards(page);
+  expect(cards.map((card) => card.badges)).toEqual([1, 1]);
+  expect(cards[0].text).toMatch(/^SAMPLE: .*More Spell on You/);
+  expect(cards[1].text).toMatch(/^CREDITS: .*Discovery.*Partly supported/);
+  // Its one credit is the album card, said so where credits are listed; no history claim.
+  await expect(page.getByRole("region", { name: "Credits" })).toContainText(
+    "1 credit is shown with the facts above.",
+  );
+  const history = page.getByRole("region", { name: "History" });
+  await expect(history).toContainText("No history was found in this result.");
+  await expect(history.getByRole("listitem")).toHaveCount(0);
+
+  // The map: nine links, each built from a record, each relation drawn once.
+  const genealogy = page.locator("#panel-genealogy");
+  await expect(genealogy.getByText(/Links as a list \(9\)/)).toBeVisible();
+  const links = genealogy.locator('ul[aria-label="Genealogy links"] > li');
+  await expect(links).toHaveCount(9);
+  expect(
+    await links.evaluateAll((all) => all.map((link) => link.getAttribute("data-link-kind"))),
+  ).toEqual(Array(9).fill("sourced"));
+  for (const fact of [/More Spell on You/, /Circo Loco/]) {
+    await expect(links.filter({ hasText: fact }), String(fact)).toHaveCount(1);
+  }
+  const nodes = await genealogy
+    .locator("svg g.nodes > g[data-node-id]")
+    .evaluateAll((all) => all.map((node) => node.getAttribute("data-node-id")));
+  expect(nodes).toHaveLength(10);
+  expect(new Set(nodes).size).toBe(nodes.length);
+  await expect(page.getByText(/Recorded run/).first()).toBeVisible();
+  expect(problems).toEqual([]);
+});
+
+// Each showcase recording (fixtures/replays: the golden run's, one entry here for every slug):
+// every relation its records document is listed once in the notes, by its record, and never named
+// "Possible" there or on a card. A card that states a record's relation is named as the record
+// names it (Hung Up's ABBA sample, One More Time's Eddie Johns sample); the others are named by
+// their own subject. Each fact is found by its other track's artist or title: the map's second hop
+// lists other tracks that sample the same records, by title alone. A fact given as
+// `{ fact, alsoIn }` is also stated by one model claim the notes list beside its record, in
+// another subject, which one claim per fact does not read as the record: Hung Up's history claim
+// "MusicBrainz lists three remixes of this recording: …", supported by the three records it
+// cites, is about history, not a relation, and lists the records in a sentence of its own, so
+// neither a restatement nor a mark (agent/restatements.ts reads a relation's own subjects and
+// templates only). That claim is pinned here for that fact alone, listed once, and never named
+// "Possible"; every other fact is still listed once.
+type Fact = RegExp | { fact: RegExp; alsoIn: RegExp };
+const DOCUMENTED: Record<string, { facts: Fact[]; cards: RegExp[] }> = {
   "hung-up-madonna": {
-    facts: [/ABBA/, /SDP extended vocal/],
-    // It names the remixers inside the records' titles: it is not read as the records, and stays.
-    cards: [/^PRODUCTION: .*remixes, including versions by Chus & Ceballos/i],
+    facts: [
+      /ABBA/,
+      {
+        fact: /SDP extended vocal/,
+        alsoIn: /^HistoryMusicBrainz lists three remixes of this recording/,
+      },
+    ],
+    cards: [/^SAMPLE: .*ABBA/i, /^TRIVIA: .*Chus & Ceballos/i],
   },
-  "juicy-the-notorious-big": {
-    facts: [/Jay.Z/, /RBX/, /Talib Kweli/, /Apathy/, /Mtume/, /The Rappin. Duke/],
-    cards: [],
+  "natural-blues-moby": {
+    facts: [/Vera Hall/, /Paolo Nutini/, /Little Hurricane/],
+    cards: [/^TRIVIA: .*remixes/i],
   },
   "one-more-time-daft-punk": {
-    facts: [/More Spell on You/, /Circo Loco/, /London Elektricity/],
+    facts: [/More Spell on You/, /Circo Loco/, /Get It Get It/],
+    // The sample card restates the Eddie Johns record in words the reader does not know yet
+    // ("… as a recording sampled in …": UNREAD in apps/api/src/replay/restated-showcases.test.ts).
+    cards: [/^SAMPLE: .*More Spell on You/i, /^CREDITS: .*Discovery/i],
+  },
+  "praise-you-fatboy-slim": {
+    facts: [/Camille Yarbrough/, /Fedde Le Grand/, /Super Mash Bros/],
+    // A production claim the judge found partly supported: shown so beside its source.
+    cards: [/^PRODUCTION: .*Balance & Rehearsal.*Partly supported/i],
+  },
+  "the-verve-bitter-sweet-symphony": {
+    facts: [/Andrew Oldham/, /Once Again/, /James Lavelle/],
     cards: [],
   },
 };
@@ -247,8 +358,14 @@ for (const { slug, query } of showcaseRecordings()) {
     });
     const everyClaim = await everyClaimListed(page);
     for (const claim of everyClaim) expect(claim).not.toMatch(/^possible (sample|cover|remix)/i);
-    for (const fact of expected.facts) {
-      const listed = everyClaim.filter((claim) => fact.test(claim));
+    for (const each of expected.facts) {
+      const { fact, alsoIn } = each instanceof RegExp ? { fact: each, alsoIn: null } : each;
+      if (alsoIn) {
+        const restating = everyClaim.filter((claim) => alsoIn.test(claim));
+        expect(restating, String(alsoIn)).toHaveLength(1);
+        expect(restating[0], String(alsoIn)).toMatch(fact);
+      }
+      const listed = everyClaim.filter((claim) => fact.test(claim) && !alsoIn?.test(claim));
       expect(listed, String(fact)).toHaveLength(1);
       expect(listed[0], String(fact)).toMatch(/^(Sample|Remix|Cover)[^ ]/);
       // Shown with the facts above only by a card that says more, as expected above.

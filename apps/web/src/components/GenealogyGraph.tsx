@@ -1522,14 +1522,25 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       });
       const selected = onScreen(boxOf(id));
       const current = currentId !== null && currentId !== id ? onScreen(boxOf(currentId)) : null;
-      const dx = nearShift(selected.x[0], selected.x[1], 0, width);
+      let dx = nearShift(selected.x[0], selected.x[1], 0, width);
       const [from, to] = detailAcrossRef.current;
+      const heading = insetRef.current + pinnedBand();
+      // A selected card beside the panel (a desktop's corner panel) has the whole height.
+      let beside = selected.x[1] + dx <= from || selected.x[0] + dx >= to;
+      // One taller than the room above or below the panel (a title on three lines beside a tall
+      // panel) would sit partly under it there: it goes beside the panel instead, left of it
+      // or else right of it, where the map is wide enough for it.
+      const across = height - heading - detailInsetRef.current - 2 * VIEW_PAD;
+      if (!beside && to > from && selected.y[1] - selected.y[0] > across) {
+        const left = from - VIEW_PAD - selected.x[1];
+        const right = to + VIEW_PAD - selected.x[0];
+        if (selected.x[0] + left >= 0) dx = left;
+        else if (selected.x[1] + right <= width) dx = right;
+        beside = selected.x[1] + dx <= from || selected.x[0] + dx >= to;
+      }
       // The analysed card matters where it is under the panel across the map.
       const under =
         current !== null && current.x[1] + dx > from && current.x[0] + dx < to ? current.y : null;
-      const heading = insetRef.current + pinnedBand();
-      // A selected card beside the panel (a desktop's corner panel) has the whole height.
-      const beside = selected.x[1] + dx <= from || selected.x[0] + dx >= to;
       let dy: number;
       if (detailTopRef.current) {
         // The panel under the heading: the room is below it.

@@ -162,7 +162,7 @@ Positives never come from a verdict: they are code-built sourced claims (support
 | mutation "role" rejected | 9/9 | 9 | counts only (n < 10) |
 | mutation "year" rejected | 5/5 | 5 | counts only (n < 10) |
 
-Model-positive pool: 12 model claims of the recordings cite evidence; 7 pass the support check and are the model positives, 5 are refused. The check is a conservative heuristic over English sentences, so the model positives lean towards simple sentences. The model claims come from the showcase recordings in `fixtures/replays` (read by `evals/agent/make-perturb.mjs`), which do not record which model wrote them: that the judge never judged its own model's text there cannot be shown from the committed files.
+Model-positive pool: 12 model claims of the recordings cite evidence; 7 pass the support check and are the model positives, 5 are refused. The check is a conservative heuristic over English sentences, so the model positives lean towards simple sentences. The model claims come from the showcase recordings in `fixtures/pinned/9971adea845d` (read by `evals/agent/make-perturb.mjs`), which do not record which model wrote them: that the judge never judged its own model's text there cannot be shown from the committed files.
 
 ### Audit of the model positives
 

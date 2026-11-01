@@ -8,6 +8,7 @@ import {
   loadFixture,
   DEMO_SLUG,
   openPlayer,
+  PREVIOUS_SHOWCASES,
   replayedRecording,
   showcaseRecordings,
   useMockApi,
@@ -414,6 +415,40 @@ const playedClips = (page: Page) =>
   page.evaluate(() => (window as unknown as { __played: string[] }).__played.slice());
 const endClip = (page: Page) =>
   page.evaluate(() => (window as unknown as { __endClip: () => void }).__endClip());
+
+// A card whose title wraps to three lines is taller than the room left above a desktop's corner
+// panel at 1280 × 800: selected, it goes beside the panel, never partly under it. One More Time
+// as recorded before the golden run (fixtures/pinned/9971adea845d), one remix retitled.
+test("at 1280 px a selected card whose title wraps to three lines stays clear of the panel", async ({
+  page,
+}) => {
+  const problems = collectProblems(page);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const id = "mb-21ad70d5-f123-4546-9cf9-0a672500d185";
+  const { events } = replayedRecording(DEMO_SLUG, undefined, PREVIOUS_SHOWCASES);
+  const complete = events.find((event) => event.type === "complete") as {
+    data: { genealogy: { nodes: Array<Record<string, unknown>> } };
+  };
+  const node = complete.data.genealogy.nodes.find((each) => each.id === id);
+  if (!node) throw new Error(`no node ${id}`);
+  const title = "A message from the Parliament of Australia to South Korea";
+  node.trackTitle = title;
+  node.label = `${title} - ${node.trackArtist}`;
+  await useMockApi(page, { suggestions: [], eventGapMs: 0, streams: { [ANALYZE]: events } });
+  await analyzeAndOpenDashboard(page, "One More Time Daft Punk");
+  await openPlayer(page);
+  const card = cardOf(page, id);
+  await graphOf(page).scrollIntoViewIfNeeded();
+  await card.focus();
+  await card.blur();
+  await card.click();
+  await expect(panelOf(page)).toBeVisible();
+  // Three lines of title, the artist and year below: taller than a two-line card.
+  const box = await card.locator("rect.card").boundingBox();
+  expect(box?.height ?? 0).toBeGreaterThan(70);
+  await expectClear(page, id);
+  expect(problems).toEqual([]);
+});
 
 test("A/B listening plays the sample, then this track, in order, and Escape stops it", async ({
   page,

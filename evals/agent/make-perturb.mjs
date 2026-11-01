@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 // Writes evals/perturb.jsonl, the set the verifier is measured on as a classifier, from the
-// committed recordings (fixtures/replays/*.json) at a fixed seed. Running it twice writes the
-// same bytes.
+// recordings it was made from at a fixed seed: the four showcases served before the showcase was
+// recorded from the golden run, kept byte for byte in fixtures/pinned/9971adea845d (the golden
+// run's judge record and cassettes are of this set, so it does not follow fixtures/replays).
+// Running it twice writes the same bytes.
 //
 //   node evals/agent/make-perturb.mjs            write evals/perturb.jsonl
 //   node evals/agent/make-perturb.mjs --stdout   print it instead
@@ -44,7 +46,7 @@ import { rng } from "./lib/stats.mjs";
 import { checkSupport, containsWords } from "./lib/support.mjs";
 
 export const SEED = 33;
-export const RECORDINGS_DIR = join(REPO_ROOT, "fixtures", "replays");
+export const RECORDINGS_DIR = join(REPO_ROOT, "fixtures", "pinned", "9971adea845d");
 export const PERTURB_PATH = join(EVALS_DIR, "perturb.jsonl");
 /** Code-built positives kept per recording (model positives are all kept). */
 export const CODE_POSITIVES_PER_RECORDING = 5;

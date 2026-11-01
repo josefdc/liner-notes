@@ -8,6 +8,12 @@
  * slug. It is outside the replay directory, so it is never served unless a test points
  * REPLAY_DIR at PINNED_DIR, and a re-record of the showcase leaves what those tests are about in
  * place.
+ *
+ * The same holds for the four showcases served until the showcase was recorded from the golden
+ * run (Bitter Sweet Symphony, Hung Up, Juicy and One More Time): a test about the exact text one
+ * of them holds reads it from fixtures/pinned/9971adea845d (`PREVIOUS_SHOWCASES_DIR`,
+ * `previousShowcase`), byte-for-byte copies of fixtures/replays at commit 9971adea845d. The
+ * agent evals' perturbation set is generated from them too (evals/agent/make-perturb.mjs).
  */
 
 import { readdirSync, readFileSync } from "node:fs";
@@ -40,3 +46,20 @@ export const PINNED_DIR = resolve(API_ROOT, "..", "..", "fixtures", "pinned", "9
 
 /** The pinned One More Time recording (see the header). */
 export const pinnedRecord = (): ReplayRecord => readRecording(DEMO_SLUG, PINNED_DIR);
+
+/**
+ * The four showcases served before the golden run's (see the header): fixtures/pinned/9971adea845d
+ * at the repository root.
+ */
+export const PREVIOUS_SHOWCASES_DIR = resolve(
+  API_ROOT,
+  "..",
+  "..",
+  "fixtures",
+  "pinned",
+  "9971adea845d",
+);
+
+/** One of the four showcases served before the golden run's, by its slug then. */
+export const previousShowcase = (slug: string): ReplayRecord =>
+  readRecording(slug, PREVIOUS_SHOWCASES_DIR);

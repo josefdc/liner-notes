@@ -1,0 +1,1294 @@
+{
+  "version": 1,
+  "source": "MusicBrainz genre votes (https://musicbrainz.org/ws/2, inc=genres), read by evals/agent/fetch-styles.mjs",
+  "rule": "the top-voted genre of the gold recording, else of the release group of its earliest release, else of its first credited artist",
+  "golden": {
+    "sha256": "8dd2049c03fa6a53fc74d353f765871cc9aa95f7ff6a8f2a081f341e29f49442"
+  },
+  "requests": 27,
+  "rows": [
+    {
+      "isrc": "GBDUW0000053",
+      "mbid": "60fa767a-d85d-4991-82bc-4294e0b11ae7",
+      "title": "One More Time",
+      "artist": "Daft Punk",
+      "style": "house",
+      "level": "recording",
+      "votes": 9,
+      "url": "https://musicbrainz.org/ws/2/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7?inc=genres+artist-credits&fmt=json",
+      "retrievedAt": "2026-11-01T00:31:59.869Z",
+      "lookups": [
+        {
+          "url": "https://musicbrainz.org/ws/2/recording/60fa767a-d85d-4991-82bc-4294e0b11ae7?inc=genres+artist-credits&fmt=json",
+          "genres": [
+            {
+              "name": "big beat",
+              "count": 1
+            },
+            {
+              "name": "club",
+              "count": 1
+            },
+            {
+              "name": "dance",
+              "count": 4
+            },
+            {
+              "name": "disco",
+              "count": 3
+            },
+            {
+              "name": "electro",
+              "count": 1
+            },
+            {
+              "name": "electronic",
+              "count": 7
+            },
+            {
+              "name": "electronica",
+              "count": 2
+            },
+            {
+              "name": "euro house",
+              "count": 1
+            },
+            {
+              "name": "french house",
+              "count": 2
+            },
+            {
+              "name": "house",
+              "count": 9
+            },
+            {
+              "name": "pop rock",
+              "count": 1
+            },
+            {
+              "name": "progressive house",
+              "count": 1
+            },
+            {
+              "name": "rock",
+              "count": 1
+            },
+            {
+              "name": "soft rock",
+              "count": 1
+            },
+            {
+              "name": "techno",
+              "count": 2
+            }
+          ],
+          "requests": 1
+        }
+      ]
+    },
+    {
+      "isrc": "GBAAA9700049",
+      "mbid": "8b6d9029-1990-4660-bd57-24b5bc0fb626",
+      "title": "Bitter Sweet Symphony",
+      "artist": "The Verve",
+      "style": "alternative rock",
+      "level": "recording",
+      "votes": 6,
+      "url": "https://musicbrainz.org/ws/2/recording/8b6d9029-1990-4660-bd57-24b5bc0fb626?inc=genres+artist-credits&fmt=json",
+      "retrievedAt": "2026-11-01T00:32:00.702Z",
+      "lookups": [
+        {
+          "url": "https://musicbrainz.org/ws/2/recording/8b6d9029-1990-4660-bd57-24b5bc0fb626?inc=genres+artist-credits&fmt=json",
+          "genres": [
+            {
+              "name": "alternative rock",
+              "count": 6
+            },
+            {
+              "name": "baroque pop",
+              "count": 1
+            },
+            {
+              "name": "britpop",
+              "count": 5
+            },
+            {
+              "name": "chamber pop",
+              "count": 1
+            },
+            {
+              "name": "dream pop",
+              "count": 1
+            },
+            {
+              "name": "indie rock",
+              "count": 1
+            },
+            {
+              "name": "neo-psychedelia",
+              "count": 1
+            },
+            {
+              "name": "pop",
+              "count": 1
+            },
+            {
+              "name": "post-britpop",
+              "count": 1
+            },
+            {
+              "name": "rock",
+              "count": 3
+            },
+            {
+              "name": "space rock revival",
+              "count": 1
+            },
+            {
+              "name": "symphonic rock",
+              "count": 1
+            }
+          ],
+          "requests": 1
+        }
+      ]
+    },
+    {
+      "isrc": "USUM70741299",
+      "mbid": "8009d470-912b-42fa-8261-b88c488eb935",
+      "title": "Stronger",
+      "artist": "Kanye West",
+      "style": "hip hop",
+      "level": "recording",
+      "votes": 5,
+      "url": "https://musicbrainz.org/ws/2/recording/8009d470-912b-42fa-8261-b88c488eb935?inc=genres+artist-credits&fmt=json",
+      "retrievedAt": "2026-11-01T00:32:01.419Z",
+      "lookups": [
+        {
+          "url": "https://musicbrainz.org/ws/2/recording/8009d470-912b-42fa-8261-b88c488eb935?inc=genres+artist-credits&fmt=json",
+          "genres": [
+            {
+              "name": "alternative rock",
+              "count": 1
+            },
+            {
+              "name": "electro",
+              "count": 1
+            },
+            {
+              "name": "electronic",
+              "count": 1
+            },
+            {
+              "name": "hip hop",
+              "count": 5
+            },
+            {
+              "name": "pop",
+              "count": 1
+            }
+          ],
+          "requests": 1
+        }
+      ]
+    },
+    {
+      "isrc": "USSB29000129",
+      "mbid": "875c24bc-fe9e-4ac6-80d3-beaacb70ee43",
+      "title": "Ice Ice Baby",
+      "artist": "Vanilla Ice",
+      "style": "hip hop",
+      "level": "recording",
+      "votes": 3,
+      "url": "https://musicbrainz.org/ws/2/recording/875c24bc-fe9e-4ac6-80d3-beaacb70ee43?inc=genres+artist-credits&fmt=json",
+      "retrievedAt": "2026-11-01T00:32:02.490Z",
+      "lookups": [
+        {
+          "url": "https://musicbrainz.org/ws/2/recording/875c24bc-fe9e-4ac6-80d3-beaacb70ee43?inc=genres+artist-credits&fmt=json",
+          "genres": [
+            {
+              "name": "europop",
+              "count": 1
+            },
+            {
+              "name": "hip hop",
+              "count": 3
+            },
+            {
+              "name": "pop",
+              "count": 2
+            },
+            {
+              "name": "pop rap",
+              "count": 3
+            },
+            {
+              "name": "pop rock",
+              "count": 1
+            }
+          ],
+          "requests": 1
+        }
+      ]
+    },
+    {
+      "isrc": "USCA29000294",
+      "mbid": "edbdeaf2-51e4-4b51-bcb6-174a160b8899",
+      "title": "U Can't Touch This",
+      "artist": "MC Hammer",
+      "style": "hip hop",
+      "level": "recording",
+      "votes": 9,
+      "url": "https://musicbrainz.org/ws/2/recording/edbdeaf2-51e4-4b51-bcb6-174a160b8899?inc=genres+artist-credits&fmt=json",
+      "retrievedAt": "2026-11-01T00:32:03.490Z",
+      "lookups": [
+        {
+          "url": "https://musicbrainz.org/ws/2/recording/edbdeaf2-51e4-4b51-bcb6-174a160b8899?inc=genres+artist-credits&fmt=json",
+          "genres": [
+            {
+              "name": "hip hop",
+              "count": 9
+            },
+            {
+              "name": "pop",
+              "count": 7
+            },
+            {
+              "name": "pop rap",
+              "count": 5
+            },
+            {
+              "name": "synth funk",
+              "count": 2
+            },
+            {
+              "name": "west coast hip hop",
+              "count": 3
+            }
+          ],
+          "requests": 1
+        }
+      ]
+    },
+    {
+      "isrc": "USTB10250016",
+      "mbid": "2f7a6735-2e09-4ce2-81e4-b148e6c39a55",
+      "title": "Gangsta's Paradise",
+      "artist": "Coolio feat. L.V.",
+      "style": "gangsta rap",
+      "level": "recording",
+      "votes": 9,
+      "url": "https://musicbrainz.org/ws/2/recording/2f7a6735-2e09-4ce2-81e4-b148e6c39a55?inc=genres+artist-credits&fmt=json",
+      "retrievedAt": "2026-11-01T00:32:04.612Z",
+      "lookups": [
+        {
+          "url": "https://musicbrainz.org/ws/2/recording/2f7a6735-2e09-4ce2-81e4-b148e6c39a55?inc=genres+artist-credits&fmt=json",
+          "genres": [
+            {
+              "name": "alternative rock",
+              "count": 1
+            },
+            {
+              "name": "boom bap",
+              "count": 1
+            },
+            {
+              "name": "conscious hip hop",
+              "count": 4
+            },
+            {
+              "name": "gangsta rap",
+              "count": 9
+            },
+            {
+              "name": "hip hop",
+              "count": 9
+            },
+            {
+              "name": "pop rap",
+              "count": 2
+            },
+            {
+              "name": "west coast hip hop",
+              "count": 6
+            }
+          ],
+          "requests": 1
+        }
+      ]
+    },
+    {
+      "isrc": "USBB40000359",
+      "mbid": "181c0a32-6e3f-4680-8a7d-1daf0b42e43b",
+      "title": "Juicy",
+      "artist": "The Notorious B.I.G.",
+      "style": "hip hop",
+      "level": "recording",
+      "votes": 7,
+      "url": "https://musicbrainz.org/ws/2/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b?inc=genres+artist-credits&fmt=json",
+      "retrievedAt": "2026-11-01T00:32:05.702Z",
+      "lookups": [
+        {
+          "url": "https://musicbrainz.org/ws/2/recording/181c0a32-6e3f-4680-8a7d-1daf0b42e43b?inc=genres+artist-credits&fmt=json",
+          "genres": [
+            {
+              "name": "east coast hip hop",
+              "count": 4
+            },
+            {
+              "name": "gangsta rap",
+              "count": 3
+            },
+            {
+              "name": "hardcore hip hop",
+              "count": 1
+            },
+            {
+              "name": "hip hop",
+              "count": 7
+            },
+            {
+              "name": "political hip hop",
+              "count": 1
+            },
+            {
+              "name": "pop rap",
+              "count": 1
+            }
+          ],
+          "requests": 1
+        }
+      ]
+    },
+    {
+      "isrc": "USBB40580685",
+      "mbid": "a2385545-186d-411a-8395-bb5f0f1c186f",
+      "title": "I'll Be Missing You",
+      "artist": "Puff Daddy & Faith Evans feat. 112",
+      "style": "gangsta rap",
+      "level": "recording",
+      "votes": 3,
+      "url": "https://musicbrainz.org/ws/2/recording/a2385545-186d-411a-8395-bb5f0f1c186f?inc=genres+artist-credits&fmt=json",
+      "retrievedAt": "2026-11-01T00:32:06.920Z",
+      "lookups": [
+        {
+          "url": "https://musicbrainz.org/ws/2/recording/a2385545-186d-411a-8395-bb5f0f1c186f?inc=genres+artist-credits&fmt=json",
+          "genres": [
+            {
+              "name": "east coast hip hop",
+              "count": 1
+            },
+            {
+              "name": "electronic",
+              "count": 2
+            },
+            {
+              "name": "gangsta rap",
+              "count": 3
+            },
+            {
+              "name": "hip hop",
+              "count": 2
+            },
+            {
+              "name": "pop rap",
+              "count": 3
+            },
+            {
+              "name": "r&b",
+              "count": 1
+            }
+          ],
+          "requests": 1
+        }
+      ]
+    },
+    {
+      "isrc": "USWB10504319",
+      "mbid": "d63f9a2c-aea5-4b77-875e-eee7ce1fd734",
+      "title": "Hung Up",
+      "artist": "Madonna",
+      "style": "pop",
+      "level": "recording",
+      "votes": 8,
+      "url": "https://musicbrainz.org/ws/2/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734?inc=genres+artist-credits&fmt=json",
+      "retrievedAt": "2026-11-01T00:32:07.988Z",
+      "lookups": [
+        {
+          "url": "https://musicbrainz.org/ws/2/recording/d63f9a2c-aea5-4b77-875e-eee7ce1fd734?inc=genres+artist-credits&fmt=json",
+          "genres": [
+            {
+              "name": "ballad",
+              "count": 1
+            },
+            {
+              "name": "club",
+              "count": 1
+            },
+            {
+              "name": "dance",
+              "count": 1
+            },
+            {
+              "name": "dance-pop",
+              "count": 5
+            },
+            {
+              "name": "disco",
+              "count": 2
+            },
+            {
+              "name": "electronic",
+              "count": 1
+            },
+            {
+              "name": "euro house",
+              "count": 2
+            },
+            {
+              "name": "europop",
+              "count": 1
+            },
+            {
+              "name": "hip hop",
+              "count": 2
+            },
+            {
+              "name": "house",
+              "count": 2
+            },
+            {
+              "name": "nu disco",
+              "count": 1
+            },
+            {
+              "name": "pop",
+              "count": 8
+            },
+            {
+              "name": "synth-pop",
+              "count": 2
+            }
+          ],
+          "requests": 1
+        }
+      ]
+    },
+    {
+      "isrc": "USIR10001280",
+      "mbid": "60d2246d-2761-4e1f-b30b-2784f00565b1",
+      "title": "Stan",
+      "artist": "Eminem feat. Dido",
+      "style": "hip hop",
+      "level": "recording",
+      "votes": 17,
+      "url": "https://musicbrainz.org/ws/2/recording/60d2246d-2761-4e1f-b30b-2784f00565b1?inc=genres+artist-credits&fmt=json",
+      "retrievedAt": "2026-11-01T00:32:08.991Z",
+      "lookups": [
+        {
+          "url": "https://musicbrainz.org/ws/2/recording/60d2246d-2761-4e1f-b30b-2784f00565b1?inc=genres+artist-credits&fmt=json",
+          "genres": [
+            {
+              "name": "blues",
+              "count": 1
+            },
+            {
+              "name": "conscious hip hop",
+              "count": 4
+            },
+            {
+              "name": "electronic",
+              "count": 1
+            },
+            {
+              "name": "hardcore hip hop",
+              "count": 2
+            },
+            {
+              "name": "hip hop",
+              "count": 17
+            },
+            {
+              "name": "horrorcore",
+              "count": 2
+            },
+            {
+              "name": "pop",
+              "count": 2
+            },
+            {
+              "name": "pop rap",
+              "count": 3
+            },
+            {
+              "name": "trip hop",
+              "count": 3
+            }
+          ],
+          "requests": 1
+        }
+      ]
+    },
+    {
+      "isrc": "GBBMQ9800092",
+      "mbid": "66197b08-aa26-4f44-91da-49a8c89168ae",
+      "title": "Praise You",
+      "artist": "Fatboy Slim",
+      "style": "big beat",
+      "level": "recording",
+      "votes": 5,
+      "url": "https://musicbrainz.org/ws/2/recording/66197b08-aa26-4f44-91da-49a8c89168ae?inc=genres+artist-credits&fmt=json",
+      "retrievedAt": "2026-11-01T00:32:12.673Z",
+      "lookups": [
+        {
+          "url": "https://musicbrainz.org/ws/2/recording/66197b08-aa26-4f44-91da-49a8c89168ae?inc=genres+artist-credits&fmt=json",
+          "genres": [
+            {
+              "name": "acid breaks",
+              "count": 1
+            },
+            {
+              "name": "alternative dance",
+              "count": 1
+            },
+            {
+              "name": "big beat",
+              "count": 5
+            },
+            {
+              "name": "breakbeat",
+              "count": 1
+            },
+            {
+              "name": "dance",
+              "count": 1
+            },
+            {
+              "name": "electronic",
+              "count": 1
+            },
+            {
+              "name": "funky breaks",
+              "count": 1
+            },
+            {
+              "name": "neo-psychedelia",
+              "count": 1
+            }
+          ],
+          "requests": 1
+        }
+      ]
+    },
+    {
+      "isrc": "GBAJH9900041",
+      "mbid": "b2d6930a-63aa-449a-b3a8-d1c54a54f4ae",
+      "title": "Natural Blues",
+      "artist": "Moby",
+      "style": "electronic",
+      "level": "recording",
+      "votes": 10,
+      "url": "https://musicbrainz.org/ws/2/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae?inc=genres+artist-credits&fmt=json",
+      "retrievedAt": "2026-11-01T00:32:15.171Z",
+      "lookups": [
+        {
+          "url": "https://musicbrainz.org/ws/2/recording/b2d6930a-63aa-449a-b3a8-d1c54a54f4ae?inc=genres+artist-credits&fmt=json",
+          "genres": [
+            {
+              "name": "ambient",
+              "count": 3
+            },
+            {
+              "name": "ambient techno",
+              "count": 1
+            },
+            {
+              "name": "breakbeat",
+              "count": 3
+            },
+            {
+              "name": "chillout",
+              "count": 2
+            },
+            {
+              "name": "club",
+              "count": 1
+            },
+            {
+              "name": "dance",
+              "count": 1
+            },
+            {
+              "name": "downtempo",
+              "count": 5
+            },
+            {
+              "name": "electro",
+              "count": 1
+            },
+            {
+              "name": "electronic",
+              "count": 10
+            },
+            {
+              "name": "electronica",
+              "count": 3
+            },
+            {
+              "name": "house",
+              "count": 2
+            },
+            {
+              "name": "techno",
+              "count": 3
+            },
+            {
+              "name": "trance",
+              "count": 1
+            }
+          ],
+          "requests": 1
+        }
+      ]
+    },
+    {
+      "isrc": "SEUM71100961",
+      "mbid": "21b6345e-cadb-4dcb-9019-28128545a933",
+      "title": "Levels",
+      "artist": "Avicii",
+      "style": "electro house",
+      "level": "recording",
+      "votes": 3,
+      "url": "https://musicbrainz.org/ws/2/recording/21b6345e-cadb-4dcb-9019-28128545a933?inc=genres+artist-credits&fmt=json",
+      "retrievedAt": "2026-11-01T00:32:15.292Z",
+      "lookups": [
+        {
+          "url": "https://musicbrainz.org/ws/2/recording/21b6345e-cadb-4dcb-9019-28128545a933?inc=genres+artist-credits&fmt=json",
+          "genres": [
+            {
+              "name": "dancehall",
+              "count": 1
+            },
+            {
+              "name": "electro",
+              "count": 1
+            },
+            {
+              "name": "electro house",
+              "count": 3
+            },
+            {
+              "name": "festival progressive house",
+              "count": 1
+            },
+            {
+              "name": "progressive house",
+              "count": 1
+            },
+            {
+              "name": "techno",
+              "count": 1
+            }
+          ],
+          "requests": 1
+        }
+      ]
+    },
+    {
+      "isrc": "USWB19900178",
+      "mbid": "248cc9d1-97ea-493e-84d4-4c5ec718683b",
+      "title": "Dreams",
+      "artist": "Fleetwood Mac",
+      "style": "rock",
+      "level": "recording",
+      "votes": 10,
+      "url": "https://musicbrainz.org/ws/2/recording/248cc9d1-97ea-493e-84d4-4c5ec718683b?inc=genres+artist-credits&fmt=json",
+      "retrievedAt": "2026-11-01T00:32:18.607Z",
+      "lookups": [
+        {
+          "url": "https://musicbrainz.org/ws/2/recording/248cc9d1-97ea-493e-84d4-4c5ec718683b?inc=genres+artist-credits&fmt=json",
+          "genres": [
+            {
+              "name": "blues",
+              "count": 3
+            },
+            {
+              "name": "blues rock",
+              "count": 1
+            },
+            {
+              "name": "classic rock",
+              "count": 2
+            },
+            {
+              "name": "easy listening",
+              "count": 2
+            },
+            {
+              "name": "pop",
+              "count": 1
+            },
+            {
+              "name": "pop rock",
+              "count": 3
+            },
+            {
+              "name": "rock",
+              "count": 10
+            },
+            {
+              "name": "soft rock",
+              "count": 8
+            }
+          ],
+          "requests": 1
+        }
+      ]
+    },
+    {
+      "isrc": "USSM18200463",
+      "mbid": "55dc4892-b5ae-4bd7-9e98-2a0d4dd53cbc",
+      "title": "Africa",
+      "artist": "Toto",
+      "style": "rock",
+      "level": "recording",
+      "votes": 10,
+      "url": "https://musicbrainz.org/ws/2/recording/55dc4892-b5ae-4bd7-9e98-2a0d4dd53cbc?inc=genres+artist-credits&fmt=json",
+      "retrievedAt": "2026-11-01T00:32:23.937Z",
+      "lookups": [
+        {
+          "url": "https://musicbrainz.org/ws/2/recording/55dc4892-b5ae-4bd7-9e98-2a0d4dd53cbc?inc=genres+artist-credits&fmt=json",
+          "genres": [
+            {
+              "name": "aor",
+              "count": 1
+            },
+            {
+              "name": "classic rock",
+              "count": 6
+            },
+            {
+              "name": "hard rock",
+              "count": 2
+            },
+            {
+              "name": "pop",
+              "count": 5
+            },
+            {
+              "name": "pop rock",
+              "count": 9
+            },
+            {
+              "name": "progressive rock",
+              "count": 1
+            },
+            {
+              "name": "rock",
+              "count": 10
+            },
+            {
+              "name": "soft rock",
+              "count": 6
+            }
+          ],
+          "requests": 2
+        }
+      ]
+    },
+    {
+      "isrc": "GBCNR8500002",
+      "mbid": "6029d549-5858-4936-9156-b90770d2ae92",
+      "title": "Running Up That Hill (A Deal With God)",
+      "artist": "Kate Bush",
+      "style": "pop",
+      "level": "recording",
+      "votes": 8,
+      "url": "https://musicbrainz.org/ws/2/recording/6029d549-5858-4936-9156-b90770d2ae92?inc=genres+artist-credits&fmt=json",
+      "retrievedAt": "2026-11-01T00:32:24.067Z",
+      "lookups": [
+        {
+          "url": "https://musicbrainz.org/ws/2/recording/6029d549-5858-4936-9156-b90770d2ae92?inc=genres+artist-credits&fmt=json",
+          "genres": [
+            {
+              "name": "alternative rock",
+              "count": 1
+            },
+            {
+              "name": "art pop",
+              "count": 2
+            },
+            {
+              "name": "art rock",
+              "count": 2
+            },
+            {
+              "name": "baroque pop",
+              "count": 1
+            },
+            {
+              "name": "experimental rock",
+              "count": 1
+            },
+            {
+              "name": "new wave",
+              "count": 1
+            },
+            {
+              "name": "pop",
+              "count": 8
+            },
+            {
+              "name": "pop rock",
+              "count": 5
+            },
+            {
+              "name": "progressive pop",
+              "count": 1
+            },
+            {
+              "name": "progressive rock",
+              "count": 1
+            },
+            {
+              "name": "rock",
+              "count": 2
+            },
+            {
+              "name": "soul",
+              "count": 1
+            },
+            {
+              "name": "synth-pop",
+              "count": 2
+            }
+          ],
+          "requests": 1
+        }
+      ]
+    },
+    {
+      "isrc": "AUUM71500303",
+      "mbid": "78be434c-0908-458f-9693-f16cdebb68ef",
+      "title": "The Less I Know the Better",
+      "artist": "Tame Impala",
+      "style": "psychedelic rock",
+      "level": "recording",
+      "votes": 4,
+      "url": "https://musicbrainz.org/ws/2/recording/78be434c-0908-458f-9693-f16cdebb68ef?inc=genres+artist-credits&fmt=json",
+      "retrievedAt": "2026-11-01T00:32:25.166Z",
+      "lookups": [
+        {
+          "url": "https://musicbrainz.org/ws/2/recording/78be434c-0908-458f-9693-f16cdebb68ef?inc=genres+artist-credits&fmt=json",
+          "genres": [
+            {
+              "name": "alternative rock",
+              "count": 1
+            },
+            {
+              "name": "disco",
+              "count": 1
+            },
+            {
+              "name": "neo-psychedelia",
+              "count": 3
+            },
+            {
+              "name": "nu disco",
+              "count": 1
+            },
+            {
+              "name": "psychedelic pop",
+              "count": 1
+            },
+            {
+              "name": "psychedelic rock",
+              "count": 4
+            },
+            {
+              "name": "synth-pop",
+              "count": 2
+            }
+          ],
+          "requests": 1
+        }
+      ]
+    },
+    {
+      "isrc": "USWB19901214",
+      "mbid": "12f65dca-de8f-43fe-a65d-f12a02aaadf3",
+      "title": "Take On Me",
+      "artist": "a-ha",
+      "style": "pop",
+      "level": "recording",
+      "votes": 19,
+      "url": "https://musicbrainz.org/ws/2/recording/12f65dca-de8f-43fe-a65d-f12a02aaadf3?inc=genres+artist-credits&fmt=json",
+      "retrievedAt": "2026-11-01T00:32:28.428Z",
+      "lookups": [
+        {
+          "url": "https://musicbrainz.org/ws/2/recording/12f65dca-de8f-43fe-a65d-f12a02aaadf3?inc=genres+artist-credits&fmt=json",
+          "genres": [
+            {
+              "name": "alternative rock",
+              "count": 1
+            },
+            {
+              "name": "arena rock",
+              "count": 1
+            },
+            {
+              "name": "dance",
+              "count": 1
+            },
+            {
+              "name": "dance-pop",
+              "count": 1
+            },
+            {
+              "name": "dance-rock",
+              "count": 1
+            },
+            {
+              "name": "disco",
+              "count": 1
+            },
+            {
+              "name": "electronic",
+              "count": 3
+            },
+            {
+              "name": "new romantic",
+              "count": 2
+            },
+            {
+              "name": "new wave",
+              "count": 5
+            },
+            {
+              "name": "pop",
+              "count": 19
+            },
+            {
+              "name": "pop rock",
+              "count": 4
+            },
+            {
+              "name": "rock",
+              "count": 2
+            },
+            {
+              "name": "synth-pop",
+              "count": 7
+            },
+            {
+              "name": "trance",
+              "count": 1
+            }
+          ],
+          "requests": 1
+        }
+      ]
+    },
+    {
+      "isrc": "USDJ20200650",
+      "mbid": "25d8de5e-3662-4ffd-8dea-511a696ac3e7",
+      "title": "Hurt",
+      "artist": "Johnny Cash",
+      "style": "country",
+      "level": "recording",
+      "votes": 9,
+      "url": "https://musicbrainz.org/ws/2/recording/25d8de5e-3662-4ffd-8dea-511a696ac3e7?inc=genres+artist-credits&fmt=json",
+      "retrievedAt": "2026-11-01T00:32:28.565Z",
+      "lookups": [
+        {
+          "url": "https://musicbrainz.org/ws/2/recording/25d8de5e-3662-4ffd-8dea-511a696ac3e7?inc=genres+artist-credits&fmt=json",
+          "genres": [
+            {
+              "name": "alternative country",
+              "count": 1
+            },
+            {
+              "name": "alternative rock",
+              "count": 1
+            },
+            {
+              "name": "americana",
+              "count": 3
+            },
+            {
+              "name": "classic country",
+              "count": 1
+            },
+            {
+              "name": "contemporary country",
+              "count": 4
+            },
+            {
+              "name": "contemporary folk",
+              "count": 1
+            },
+            {
+              "name": "country",
+              "count": 9
+            },
+            {
+              "name": "country rock",
+              "count": 1
+            },
+            {
+              "name": "outlaw country",
+              "count": 1
+            },
+            {
+              "name": "rock",
+              "count": 2
+            },
+            {
+              "name": "traditional country",
+              "count": 1
+            }
+          ],
+          "requests": 1
+        }
+      ]
+    },
+    {
+      "isrc": "GBAHT0600202",
+      "mbid": "aa6c54d3-226b-47d6-85b9-2adf3e22ebaf",
+      "title": "Crazy",
+      "artist": "Gnarls Barkley",
+      "style": "pop",
+      "level": "recording",
+      "votes": 7,
+      "url": "https://musicbrainz.org/ws/2/recording/aa6c54d3-226b-47d6-85b9-2adf3e22ebaf?inc=genres+artist-credits&fmt=json",
+      "retrievedAt": "2026-11-01T00:32:29.652Z",
+      "lookups": [
+        {
+          "url": "https://musicbrainz.org/ws/2/recording/aa6c54d3-226b-47d6-85b9-2adf3e22ebaf?inc=genres+artist-credits&fmt=json",
+          "genres": [
+            {
+              "name": "alternative hip hop",
+              "count": 3
+            },
+            {
+              "name": "alternative r&b",
+              "count": 1
+            },
+            {
+              "name": "alternative rock",
+              "count": 1
+            },
+            {
+              "name": "dance",
+              "count": 1
+            },
+            {
+              "name": "electronica",
+              "count": 2
+            },
+            {
+              "name": "experimental hip hop",
+              "count": 1
+            },
+            {
+              "name": "funk",
+              "count": 4
+            },
+            {
+              "name": "hip hop",
+              "count": 4
+            },
+            {
+              "name": "neo soul",
+              "count": 5
+            },
+            {
+              "name": "pop",
+              "count": 7
+            },
+            {
+              "name": "pop soul",
+              "count": 1
+            },
+            {
+              "name": "psychedelic soul",
+              "count": 1
+            },
+            {
+              "name": "r&b",
+              "count": 2
+            },
+            {
+              "name": "soul",
+              "count": 1
+            }
+          ],
+          "requests": 1
+        }
+      ]
+    },
+    {
+      "isrc": "JPP301900716",
+      "mbid": "57a6dff3-daee-4e63-bc82-6bd6f5df2957",
+      "title": "夜に駆ける",
+      "artist": "YOASOBI",
+      "style": "j-pop",
+      "level": "recording",
+      "votes": 2,
+      "url": "https://musicbrainz.org/ws/2/recording/57a6dff3-daee-4e63-bc82-6bd6f5df2957?inc=genres+artist-credits&fmt=json",
+      "retrievedAt": "2026-11-01T00:32:33.198Z",
+      "lookups": [
+        {
+          "url": "https://musicbrainz.org/ws/2/recording/57a6dff3-daee-4e63-bc82-6bd6f5df2957?inc=genres+artist-credits&fmt=json",
+          "genres": [
+            {
+              "name": "alternative dance",
+              "count": 1
+            },
+            {
+              "name": "j-pop",
+              "count": 2
+            },
+            {
+              "name": "yakousei",
+              "count": 1
+            }
+          ],
+          "requests": 1
+        }
+      ]
+    },
+    {
+      "isrc": "USUM71210283",
+      "mbid": "882ce25d-51b9-4fe5-bbdf-16e661df0822",
+      "title": "Gangnam Style (강남스타일)",
+      "artist": "PSY",
+      "style": "k-pop",
+      "level": "recording",
+      "votes": 6,
+      "url": "https://musicbrainz.org/ws/2/recording/882ce25d-51b9-4fe5-bbdf-16e661df0822?inc=genres+artist-credits&fmt=json",
+      "retrievedAt": "2026-11-01T00:32:33.334Z",
+      "lookups": [
+        {
+          "url": "https://musicbrainz.org/ws/2/recording/882ce25d-51b9-4fe5-bbdf-16e661df0822?inc=genres+artist-credits&fmt=json",
+          "genres": [
+            {
+              "name": "dance-pop",
+              "count": 2
+            },
+            {
+              "name": "electro",
+              "count": 1
+            },
+            {
+              "name": "electronic",
+              "count": 1
+            },
+            {
+              "name": "electropop",
+              "count": 1
+            },
+            {
+              "name": "hip hop",
+              "count": 1
+            },
+            {
+              "name": "hip house",
+              "count": 2
+            },
+            {
+              "name": "house",
+              "count": 1
+            },
+            {
+              "name": "k-pop",
+              "count": 6
+            },
+            {
+              "name": "pop",
+              "count": 2
+            },
+            {
+              "name": "pop rap",
+              "count": 1
+            },
+            {
+              "name": "pop rock",
+              "count": 1
+            }
+          ],
+          "requests": 1
+        }
+      ]
+    },
+    {
+      "isrc": "FR10F1200080",
+      "mbid": "cd6c8d5c-fd3b-4ec4-bb57-7a59451f7edb",
+      "title": "More Spell on You",
+      "artist": "Eddie Johns",
+      "style": "disco",
+      "level": "release-group",
+      "votes": 1,
+      "url": "https://musicbrainz.org/ws/2/release-group/14530fcf-6d70-3984-8644-55fdf1ee2ae9?inc=genres&fmt=json",
+      "retrievedAt": "2026-11-01T00:32:38.265Z",
+      "lookups": [
+        {
+          "url": "https://musicbrainz.org/ws/2/recording/cd6c8d5c-fd3b-4ec4-bb57-7a59451f7edb?inc=genres+artist-credits&fmt=json",
+          "genres": [],
+          "requests": 1
+        },
+        {
+          "url": "https://musicbrainz.org/ws/2/release?recording=cd6c8d5c-fd3b-4ec4-bb57-7a59451f7edb&inc=release-groups&limit=100&offset=0&fmt=json",
+          "releases": 3,
+          "earliestReleaseGroup": "14530fcf-6d70-3984-8644-55fdf1ee2ae9",
+          "requests": 1
+        },
+        {
+          "url": "https://musicbrainz.org/ws/2/release-group/14530fcf-6d70-3984-8644-55fdf1ee2ae9?inc=genres&fmt=json",
+          "genres": [
+            {
+              "name": "disco",
+              "count": 1
+            },
+            {
+              "name": "electronic",
+              "count": 1
+            },
+            {
+              "name": "rock",
+              "count": 1
+            }
+          ],
+          "requests": 1
+        }
+      ]
+    },
+    {
+      "isrc": "QM4TX1779716",
+      "mbid": "61ef31c0-d65b-4d76-b9bb-80eec6e107de",
+      "title": "Amen, Brother",
+      "artist": "The Winstons",
+      "style": "funk",
+      "level": "recording",
+      "votes": 2,
+      "url": "https://musicbrainz.org/ws/2/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de?inc=genres+artist-credits&fmt=json",
+      "retrievedAt": "2026-11-01T00:32:39.367Z",
+      "lookups": [
+        {
+          "url": "https://musicbrainz.org/ws/2/recording/61ef31c0-d65b-4d76-b9bb-80eec6e107de?inc=genres+artist-credits&fmt=json",
+          "genres": [
+            {
+              "name": "funk",
+              "count": 2
+            },
+            {
+              "name": "soul",
+              "count": 2
+            }
+          ],
+          "requests": 1
+        }
+      ]
+    }
+  ]
+}

@@ -17,9 +17,11 @@ evals/agent/
   spend.mjs           the spend log by purpose, against the caps, and what the records name
   report.mjs          npm run eval:table -- --runs <dir>: the report from run records
   check-report.mjs    renders a report again from its run records and checks it
-  make-perturb.mjs    writes evals/perturb.jsonl from fixtures/replays at a fixed seed
+  make-perturb.mjs    writes evals/perturb.jsonl from fixtures/pinned/9971adea845d at a fixed seed
   perturb-check.mjs   runs evals/perturb.jsonl through the app's numeric check
   export-labels.mjs   CSV of claims to label blind, without verdicts; its key apart
+  fetch-styles.mjs    writes evals/showcase-styles.json from MusicBrainz genre votes (network)
+  showcase.mjs        which golden-run rows are recorded as the showcase replays, by rule
   lib/golden.mjs      golden set: rows, sha256, subsets, gold targets, sites
   lib/score.mjs       edge matching, held-out exclusion, hallucination, pipeline metrics
   lib/support.mjs     the deterministic support check (claim text against cited excerpts)
@@ -75,8 +77,9 @@ it reads is documented at the top of that file. In short:
   every site. The rule errs towards excluding. Of the 16 gold targets in the live subset, 15
   also have a MusicBrainz source, so **one** target is held-out (Crazy's "Last Men Standing",
   documented by Wikipedia only) and it is lost in any run that cites Wikipedia, as each of the
-  four committed recordings does. Held-out recall is therefore shown as counts, the report says
-  why, and it gives n before and after the exclusion and the sites that removed targets.
+  four recordings in `fixtures/pinned/9971adea845d` does. Held-out recall is therefore shown as
+  counts, the report says why, and it gives n before and after the exclusion and the sites that
+  removed targets.
 - **Hallucinated-sample rate**: the share of no-sample controls with at least one forward sample,
   interpolation or cover edge, and the mean number of such edges per control.
 - **Identity** is scored at recording level: the row's MusicBrainz recording when both the row
@@ -241,7 +244,11 @@ describes the unmatched edges of the committed run.
 
 ## The perturbation set
 
-`evals/perturb.jsonl` is generated, not written by hand:
+`evals/perturb.jsonl` is generated, not written by hand, from the four showcase recordings it
+was first made from (Bitter Sweet Symphony, Hung Up, Juicy and One More Time, as served until the
+showcase was recorded from the golden run), kept byte for byte in `fixtures/pinned/9971adea845d`.
+The golden run's judge record and cassettes are of this set, so it does not follow
+`fixtures/replays`; the report names the directory `make-perturb.mjs` reads (`RECORDINGS_DIR`).
 
 ```sh
 node evals/agent/make-perturb.mjs        # rewrite it (same bytes every time)
@@ -304,6 +311,75 @@ node evals/agent/export-labels.mjs --out labels.csv --key ~/labels-key.json
   and the map from label ids to cases go to the `--key` file, which must not sit next to the
   CSV or anywhere in the repository (the CLI refuses both); keep it away from whoever labels.
 - The generator sorts by code point, so its output is the same bytes in every locale.
+
+## The showcase
+
+The showcase recordings (`fixtures/replays`) are runs of the golden run (its code kept at the tag
+`golden-run-2026-10-31`), chosen by `showcase.mjs` from the committed run records, never by hand.
+`showcase.test.mjs` runs the choice on the committed records and styles and fails unless it is
+the set of files in `fixtures/replays`, each recorded from its chosen run, and the list
+`apps/api/src/replay/demo-recording.test.ts` pins; that test checks that each recording holds its
+run's whole result (under the golden run's masks, `lib/record.mjs`) and measured audio block.
+
+```sh
+node evals/agent/showcase.mjs            # the table: each row, its style, why it fails or is chosen
+node evals/agent/fetch-styles.mjs        # rewrites evals/showcase-styles.json (network; by hand)
+```
+
+- **Eligible** rows have the right identity, a measured audio block with a tempo from the
+  signal, a Cover Art Archive cover (the recorder's own rule), no measured field from model
+  text and no model claim or link shown as sourced without a verdict that sources it, at least
+  5 code-built sourced links in the map (the fewest of the four showcases the set replaced), a
+  style, and a page that names no relation "Possible …".
+- **The page rule is a demo choice, not a property of the product.** The result as the replay
+  serves it is named by the web's own modules (`apps/web/src/components/provenance/claims.ts`,
+  `genealogy/links.ts`, `genealogy/relationWords.ts`, as the Player names a card's or a claim's
+  relation), and a row fails when any claim shown would read "Possible sample", "Possible cover"
+  or "Possible remix". It keeps hedged relations off the demo so the notes spec can check that
+  each relation a record documents is stated once. How many rows it excludes is in the table
+  `showcase.mjs` prints; for two it is the only reason, Gangsta's Paradise and The Less I Know the
+  Better (`showcase.test.mjs` checks that). Gangsta's Paradise is a known
+  limitation of the restatement reader (`apps/api/src/agent/restatements.ts`): its model claim
+  "Coolio's recording draws on Stevie Wonder's 'Pastime Paradise'", partly supported, states the
+  relation its MusicBrainz record documents ("samples 'Pastime Paradise'") in words the reader's
+  templates do not hold ("draws on" names no relation), so it is neither left out nor marked and
+  would read "Possible sample" beside the record's "Sample".
+- **The style** is MusicBrainz's top-voted genre (ties by name) of the gold recording, else of
+  the release group of its earliest release, else of its first credited artist, as
+  `evals/showcase-styles.json` records it with the level, the vote count, the lookup's URL and
+  when it was read. Each row keeps every lookup it made with its whole genre list (name and vote
+  count) and its request count, and the file the total, retries included, so the choice can be
+  checked again offline (`showcase.test.mjs` does). It is never model text and never the audio
+  service's style classifier (which `showcase.mjs` prints for reference: it is a model estimate,
+  and it is wrong for some rows). Styles are MusicBrainz genre names compared exactly (equal
+  lower-cased): "house", "electro house", "big beat" and "electronic" are four styles, though all
+  are electronic music, so the showcase's styles count MusicBrainz's genres, not families of them.
+- **The choice**: the eligible rows that were already showcases (so the specs keep their
+  anchors), then the eligible rows that add a style not chosen yet, the most code-built sourced
+  links first (ties by ISRC), until at least 5 tracks and 4 styles. When that cannot be reached
+  the script exits 1 and nothing is recorded. What it chooses on the committed records is the
+  last lines `showcase.mjs` prints, and the files in `fixtures/replays` (`showcase.test.mjs`
+  fails when they differ). A row keeps its showcase slug, or takes its title and first artist; when that
+  slug would hold the query its run was asked and the result does not make that query public
+  (the recorder refuses a typed query anywhere in a record), the artist comes first (Bitter
+  Sweet Symphony's run was asked "Bitter Sweet Symphony The Verve" and resolved to "Bitter Sweet
+  Symphony - Remastered 2016", so it is `the-verve-bitter-sweet-symphony`).
+- `fetch-styles.mjs` is the only script here that reads the network: MusicBrainz's public API
+  (keyless), at most one request per second, with a User-Agent naming the project and one retry
+  after a 503. It is run by hand and its output committed; CI and the tests
+  (`apps/api/src/replay/demo-recording.test.ts`, `showcase.test.mjs`) read the committed file and
+  never fetch. The golden file is not changed: the report and its runs are hashed against it.
+- Known gaps the showcase shows as they are: One More Time's sample card ("MusicBrainz lists
+  … as a recording sampled in …") restates its record in words the reader does not hold yet, so
+  the fact shows on the card and in the notes (pinned as `UNREAD` in
+  `apps/api/src/replay/restated-showcases.test.ts`: teaching the reader those words changes what
+  the golden run's own replay serves, so it waits for the golden run to be recorded again), and
+  its album is stated by its record and by model claims in their own words. MusicBrainz's
+  relations include user-added recordings, and a map draws each as a documented relation: One
+  More Time's names artists by pseudonyms, and the golden run's Gangnam Style result (not in the
+  showcase) draws a 2025 keyword-stuffed listing (recording
+  a72d108d-7d1d-43ca-be60-b8aec81bc303) as a documented sample. The app shows them as
+  MusicBrainz documents them; it does not judge whether a user-added recording is a real one.
 
 ## Pending
 

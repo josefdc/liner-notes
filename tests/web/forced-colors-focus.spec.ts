@@ -46,6 +46,8 @@ type Stop = {
   mapItem: boolean;
   /** Inside the activity log's collapsible entries. */
   inLog: boolean;
+  /** One of the timeline's sections (the button a section holds). */
+  segment: boolean;
   /** Not shown at all: wholly clipped, or under clip-path, clip or opacity 0. */
   hidden: string | null;
   /** Whether it is one of the screen's elements expected not to be shown (`notShown`). */
@@ -275,6 +277,7 @@ async function installProbe(page: Page) {
         chip: element.querySelector("[data-provenance]") !== null,
         mapItem: element.matches(mapItems),
         inLog: element.closest("#activity-log-content") !== null,
+        segment: element.closest("[data-segment-tint]") !== null,
         hidden,
         expectedHidden: w.__notShown.some((selector) => element.matches(selector)),
         clippedBy: ownClips,
@@ -900,7 +903,7 @@ test.describe("forced-colors mode", () => {
     await openPlayer(page);
     const player = await checkScreen(page, "the Player");
     expect(
-      player.tabbed.some((stop) => stop.role === "listitem"),
+      player.tabbed.some((stop) => stop.segment),
       "the timeline's sections are among the Player's stops",
     ).toBe(true);
   });
@@ -980,7 +983,7 @@ test.describe("forced-colors mode", () => {
 
     await openPlayer(page);
     await page.keyboard.press("Tab");
-    for (const segment of await page.locator('[role="listitem"][tabindex="0"]').all()) {
+    for (const segment of await page.locator("li[data-segment-tint] > button").all()) {
       await segment.focus();
       await expectPainted(page, "timeline section", painted);
     }

@@ -8,6 +8,12 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+/** The markers drawn (sample times and key moments): the buttons of the lanes' lists. */
+const markersIn = (root: HTMLElement) =>
+  within(root)
+    .queryAllByRole('list', { name: /^(Samples|Key moments)$/ })
+    .flatMap((lane) => within(lane).getAllByRole('button'));
+
 const template = [
   { label: 'Intro', start: 0, end: 10, color: colors.gray[700] },
   { label: 'Main', start: 10, end: 90, color: colors.gray[800] },
@@ -15,6 +21,36 @@ const template = [
 ];
 
 describe('SmartTimeline', () => {
+  it('makes its markers and sections buttons, named by what they mark, and nothing else a Tab stop', () => {
+    render(
+      <SmartTimeline
+        segments={template}
+        segmentsSource="inferred"
+        durationSeconds={240}
+        samples={[{ time: 60, description: 'Old record' }]}
+        keyMoments={[{ time: 4, type: 'onset', intensity: 1, description: 'Beat transition' }]}
+      />,
+    );
+    const timeline = screen.getByRole('group', { name: 'Song structure' });
+    expect(markersIn(timeline).map((marker) => marker.getAttribute('aria-label'))).toEqual([
+      'Sample: Old record (time inferred by the model)',
+      'Beat transition (measured at 0:04 in the preview)',
+    ]);
+    const sections = timeline.querySelectorAll('li[data-segment-tint] > button');
+    expect([...sections].map((section) => section.getAttribute('aria-label'))).toEqual([
+      'Intro, 10% of track',
+      'Main, 80% of track',
+      'Outro, 10% of track',
+    ]);
+    for (const button of timeline.querySelectorAll('button')) {
+      expect(button.getAttribute('type')).toBe('button');
+    }
+    // No picture-role Tab stop, and no list item or other element that only tabindex makes
+    // focusable.
+    expect(timeline.querySelectorAll('[tabindex]')).toHaveLength(0);
+    expect(within(timeline).queryAllByRole('img')).toHaveLength(0);
+  });
+
   it.each([
     ['that is a template', 'template'],
     ['of unknown origin', undefined],
@@ -44,6 +80,7 @@ describe('SmartTimeline', () => {
       expect(timeline.textContent?.match(/not analyzed/g)).toHaveLength(2);
       expect(timeline.textContent).toContain('No key moments');
       expect(within(timeline).queryAllByRole('img')).toHaveLength(0);
+      expect(markersIn(timeline)).toHaveLength(0);
       // Nothing is placed on the song's time, so no axis is drawn for it: its length is said in
       // words beside the line instead.
       expect(timeline.textContent).not.toContain('0:00');
@@ -75,6 +112,7 @@ describe('SmartTimeline', () => {
     // The sample is not placed, and the note says why in the same words.
     expect(timeline.textContent).toContain('Song length unknown: 1 sample not placed');
     expect(within(timeline).queryAllByRole('img')).toHaveLength(0);
+    expect(markersIn(timeline)).toHaveLength(0);
     expect(timeline.textContent).not.toMatch(/0:00|Duration/);
   });
 
@@ -186,7 +224,9 @@ describe('SmartTimeline', () => {
     // The axis says the length: no second length in words.
     expect(timeline.querySelector('[data-song-length]')).toBeNull();
     expect(timeline.textContent).not.toContain('Song length');
-    expect(within(timeline).getAllByRole('img', { name: /^Sample: Old record/ })).toHaveLength(1);
+    expect(within(timeline).getAllByRole('button', { name: /^Sample: Old record/ })).toHaveLength(
+      1,
+    );
     expect(timeline.textContent).toContain('Song sections not analyzed');
   });
 
@@ -227,7 +267,7 @@ describe('SmartTimeline', () => {
     expect(timeline.textContent).not.toContain('not analyzed');
     expect(timeline.querySelector('[data-structure="not-analyzed"]')).toBeNull();
     expect(timeline.querySelector('[data-song-length]')).toBeNull();
-    expect(within(timeline).getAllByRole('img')).toHaveLength(2);
+    expect(markersIn(timeline)).toHaveLength(2);
     expect(error.mock.calls.flat().join(' ')).not.toMatch(/same key/);
   });
 
@@ -257,10 +297,9 @@ describe('SmartTimeline', () => {
       />,
     );
     const sections = screen.getAllByRole('listitem');
-    expect(sections.map((section) => section.getAttribute('aria-label'))).toEqual([
-      'Verse, 40% of track',
-      'Chorus, 60% of track',
-    ]);
+    expect(
+      sections.map((section) => within(section).getByRole('button').getAttribute('aria-label')),
+    ).toEqual(['Verse, 40% of track', 'Chorus, 60% of track']);
     for (const section of sections) {
       expect(section.style.backgroundColor).toBe('');
       expect(section.className).toContain('bg-prov-inferred/');
@@ -280,7 +319,7 @@ describe('SmartTimeline', () => {
         ]}
       />,
     );
-    const markers = screen.getAllByRole('img');
+    const markers = markersIn(document.body);
     const drawn = markers.map((marker) => {
       const shape = marker.querySelector('svg') as SVGElement;
       return [marker.getAttribute('aria-label'), shape.style.color, shape.dataset.shape];
@@ -312,10 +351,10 @@ describe('SmartTimeline', () => {
       />,
     );
     const preview = screen.getByRole('group', { name: 'Audio preview (about 30 s)' });
-    const markers = within(preview).getAllByRole('img');
+    const markers = markersIn(preview);
     expect(markers).toHaveLength(1);
     // 12 s of a 30 s preview, not 12 s of a 240 s song.
-    expect(markers[0].getAttribute('style')).toContain('left: 40%');
+    expect(markers[0].closest('li')?.getAttribute('style')).toContain('left: 40%');
     expect(markers[0].getAttribute('aria-label')).toContain('in the preview');
     // An intensity of 0 is drawn as 0, not as full opacity.
     expect((markers[0].firstElementChild as HTMLElement).style.opacity).toBe('0');
@@ -334,7 +373,7 @@ describe('SmartTimeline', () => {
       />,
     );
     const preview = screen.getByRole('group', { name: 'Audio preview (about 30 s)' });
-    const markers = within(preview).getAllByRole('img');
+    const markers = markersIn(preview);
     expect(markers).toHaveLength(1);
     expect(markers[0].getAttribute('aria-label')).toContain('Late onset');
     // The lane stretches to the latest moment instead of pinning it past the end.
@@ -369,7 +408,7 @@ describe('SmartTimeline', () => {
       />,
     );
     const timeline = screen.getByRole('group', { name: 'Song structure' });
-    const markers = within(timeline).getAllByRole('img');
+    const markers = markersIn(timeline);
     expect(markers).toHaveLength(1);
     expect(markers[0].getAttribute('aria-label')).toContain('time inferred by the model');
     expect(timeline.textContent).toContain('Sample times: model inference');
@@ -539,10 +578,9 @@ describe('the measured layers of the preview', () => {
     const timeline = screen.getByRole('group', { name: 'Song structure' });
     const [structure] = within(timeline).getAllByRole('list');
     const model = within(structure).getAllByRole('listitem');
-    expect(model.map((item) => item.getAttribute('aria-label'))).toEqual([
-      'Verse, 40% of track',
-      'Chorus, 60% of track',
-    ]);
+    expect(
+      model.map((item) => within(item).getByRole('button').getAttribute('aria-label')),
+    ).toEqual(['Verse, 40% of track', 'Chorus, 60% of track']);
     for (const item of model) {
       expect(item.dataset.segmentTint).toBe('inferred');
       expect(item.className).toContain('bg-prov-inferred/');

@@ -510,7 +510,7 @@ const PROVENANCE_TEXT = [
   'section[aria-label$="(model estimate)"] > p',
   'p:text-is("Audio-model estimates (scores, not probabilities)")',
   // The timeline's preview-lane header and its notes ("No key moments — <reason>").
-  '[aria-label="Song structure"] [role="group"] > div:first-child > span',
+  '[aria-label="Song structure"] fieldset > div:first-child > span',
   '[aria-label="Song structure"] > p',
 ].join(", ");
 

@@ -259,8 +259,8 @@ test.describe("a result with claims", () => {
       await expect(page.getByText(text)).toBeHidden();
     }
     const timeline = page.getByRole("group", { name: "Song structure" });
-    await expect(timeline.getByRole("img", { name: /^Sample: Vocal chop/ })).toHaveCount(1);
-    await expect(timeline.getByRole("img", { name: /Horn stab/ })).toHaveCount(0);
+    await expect(timeline.getByRole("button", { name: /^Sample: Vocal chop/ })).toHaveCount(1);
+    await expect(timeline.getByRole("button", { name: /Horn stab/ })).toHaveCount(0);
     // Two relations: the compact row, with its three tracks and two relations.
     const row = page.locator('#panel-genealogy [data-testid="lineage-row"]');
     await expect(row.locator("[data-lineage-card]")).toHaveCount(3);

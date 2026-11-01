@@ -114,8 +114,12 @@ for (const width of [390, 1440]) {
     await expect(lane.locator('[data-measured-layer="legend"]')).toContainText("61 beats");
 
     // The song's sections are a template in this recording: none is drawn or named. The only
-    // list in the timeline is the measured sections of the preview.
-    await expect(timeline.getByRole("list")).toHaveCount(1);
+    // lists in the timeline are the preview's: its measured sections and its key moments.
+    expect(
+      await timeline
+        .getByRole("list")
+        .evaluateAll((lists) => lists.map((list) => list.getAttribute("aria-label"))),
+    ).toEqual(["Sections measured in the preview", "Key moments"]);
     await expect(timeline.locator("[data-segment-tint]")).toHaveCount(0);
     // The line is about the whole song, and says the preview's sections below are measured.
     await expect(timeline.locator('[data-structure="not-analyzed"]')).toHaveText(

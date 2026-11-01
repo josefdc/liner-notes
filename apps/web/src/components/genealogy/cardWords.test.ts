@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cardName, cardWords } from './cardWords';
+import { cardName, cardSaid, cardWords } from './cardWords';
 import { labelYear, nodesById, recordYear, yearOf } from './links';
 import { layoutLineage } from './lineageLayout';
 
@@ -34,6 +34,52 @@ describe('cardWords and cardName', () => {
     expect(cardName({ label: 'Bright Lines', trackArtist: 'Test Artist' }, 2011)).toBe(
       'Bright Lines by Test Artist (2011)',
     );
+  });
+});
+
+describe('cardSaid', () => {
+  const spell = { trackTitle: 'More Spell on You', trackArtist: 'Eddie Johns' };
+
+  it('says the drawn words first, in their order, each line apart and "·" as a pause', () => {
+    expect(
+      cardSaid(spell, 1979, {
+        title: { lines: ['More Spell on', 'You'] },
+        meta: { lines: ['Eddie Johns · 1979'] },
+        tag: 'Origin',
+      }),
+    ).toBe('More Spell on You, Eddie Johns, 1979, Origin');
+  });
+
+  it('says "undated" after the drawn words when the card shows no year', () => {
+    expect(
+      cardSaid(spell, null, {
+        title: { lines: ['More Spell on You'] },
+        meta: { lines: ['Eddie Johns'] },
+        tag: null,
+      }),
+    ).toBe('More Spell on You, Eddie Johns, undated');
+  });
+
+  it('adds the whole name where the drawn words cut or break the title', () => {
+    const long = { trackTitle: 'One More Time (Daft Punk) / Swoon (Chemical Brothers)' };
+    expect(
+      cardSaid(long, 2001, {
+        title: { lines: ['One More Time (Daft', 'Punk) / Swoon…'] },
+        meta: { lines: ['2001'] },
+        tag: null,
+        note: { lines: ['Title shortened'] },
+      }),
+    ).toBe(
+      'One More Time (Daft Punk) / Swoon…, 2001, Title shortened (One More Time (Daft Punk) / Swoon (Chemical Brothers) (2001))',
+    );
+    // A line ending inside a word runs on into the next one, as drawn, then the word whole.
+    expect(
+      cardSaid({ trackTitle: 'Supercalifragilistic' }, 1964, {
+        title: { lines: ['Supercali-', 'fragilistic'], hyphenated: [true, false] },
+        meta: { lines: ['1964'] },
+        tag: null,
+      }),
+    ).toBe('Supercali-fragilistic, 1964 (Supercalifragilistic (1964))');
   });
 });
 

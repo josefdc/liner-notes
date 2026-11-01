@@ -226,8 +226,10 @@ describe('GenealogyGraph links', () => {
     expect(targets[0].getAttribute('aria-label')).toBe(
       `Bright Lines (2011) samples Older Record - Someone (1984). Sourced · cites ${MB_SOURCED}.`,
     );
-    // A role that takes a name: a path has none of its own.
-    expect(targets.map((target) => target.getAttribute('role'))).toEqual(targets.map(() => 'img'));
+    // A Tab stop's role, which takes a name: a path has none of its own, and no picture's role.
+    expect(targets.map((target) => target.getAttribute('role'))).toEqual(
+      targets.map(() => 'button'),
+    );
     // No native tooltip repeating the detail.
     expect(targets[0].querySelector('title')).toBeNull();
 
@@ -259,8 +261,15 @@ describe('GenealogyGraph links', () => {
       '-1',
       '-1',
     ]);
-    expect(items[0].getAttribute('aria-label')).toBe('Bright Lines (2011), the analyzed track');
-    expect(items[1].getAttribute('role')).toBe('button');
+    // Each named by the words its card draws, in their order, first.
+    expect(items[0].getAttribute('aria-label')).toBe(
+      'Bright Lines, 2011, This track, the analyzed track',
+    );
+    expect(items[1].getAttribute('aria-label')).toBe(
+      `Older Record - Someone, 1984, Origin: Bright Lines (2011) samples Older Record - Someone (1984). Sourced · cites ${MB_SOURCED}. Press Enter for its details.`,
+    );
+    // Every item a button: no picture-role Tab stop.
+    expect(items.map((item) => item.getAttribute('role'))).toEqual(items.map(() => 'button'));
 
     await act(async () => items[0].focus());
     await act(async () => {

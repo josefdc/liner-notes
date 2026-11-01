@@ -469,5 +469,31 @@ describe("a card's cut credit", () => {
     expect(said('dated')).toBe('Artist and year shortened');
     expect(trackOf(container, 'undated').getAttribute('data-shortened')).toBe('artist');
     expect(said('undated')).toBe('Artist shortened');
+
+    // Each card's name starts with the words it draws, in their order and with every line apart
+    // (as speech input and axe's label-in-name check compare them: the words only, what is in
+    // brackets left out), then says the track whole: the cut artist too.
+    const wordsOf = (text: string) =>
+      text
+        .replace(/\([^()]*\)/g, ' ')
+        .replace(/[^\p{L}\p{N}]+/gu, ' ')
+        .trim()
+        .toLowerCase()
+        .split(' ');
+    for (const track of drawnTracks(container)) {
+      const name = track.getAttribute('aria-label') ?? '';
+      const shown = wordsOf(track.querySelector('g.node-label')?.textContent ?? '');
+      expect(wordsOf(name).slice(0, shown.length), name).toEqual(shown);
+    }
+    for (const [id, title] of [
+      ['dated', 'Symphony No. 5'],
+      ['undated', 'Symphony No. 6'],
+    ]) {
+      const name = trackOf(container, id).getAttribute('aria-label') ?? '';
+      expect(name).toContain(`${title} by ${LONG}`);
+    }
+    expect(trackOf(container, 'undated').getAttribute('aria-label')).toContain(
+      `${LONG} (undated))`,
+    );
   });
 });

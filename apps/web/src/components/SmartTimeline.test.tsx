@@ -81,6 +81,8 @@ describe('SmartTimeline', () => {
       expect(timeline.textContent).toContain('No key moments');
       expect(within(timeline).queryAllByRole('img')).toHaveLength(0);
       expect(markersIn(timeline)).toHaveLength(0);
+      // Nothing drawn, no section either: no button at all.
+      expect(within(timeline).queryAllByRole('button')).toHaveLength(0);
       // Nothing is placed on the song's time, so no axis is drawn for it: its length is said in
       // words beside the line instead.
       expect(timeline.textContent).not.toContain('0:00');
@@ -113,6 +115,8 @@ describe('SmartTimeline', () => {
     expect(timeline.textContent).toContain('Song length unknown: 1 sample not placed');
     expect(within(timeline).queryAllByRole('img')).toHaveLength(0);
     expect(markersIn(timeline)).toHaveLength(0);
+    // Nothing drawn, no section either: no button at all.
+    expect(within(timeline).queryAllByRole('button')).toHaveLength(0);
     expect(timeline.textContent).not.toMatch(/0:00|Duration/);
   });
 

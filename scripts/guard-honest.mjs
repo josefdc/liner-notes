@@ -666,8 +666,14 @@ export const rules = [
     id: "colour-literals-web-tests",
     owner: "#38",
     description:
-      "Colour literals in web component tests (apps/web/src *.tsx tests and test helpers): hex, colour functions, named colours as a colour value and Tailwind palette shades. Take an expected colour from styles/theme.ts",
-    files: (p) => p.startsWith("apps/web/src/") && p.endsWith(".tsx") && isTestSupport(p),
+      "Colour literals in web component tests and test helpers (apps/web/src *.tsx tests, and helpers such as genealogy/testing.ts): hex, colour functions, named colours as a colour value and Tailwind palette shades. Take an expected colour from styles/theme.ts",
+    // .test.ts files are left out: their titles cite issues (#240) and links.test.ts has an rgb()
+    // contrast helper, and their colour assertions already read theme.ts.
+    files: (p) =>
+      p.startsWith("apps/web/src/") &&
+      isScript(p) &&
+      isTestSupport(p) &&
+      (p.endsWith(".tsx") || !isTest(p)),
     pattern: [...COLOUR_LITERALS, PALETTE_SHADE],
     scan: "code",
   },

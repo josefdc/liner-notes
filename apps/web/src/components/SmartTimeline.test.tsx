@@ -291,6 +291,9 @@ describe('SmartTimeline', () => {
       ['Key change (measured at 0:08 in the preview)', colors.prov.measured, 'circle'],
       ['Peak (measured at 0:12 in the preview)', colors.prov.measured, 'up'],
     ]);
+    // The expected colours come from the tokens, so the tokens must stay apart for the check
+    // above to tell an inferred marker from a measured one.
+    expect(colors.prov.inferred).not.toBe(colors.prov.measured);
     // Their words are in a text colour, not the marker's.
     for (const marker of markers) {
       expect((marker.lastElementChild as HTMLElement).className).toContain('text-text-secondary');

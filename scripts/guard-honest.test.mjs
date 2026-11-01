@@ -317,11 +317,14 @@ describe("colour-literals-web-tests", () => {
     ).toBe(0);
   });
 
-  it("scans web .tsx tests and test helpers, not shipped source, script tests or other packages", () => {
+  it("scans web .tsx tests and every web test helper, not shipped source, .test.ts files or other packages", () => {
     const { files } = rule("colour-literals-web-tests");
     expect(files("apps/web/src/components/Thing.test.tsx")).toBe(true);
     expect(files("apps/web/src/components/Thing.spec.tsx")).toBe(true);
     expect(files("apps/web/src/components/testing/Harness.tsx")).toBe(true);
+    expect(files("apps/web/src/components/testing/harness.ts")).toBe(true);
+    for (const helper of TEST_HELPERS) expect(files(helper), helper).toBe(true);
+    expect(files("apps/web/src/components/genealogy/fixtures/a.json")).toBe(false);
     expect(files("apps/web/src/components/Thing.tsx")).toBe(false);
     expect(files("apps/web/src/components/genealogy/links.test.ts")).toBe(false);
     expect(files("apps/api/src/a.test.tsx")).toBe(false);
@@ -335,6 +338,7 @@ describe("colour-literals-web-tests", () => {
       "apps/web/src/components/Thing.tsx",
       "apps/web/src/components/Thing.test.tsx",
       "apps/web/src/components/testing/Harness.tsx",
+      ...TEST_HELPERS,
     ]) {
       expect(shipped(path) && tests(path), path).toBe(false);
     }

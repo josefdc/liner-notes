@@ -126,9 +126,8 @@ const ActivityLog: React.FC<ActivityLogProps> = ({ logs, isComplete, recorded = 
       </button>
 
       {/* Collapsible content */}
-      <div
+      <section
         id="activity-log-content"
-        role="region"
         aria-label="Activity log entries"
         // Collapsed, its entries are out of sight: out of the Tab order and the reading order
         // too (the scroller would otherwise be a Tab stop that shows nothing).
@@ -222,7 +221,7 @@ const ActivityLog: React.FC<ActivityLogProps> = ({ logs, isComplete, recorded = 
             </span>
           </div>
         </div>
-      </div>
+      </section>
     </div>
   );
 };

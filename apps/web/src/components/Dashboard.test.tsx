@@ -638,8 +638,11 @@ describe('the Dashboard headings', () => {
   });
 
   it('labels the hover overlay of a connected track in a neutral hue', () => {
-    render(<TargetScanOverlay isHovered />);
+    const { container } = render(<TargetScanOverlay isHovered />);
     expect(screen.getByText('Analyze this track').className).not.toMatch(/cyber/);
+    // Inside a button: phrasing content only, and kept out of the button's name.
+    expect(container.querySelector('div')).toBeNull();
+    expect(container.firstElementChild?.getAttribute('aria-hidden')).toBe('true');
   });
 
   it('says no analysis is loaded, as its h1, when there is no result', () => {

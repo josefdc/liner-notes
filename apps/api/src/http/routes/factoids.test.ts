@@ -42,6 +42,8 @@ import {
   PINNED_DIR,
   PREVIOUS_SHOWCASES_DIR,
   previousShowcase,
+  readRecording,
+  recordingSlugs,
 } from "../../replay/testing/recordings.js";
 import factoidsRouter, { createFactoidsRouter, recordedFactoids } from "./factoids.js";
 
@@ -780,6 +782,41 @@ describe("each fact's claim", () => {
     expect(demo.body.claims).toEqual([]);
     expect(model.invoke).not.toHaveBeenCalled();
   });
+
+  it.each(recordingSlugs())(
+    "of the committed showcase %s is each card its replay serves, a card that restates left out",
+    async (slug) => {
+      vi.stubEnv("REPLAY_MODE", "only");
+      onTestFinished(() => {
+        vi.unstubAllEnvs();
+      });
+      const record = readRecording(slug);
+      const served = replayedAnalysis(record, "run-served");
+      const shown = new Set((served.claims ?? []).map((claim) => claim.id));
+      // The recorded cards whose claim the replay left out as a restatement are not served.
+      const restating = record.analysis.factoids.filter((card) => !shown.has(card.claimId ?? ""));
+      expect(served.factoids).toHaveLength(record.analysis.factoids.length - restating.length);
+      const res = await request(app())
+        .post(withRunToken("/api/factoids/more"))
+        .send({
+          trackId: record.analysis.id,
+          trackTitle: record.analysis.title,
+          trackArtist: record.analysis.artist,
+          existingFactoidIds: [],
+        })
+        .timeout(2000);
+      expect(res.status).toBe(200);
+      const ids = res.body.factoids.map((factoid: { id: string }) => factoid.id);
+      expect(ids).toEqual(served.factoids.map((factoid) => factoid.id));
+      for (const card of restating) expect(ids).not.toContain(card.id);
+      expect(res.body.claims).toEqual(
+        served.factoids.map((factoid) =>
+          served.claims?.find((claim) => claim.id === factoid.claimId),
+        ),
+      );
+      expect(model.invoke).not.toHaveBeenCalled();
+    },
+  );
 
   it("of a recording never brings back a card the replay left out as a restatement", async () => {
     vi.stubEnv("REPLAY_MODE", "only");

@@ -154,6 +154,18 @@ describe.each(Object.entries(SHOWCASES))(
   },
 );
 
+/**
+ * The model's claims of a committed showcase that state a record's relation in a wording the
+ * reader does not know, so are neither left out nor marked, by the start of their ids. One More
+ * Time's "MusicBrainz lists … as a recording sampled in …" (the golden run's words) is one: it is
+ * served as the page's sample card beside its record's row. Teaching the reader that wording
+ * changes what the golden run's own replay serves, so it waits for the golden run to be recorded
+ * again; until then the exception is named here, and any other fails.
+ */
+const UNREAD: Record<string, string[]> = {
+  "one-more-time-daft-punk": ["5f2d565f"],
+};
+
 describe.each(recordingSlugs())("the committed showcase %s, replayed", (slug) => {
   const record = readRecording(slug);
   const served = replayedAnalysis(record, `run-${slug}`);
@@ -170,6 +182,38 @@ describe.each(recordingSlugs())("the committed showcase %s, replayed", (slug) =>
       ) as Claim;
       expect(claim).toEqual(before);
     }
+  });
+
+  it("counts the claims it leaves out, and says so", () => {
+    const shown = new Set((served.claims ?? []).map((claim) => claim.id));
+    const left = (record.analysis.claims ?? []).filter((claim) => !shown.has(claim.id)).length;
+    expect(served.run?.verifier?.restated).toBe(
+      (record.analysis.run?.verifier?.restated ?? 0) + left,
+    );
+    const notice = replayNotice(record).message;
+    if (left > 0) {
+      expect(notice).toContain(`${left} repeated claim${left === 1 ? "" : "s"} left out.`);
+    } else expect(notice).not.toContain("left out");
+  });
+
+  it("lists each documented relation once, by its record, never also as a guess beside it", () => {
+    const claims = served.claims ?? [];
+    const unread: string[] = [];
+    for (const built of claims.filter((claim) => claim.origin === "code")) {
+      for (const id of relationRecords(built, served) ?? []) {
+        const others = claims.filter(
+          (claim) => claim !== built && claim.origin === "model" && claim.evidenceIds.includes(id),
+        );
+        for (const other of others) {
+          const relation = other.about === "sample" || other.about === "cover";
+          if (!relation) continue;
+          if ((UNREAD[slug] ?? []).includes(short(other.id))) unread.push(short(other.id));
+          else expect(other.documentedBy ?? [], other.text).toContain(built.id);
+        }
+      }
+    }
+    // Each exception named is still one: a reader that learns its wording must drop it here.
+    expect(unread.sort()).toEqual([...(UNREAD[slug] ?? [])].sort());
   });
 
   it("leaves nothing more out when run on what it served", () => {

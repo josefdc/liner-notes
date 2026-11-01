@@ -12,24 +12,31 @@
 //     (apps/api/src/replay/cover.ts, the rule the recorder keeps a cover by);
 //   - honest: no measured field copied from model text (the contract's analysisIssues), and no
 //     model claim or model link shown as sourced unless the judge's verdict sources it
-//     (apps/api/src/agent/verifier/index.ts verdictSources) and it cites evidence;
+//     (apps/api/src/agent/verifier/index.ts verdictSources; a link asserts a relation) and the
+//     claim cites evidence;
 //   - map: at least --min-links code-built sourced links in its song-relations map (5 by default:
 //     the fewest of the four showcases this set replaces, Bitter Sweet Symphony's);
-//   - page: no model claim about a sample or a cover would be named "Possible …" on the page: in
-//     the result as the replay serves it (agent/restatements.ts oneClaimPerFact), each is known
-//     (sourced and supported whole) or marked as stating a record's relation (documentedBy) with
-//     a supported or partial verdict, as apps/web's relationWords.ts names them. The notes spec
-//     (tests/web/notes-view.spec.ts) requires that of every showcase;
+//   - page: no claim the page shows is named "Possible …" (a possible sample, cover, remix …): the
+//     result as the replay serves it (agent/restatements.ts oneClaimPerFact), named by the web's
+//     own modules as the Player names a card's and a claim's relation (provenance/claims.ts
+//     resultClaims and withoutHiddenRelations, genealogy/links.ts shownLinks and
+//     relationLabelsByClaim, genealogy/relationWords.ts withDocumentedRelations,
+//     claimRelationKnown and claimRelationWords). A demo choice, not a rule of the product: the
+//     showcase shows no hedged relation, so the notes spec (tests/web/notes-view.spec.ts) can
+//     check each relation it states is stated once. It leaves out every row whose page hedges a
+//     model's relation the records do not mark, Gangsta's Paradise among them (README, "The
+//     showcase");
 //   - style: a MusicBrainz genre in evals/showcase-styles.json.
 // The style is that file's, never model text and never the audio service's style classifier
 // (printed beside it for reference only). Two styles are the same when their names are equal
 // lower-cased (styleKey).
 //
 // The choice (chooseShowcase): every eligible row that is already a showcase (CURRENT_SHOWCASES,
-// so the specs keep their anchors), then the eligible rows whose style is not yet chosen, the
-// most code-built sourced links first (ties by ISRC), until at least MIN_TRACKS tracks and
-// MIN_STYLES styles are chosen. When the eligible rows cannot reach both, nothing is chosen and
-// the script exits 1.
+// so the specs keep their anchors), then every eligible row whose style is not yet chosen, the
+// most code-built sourced links first (ties by ISRC), each style once. The choice must reach at
+// least MIN_TRACKS tracks and MIN_STYLES styles; when it cannot, nothing is chosen and the script
+// exits 1. A style is the MusicBrainz genre name as written, compared exactly (styleKey): "house",
+// "electro house" and "big beat" are three styles, though each is electronic music.
 //
 // No network, no model call. Needs the contract package built (lib/app.mjs).
 
@@ -121,6 +128,7 @@ export async function selectShowcase({
     importApp("apps/api/src/replay/recorder.ts"),
     importApp("apps/api/src/agent/restatements.ts"),
   ]);
+  const web = await webRelationWords();
   const golden = new Map(readGolden().rows.map((row) => [row.isrc, row]));
   const runs = JSON.parse(readFileSync(join(runsDir, "d.json"), "utf8")).filter(
     (run) => (run.repeat ?? 0) === 0,
@@ -174,28 +182,12 @@ export async function selectShowcase({
       (link) =>
         link.origin !== "code" &&
         link.kind === "sourced" &&
-        claims.get(link.claimId)?.verdict !== "supported",
+        !verifier.verdictSources(claims.get(link.claimId)?.verdict, true),
     );
     if (modelLinks.length) fails.push(`honest: ${modelLinks.length} model links shown as sourced`);
-    const served = oneClaimPerFact(analysis).result;
-    const builtSourced = new Set(
-      (served.claims ?? [])
-        .filter((claim) => claim.origin === "code" && claim.kind === "sourced")
-        .map((claim) => claim.id),
-    );
-    const possible = (served.claims ?? []).filter(
-      (claim) =>
-        claim.origin === "model" &&
-        ["sample", "cover"].includes(claim.about) &&
-        !(claim.kind === "sourced" && claim.verdict === "supported") &&
-        !(
-          ["supported", "partial"].includes(claim.verdict) &&
-          (claim.documentedBy ?? []).length > 0 &&
-          claim.documentedBy.every((id) => builtSourced.has(id))
-        ),
-    );
+    const possible = possibleRelations(unmaskedTimes(oneClaimPerFact(analysis).result), web);
     if (possible.length) {
-      fails.push(`page: ${possible.length} model claims about a relation named "Possible"`);
+      fails.push(`page: ${possible.length} claims shown with a relation named "Possible"`);
     }
     const codeSourced = links.filter((link) => link.origin === "code" && link.kind === "sourced");
     if (codeSourced.length < minLinks) {
@@ -221,27 +213,69 @@ export async function selectShowcase({
   });
 }
 
+/** When a normalised result's sources were read, masked ("[time]"), for the page's reading. */
+const READ_AT = "2026-10-31T00:00:00.000Z";
+
 /**
- * The showcase from the selected rows (see the header): the eligible current showcases, then the
- * richest maps that add a style, until `minTracks` tracks and `minStyles` styles, by slug; null
- * when the eligible rows cannot reach both.
+ * A normalised result whose evidence the page can read: the page keeps only evidence with a
+ * time it was read, and the normalisation masks that time (RESULT_MASKS). Naming a relation
+ * does not read it.
+ */
+export function unmaskedTimes(result) {
+  const evidence = (result.evidence ?? []).map((item) =>
+    item.retrievedAt === "[time]" ? { ...item, retrievedAt: READ_AT } : item,
+  );
+  return { ...result, evidence };
+}
+
+/** The web's modules that name a relation on the page (see possibleRelations). */
+export async function webRelationWords() {
+  const claims = await importApp("apps/web/src/components/provenance/claims.ts");
+  const links = await importApp("apps/web/src/components/genealogy/links.ts");
+  const words = await importApp("apps/web/src/components/genealogy/relationWords.ts");
+  return { ...claims, ...links, ...words };
+}
+
+/**
+ * The claims the page shows whose relation it names "Possible …", each with those words: the
+ * Player's naming (apps/web/src/components/Player.tsx `claimRelations`, InteractiveFactoid.tsx
+ * `factoidCategory`, ClaimList.tsx), on the result as served. `web` is webRelationWords().
+ */
+export function possibleRelations(track, web) {
+  const claims = web.resultClaims(track);
+  const genealogy = web.withoutHiddenRelations(track.genealogy, claims.isHidden);
+  const graphLinks = web.shownLinks(
+    genealogy,
+    web.linkContext(track.evidence, claims, { releaseYear: track.releaseYear }),
+  );
+  const named = web.withDocumentedRelations(web.relationLabelsByClaim(graphLinks), claims.all);
+  return claims.shown.flatMap((shown) => {
+    const known = web.claimRelationKnown(shown.kind, shown.claim);
+    const words = web.claimRelationWords(shown.claim.about, known, named.get(shown.claim.id));
+    return words?.startsWith("Possible") ? [{ id: shown.claim.id, words }] : [];
+  });
+}
+
+/**
+ * The showcase from the selected rows (see the header): the eligible current showcases, then
+ * every eligible row that adds a style, the richest maps first, by slug; null when that does not
+ * reach `minTracks` tracks and `minStyles` styles.
  */
 export function chooseShowcase(rows, { minTracks = MIN_TRACKS, minStyles = MIN_STYLES } = {}) {
   const eligible = rows.filter((row) => row.eligible);
   const current = new Set(Object.values(CURRENT_SHOWCASES));
   const chosen = eligible.filter((row) => current.has(row.isrc));
   const styles = new Set(chosen.map((row) => styleKey(row.style)));
-  const met = () => chosen.length >= minTracks && styles.size >= minStyles;
   const others = eligible
     .filter((row) => !current.has(row.isrc))
     .sort((a, b) => b.codeSourcedLinks - a.codeSourcedLinks || byString(a.isrc, b.isrc));
   for (const row of others) {
-    if (met()) break;
     if (styles.has(styleKey(row.style))) continue;
     chosen.push(row);
     styles.add(styleKey(row.style));
   }
-  return met() ? chosen.sort((a, b) => byString(a.slug, b.slug)) : null;
+  const met = chosen.length >= minTracks && styles.size >= minStyles;
+  return met ? chosen.sort((a, b) => byString(a.slug, b.slug)) : null;
 }
 
 /** Code-built sourced links in each recording of `dir` (the threshold's reference). */

@@ -63,7 +63,7 @@ test("a recording's own genre is used first, with its URL and votes", async () =
     votes: 4,
     url: recordingUrl("rec-1"),
     retrievedAt: NOW(),
-    lookups: [recordingUrl("rec-1")],
+    lookups: [{ url: recordingUrl("rec-1"), genres: [{ name: "house", count: 4 }] }],
   });
   assert.equal(asked.length, 1);
 });
@@ -85,6 +85,13 @@ test("then the earliest release's group, reading every page of releases", async 
   assert.equal(entry.style, "trip hop");
   assert.equal(entry.level, "release-group");
   assert.equal(entry.url, releaseGroupUrl("rg-early"));
+  // Every lookup, with what the rule read of it: each genre list whole, each page's size.
+  assert.deepEqual(entry.lookups, [
+    { url: recordingUrl("rec-1"), genres: [] },
+    { url: releasesUrl("rec-1", 0), releases: 1 },
+    { url: releasesUrl("rec-1", 1), releases: 1, earliestReleaseGroup: "rg-early" },
+    { url: releaseGroupUrl("rg-early"), genres: [{ name: "trip hop", count: 1 }] },
+  ]);
 });
 
 test("then the first credited artist, and a row with no genre anywhere is kept with none", async () => {
@@ -118,6 +125,7 @@ test("the client sends the User-Agent, retries a 503 once and refuses any other 
   const client = musicBrainzClient({ fetchImpl, spacing: 0, retryAfter: 0 });
   assert.deepEqual(await client.get(recordingUrl("rec-1")), { genres: [] });
   assert.equal(client.requests(), 2);
+  assert.equal(client.requestsOf(recordingUrl("rec-1")), 2);
   assert.ok(calls.every((c) => c.ua === USER_AGENT));
   await assert.rejects(client.get("https://example.org/x"), /not a MusicBrainz API URL/);
   assert.equal(client.requests(), 2);

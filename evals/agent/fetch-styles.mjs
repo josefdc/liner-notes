@@ -18,7 +18,12 @@
 //   3. else the genres of the recording's first credited artist.
 // At the first level with a genre that has at least one vote, the style is its top-voted genre
 // (ties by name), kept with the level, its vote count and the URL of the lookup that gave it. A
-// row with no genre at any level is kept with a null style and the URLs it looked up.
+// row with no genre at any level is kept with a null style. Each row keeps every lookup it made,
+// in order: its URL, how many requests it took (a retry after a 503 counts), and what the rule
+// read of it (a genre lookup's whole genre list, name and vote count, as MusicBrainz answered
+// it; a page of releases, how many it held and the earliest release group so far), so the
+// choice can be checked again from the committed file alone. The file's `requests` counts every
+// request sent, retries included.
 
 import { writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -42,6 +47,13 @@ export const releasesUrl = (mbid, offset = 0) =>
 export const releaseGroupUrl = (mbid) =>
   `${MUSICBRAINZ_API}/release-group/${mbid}?inc=genres&fmt=json`;
 export const artistUrl = (mbid) => `${MUSICBRAINZ_API}/artist/${mbid}?inc=genres&fmt=json`;
+
+/** A MusicBrainz entity's genres as the file keeps them: name and vote count, as answered. */
+export const genreList = (entity) =>
+  (entity?.genres ?? []).map((genre) => ({
+    name: genre?.name ?? null,
+    count: genre?.count ?? null,
+  }));
 
 /** The top-voted genre of a MusicBrainz entity (ties by name), or null when none has a vote. */
 export function topGenre(entity) {
@@ -80,8 +92,12 @@ export async function styleEntry(row, get, now = () => new Date().toISOString())
   const base = { isrc: row.isrc, mbid: row.mbid, title: row.title, artist: row.artist };
   const lookups = [];
   const read = async (url) => {
-    lookups.push(url);
-    return get(url);
+    const lookup = { url };
+    lookups.push(lookup);
+    const body = await get(url);
+    if (url.includes("inc=genres")) lookup.genres = genreList(body);
+    else lookup.releases = (body?.releases ?? []).length;
+    return body;
   };
   const found = (level, genre, url) => ({
     ...base,
@@ -107,6 +123,7 @@ export async function styleEntry(row, get, now = () => new Date().toISOString())
     if (offset >= MAX_RELEASES) throw new Error(`${row.isrc}: more than ${MAX_RELEASES} releases`);
   }
   const group = earliestReleaseGroup(releases);
+  lookups.at(-1).earliestReleaseGroup = group;
   if (group) {
     const url = releaseGroupUrl(group);
     const genre = topGenre(await read(url));
@@ -123,7 +140,10 @@ export async function styleEntry(row, get, now = () => new Date().toISOString())
 
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
 
-/** A paced MusicBrainz client: one request per SPACING_MS, one retry after a 503. */
+/**
+ * A paced MusicBrainz client: one request per SPACING_MS, one retry after a 503. `requests()`
+ * counts every request sent, retries included; `requestsOf(url)`, those sent for one URL.
+ */
 export function musicBrainzClient({
   fetchImpl = fetch,
   spacing = SPACING_MS,
@@ -131,11 +151,13 @@ export function musicBrainzClient({
 } = {}) {
   let last = 0;
   let requests = 0;
+  const byUrl = new Map();
   async function once(url) {
     const wait = last + spacing - Date.now();
     if (wait > 0) await sleep(wait);
     last = Date.now();
     requests++;
+    byUrl.set(url, (byUrl.get(url) ?? 0) + 1);
     return fetchImpl(url, {
       signal: AbortSignal.timeout(TIMEOUT_MS),
       headers: { accept: "application/json", "user-agent": USER_AGENT },
@@ -152,7 +174,7 @@ export function musicBrainzClient({
     if (!res.ok) throw new Error(`${url}: HTTP ${res.status}`);
     return res.json();
   }
-  return { get, requests: () => requests };
+  return { get, requests: () => requests, requestsOf: (url) => byUrl.get(url) ?? 0 };
 }
 
 const isMain =
@@ -164,6 +186,7 @@ if (isMain) {
   const rows = [];
   for (const row of liveRows(golden)) {
     const entry = await styleEntry(row, client.get);
+    for (const lookup of entry.lookups) lookup.requests = client.requestsOf(lookup.url);
     rows.push(entry);
     console.log(
       `${row.isrc} ${row.title}: ${entry.style ?? "no genre"}` +
@@ -176,11 +199,13 @@ if (isMain) {
       "MusicBrainz genre votes (https://musicbrainz.org/ws/2, inc=genres), read by evals/agent/fetch-styles.mjs",
     rule: "the top-voted genre of the gold recording, else of the release group of its earliest release, else of its first credited artist",
     golden: { sha256: golden.sha256 },
+    requests: client.requests(),
     rows,
   };
   writeFileSync(resolve(values.out), `${JSON.stringify(file, null, 2)}\n`);
   const missing = rows.filter((r) => r.style === null).map((r) => r.isrc);
+  const lookups = rows.reduce((n, r) => n + r.lookups.length, 0);
   console.log(
-    `${client.requests()} requests; ${rows.length} rows; without a genre: ${missing.length ? missing.join(", ") : "none"}`,
+    `${client.requests()} requests (${lookups} lookups, ${client.requests() - lookups} retries); ${rows.length} rows; without a genre: ${missing.length ? missing.join(", ") : "none"}`,
   );
 }

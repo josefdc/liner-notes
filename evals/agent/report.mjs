@@ -39,6 +39,7 @@ import {
   sourceErrors,
 } from "./lib/extras.mjs";
 import { RESULTS_DIR } from "./lib/record.mjs";
+import { RECORDINGS_DIR } from "./make-perturb.mjs";
 import { ABLATIONS, readRuns, scoreAll } from "./lib/score.mjs";
 import { BOOTSTRAP_RESAMPLES, BOOTSTRAP_SEED, MIN_N_FOR_RATE } from "./lib/stats.mjs";
 
@@ -615,7 +616,7 @@ function renderClassifier(extras, lines, json) {
     "",
     table(["metric", "value", "n", CI_HEADER], rows),
     "",
-    `Model-positive pool: ${pool.modelClaimsCitingEvidence} model claims of the recordings cite evidence; ${pool.passedSupportCheck} pass the support check and are the model positives, ${pool.modelClaimsCitingEvidence - pool.passedSupportCheck} are refused. The check is a conservative heuristic over English sentences, so the model positives lean towards simple sentences. The model claims come from the showcase recordings in \`fixtures/replays\` (read by \`evals/agent/make-perturb.mjs\`), which do not record which model wrote them: that the judge never judged its own model's text there cannot be shown from the committed files.`,
+    `Model-positive pool: ${pool.modelClaimsCitingEvidence} model claims of the recordings cite evidence; ${pool.passedSupportCheck} pass the support check and are the model positives, ${pool.modelClaimsCitingEvidence - pool.passedSupportCheck} are refused. The check is a conservative heuristic over English sentences, so the model positives lean towards simple sentences. The model claims come from the showcase recordings in \`${relative(REPO_ROOT, RECORDINGS_DIR)}\` (read by \`evals/agent/make-perturb.mjs\`), which do not record which model wrote them: that the judge never judged its own model's text there cannot be shown from the committed files.`,
     "",
   );
   json.classifier = {

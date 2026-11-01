@@ -248,8 +248,7 @@ describes the unmatched edges of the committed run.
 was first made from (Bitter Sweet Symphony, Hung Up, Juicy and One More Time, as served until the
 showcase was recorded from the golden run), kept byte for byte in `fixtures/pinned/9971adea845d`.
 The golden run's judge record and cassettes are of this set, so it does not follow
-`fixtures/replays`; the report's sentence that its model claims come from `fixtures/replays`
-describes that directory at the report's commit.
+`fixtures/replays`; the report names the directory `make-perturb.mjs` reads (`RECORDINGS_DIR`).
 
 ```sh
 node evals/agent/make-perturb.mjs        # rewrite it (same bytes every time)
@@ -315,8 +314,12 @@ node evals/agent/export-labels.mjs --out labels.csv --key ~/labels-key.json
 
 ## The showcase
 
-The showcase recordings (`fixtures/replays`) are runs of the golden run, chosen by
-`showcase.mjs` from the committed run records, never by hand:
+The showcase recordings (`fixtures/replays`) are runs of the golden run (its code kept at the tag
+`golden-run-2026-10-31`), chosen by `showcase.mjs` from the committed run records, never by hand.
+`showcase.test.mjs` runs the choice on the committed records and styles and fails unless it is
+the set of files in `fixtures/replays`, each recorded from its chosen run, and the list
+`apps/api/src/replay/demo-recording.test.ts` pins; that test checks that each recording holds its
+run's whole result (under the golden run's masks, `lib/record.mjs`) and measured audio block.
 
 ```sh
 node evals/agent/showcase.mjs            # the table: each row, its style, why it fails or is chosen
@@ -326,30 +329,54 @@ node evals/agent/fetch-styles.mjs        # rewrites evals/showcase-styles.json (
 - **Eligible** rows have the right identity, a measured audio block with a tempo from the
   signal, a Cover Art Archive cover (the recorder's own rule), no measured field from model
   text and no model claim or link shown as sourced without a verdict that sources it, at least
-  5 code-built sourced links in the map (the fewest of the four showcases the set replaced), no
-  model claim about a sample or cover that the page would name "Possible …" (in the result as the
-  replay serves it, each is sourced and supported whole, or marked as stating a record's relation
-  with a supported or partial verdict: the notes spec requires it of every showcase), and a
-  style.
+  5 code-built sourced links in the map (the fewest of the four showcases the set replaced), a
+  style, and a page that names no relation "Possible …".
+- **The page rule is a demo choice, not a property of the product.** The result as the replay
+  serves it is named by the web's own modules (`apps/web/src/components/provenance/claims.ts`,
+  `genealogy/links.ts`, `genealogy/relationWords.ts`, as the Player names a card's or a claim's
+  relation), and a row fails when any claim shown would read "Possible sample", "Possible cover"
+  or "Possible remix". It keeps hedged relations off the demo so the notes spec can check that
+  each relation a record documents is stated once. It excludes 13 of the 24 rows; for two it is
+  the only reason (Gangsta's Paradise, The Less I Know the Better). Gangsta's Paradise is a known
+  limitation of the restatement reader (`apps/api/src/agent/restatements.ts`): its model claim
+  "Coolio's recording draws on Stevie Wonder's 'Pastime Paradise'", partly supported, states the
+  relation its MusicBrainz record documents ("samples 'Pastime Paradise'") in words the reader's
+  templates do not hold ("draws on" names no relation), so it is neither left out nor marked and
+  would read "Possible sample" beside the record's "Sample".
 - **The style** is MusicBrainz's top-voted genre (ties by name) of the gold recording, else of
   the release group of its earliest release, else of its first credited artist, as
   `evals/showcase-styles.json` records it with the level, the vote count, the lookup's URL and
-  when it was read. It is never model text and never the audio service's style classifier
-  (which `showcase.mjs` prints for reference: it is a model estimate, and it is wrong for some
-  rows). Two styles are one when their names are equal lower-cased.
+  when it was read. Each row keeps every lookup it made with its whole genre list (name and vote
+  count) and its request count, and the file the total, retries included, so the choice can be
+  checked again offline (`showcase.test.mjs` does). It is never model text and never the audio
+  service's style classifier (which `showcase.mjs` prints for reference: it is a model estimate,
+  and it is wrong for some rows). Styles are MusicBrainz genre names compared exactly (equal
+  lower-cased): "house", "electro house", "big beat" and "electronic" are four styles, though all
+  are electronic music, so "six styles" counts MusicBrainz's genres, not families of them.
 - **The choice**: the eligible rows that were already showcases (so the specs keep their
-  anchors), then the eligible rows that add a style, the most code-built sourced links first
-  (ties by ISRC), until at least 5 tracks and 4 styles. When that cannot be reached the script
-  exits 1 and nothing is recorded. A row keeps its showcase slug, or takes its title and first
-  artist; when that slug would hold the query its run was asked and the result does not make
-  that query public (the recorder refuses a typed query anywhere in a record), the artist comes
-  first (Bitter Sweet Symphony's run was asked "Bitter Sweet Symphony The Verve" and resolved to
-  "Bitter Sweet Symphony - Remastered 2016", so it is `the-verve-bitter-sweet-symphony`).
+  anchors), then every eligible row that adds a style not chosen yet, the most code-built sourced
+  links first (ties by ISRC). It must reach at least 5 tracks and 4 styles; when it cannot, the
+  script exits 1 and nothing is recorded. On the committed records it chooses six: One More
+  Time, Bitter Sweet Symphony and Hung Up, then Praise You (big beat), Natural Blues
+  (electronic) and Gangnam Style (k-pop); Running Up That Hill is eligible, but its style (pop)
+  is Hung Up's. A row keeps its showcase slug, or takes its title and first artist; when that
+  slug would hold the query its run was asked and the result does not make that query public
+  (the recorder refuses a typed query anywhere in a record), the artist comes first (Bitter
+  Sweet Symphony's run was asked "Bitter Sweet Symphony The Verve" and resolved to "Bitter Sweet
+  Symphony - Remastered 2016", so it is `the-verve-bitter-sweet-symphony`).
 - `fetch-styles.mjs` is the only script here that reads the network: MusicBrainz's public API
   (keyless), at most one request per second, with a User-Agent naming the project and one retry
   after a 503. It is run by hand and its output committed; CI and the tests
   (`apps/api/src/replay/demo-recording.test.ts`, `showcase.test.mjs`) read the committed file and
   never fetch. The golden file is not changed: the report and its runs are hashed against it.
+- Known gaps the showcase shows as they are: One More Time's sample card ("MusicBrainz lists
+  … as a recording sampled in …") restates its record in words the reader does not hold yet, so
+  the fact shows on the card and in the notes (pinned as `UNREAD` in
+  `apps/api/src/replay/restated-showcases.test.ts`: teaching the reader those words changes what
+  the golden run's own replay serves, so it waits for the golden run to be recorded again), and
+  its album is stated by its record and by model claims in their own words. MusicBrainz's
+  relations include user-added recordings whose artists are pseudonyms (One More Time's and
+  Gangnam Style's maps), shown as MusicBrainz documents them.
 
 ## Pending
 

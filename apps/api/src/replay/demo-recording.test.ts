@@ -10,9 +10,9 @@
  * that falls short is re-recorded (npm run replay:record -w apps/api), never edited by hand.
  *
  * The showcase is the golden run's (evals/agent/runs/2026-10-31), chosen by
- * evals/agent/showcase.mjs: each recording is one of that run's analyses, with the measured audio
- * block its run record holds, and together they span at least MIN_TRACKS tracks and MIN_STYLES
- * styles. A track's style is MusicBrainz's genre as evals/showcase-styles.json records it (with
+ * evals/agent/showcase.mjs (whose own test checks that its choice is this set): each recording is
+ * one of that run's analyses, its whole result as the run's committed result holds it, and
+ * together they span at least MIN_TRACKS tracks and MIN_STYLES styles. A track's style is MusicBrainz's genre as evals/showcase-styles.json records it (with
  * the lookup's URL), never model text and never the audio service's style classifier; two styles
  * are one when their names are equal lower-cased.
  */
@@ -44,6 +44,9 @@ interface GoldenRun {
   isrc: string;
   repeat?: number;
   commit: string;
+  /** When the run started; the recording's time is when it completed. */
+  recordedAt: string;
+  latencyMs: number;
 }
 interface StyleEntry {
   isrc: string;
@@ -57,20 +60,29 @@ const readJson = <T>(path: string): T => JSON.parse(readFileSync(path, "utf8")) 
 
 /**
  * The golden run's analysis a recording was made from: the first run (row d, after the verifier)
- * whose committed result is the recording's track, with the commit it ran at; null for none.
+ * whose committed result is the recording's track, with the commit it ran at, that completed
+ * when the recording says (within 5 s of its start plus its latency); null for none. With the
+ * run's committed result (results/<isrc>.json, normalised: lib/record.mjs).
  */
-function goldenRunOf(record: ReplayRecord): { run: GoldenRun; audio: unknown } | null {
+function goldenRunOf(record: ReplayRecord): { run: GoldenRun; result: GoldenResult } | null {
   const runs = readJson<GoldenRun[]>(join(GOLDEN_RUN_DIR, "d.json"));
   for (const run of runs.filter((each) => (each.repeat ?? 0) === 0)) {
-    const result = readJson<{ id: string; audio?: unknown }>(
-      join(GOLDEN_RUN_DIR, "results", `${run.isrc}.json`),
-    );
-    if (result.id === record.analysis.id && run.commit === record.commit) {
-      return { run, audio: result.audio ?? null };
+    const result = readJson<GoldenResult>(join(GOLDEN_RUN_DIR, "results", `${run.isrc}.json`));
+    const completed = Date.parse(run.recordedAt) + run.latencyMs;
+    const when = Math.abs(Date.parse(record.recordedAt) - completed) <= 5000;
+    if (result.id === record.analysis.id && run.commit === record.commit && when) {
+      return { run, result };
     }
   }
   return null;
 }
+type GoldenResult = { id: string; audio?: unknown; queryMatch?: unknown } & Record<string, unknown>;
+
+// The golden run's own normalisation (the masks its replay compares results under).
+const goldenRecords: {
+  normalisedResult: (events: unknown[]) => Record<string, unknown> | null;
+  resultDifferences: (a: unknown, b: unknown, limit?: number) => string[];
+} = await import(new URL("../../../../evals/agent/lib/record.mjs", import.meta.url).href);
 const demo = readRecording(DEMO_SLUG);
 /** The demo's track, as scripts/replay-e2e.mjs (TRACK_ID) and the web specs open it. */
 const DEMO_TRACK_ID = "0DiWol3AO6WpXZgp0goxAV";
@@ -122,9 +134,10 @@ function uncleanRecordings(dir: string): string[] {
 }
 
 describe("every committed recording", () => {
-  it("are the golden run's five showcases, no more and no fewer: a change to the set is made here", () => {
-    // As evals/agent/showcase.mjs chooses them.
+  it("are the golden run's six showcases, no more and no fewer: a change to the set is made here", () => {
+    // As evals/agent/showcase.mjs chooses them (evals/agent/showcase.test.mjs checks it does).
     expect(SLUGS).toEqual([
+      "gangnam-style-psy",
       "hung-up-madonna",
       "natural-blues-moby",
       "one-more-time-daft-punk",
@@ -140,9 +153,28 @@ describe("every committed recording", () => {
       const record = readRecording(slug);
       const golden = goldenRunOf(record);
       // The measured block exactly as the run measured it: never edited, never re-measured.
-      expect(record.analysis.audio, slug).toEqual(golden?.audio);
+      expect(record.analysis.audio, slug).toEqual(golden?.result.audio);
       expect(record.analysis.audio?.tempo?.basis, slug).toBe("signal");
       expect(record.analysis.coverUrl, slug).toMatch(ARCHIVE_FRONT);
+    }
+  });
+
+  it("each hold the whole result their run showed: its claims, cards, map and evidence", () => {
+    for (const slug of SLUGS) {
+      const record = readRecording(slug);
+      const golden = goldenRunOf(record);
+      if (!golden) throw new Error(`${slug}: no golden run`);
+      // The recording under the golden run's masks (ids by order of first appearance, no run
+      // stamps, no preview link, no read times; the cover compared apart above). Only how the
+      // recorded run's search text matched the track differs: the recorder leaves it out, since
+      // a recording is replayed for other texts (recorder.ts). An excerpt the recorder withholds
+      // (a long token-shaped run) or an image it blanks would differ too: none of these does.
+      const recorded = goldenRecords.normalisedResult([
+        { type: "complete", data: record.analysis },
+      ]);
+      const { queryMatch, ...expected } = golden.result;
+      expect(queryMatch, slug).toBe("exact");
+      expect(goldenRecords.resultDifferences(expected, recorded), slug).toEqual([]);
     }
   });
 

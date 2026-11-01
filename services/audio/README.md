@@ -586,9 +586,9 @@ times are seconds from the start of the preview. Every block is `null` when it w
   with that rule alone lifted 1 gets a key (right) and the first rule behind it to fire on the
   other 10 is fewer than three pitch classes. Every loosening of the spectral-line rule that
   report's calibration section tries fails the written procedure, so this stays a limit. None
-  of the five showcase recordings (`fixtures/replays/*.json`, recorded from the golden run at
-  analyzer 2.3.6) gets a measured key: Hung Up, Natural Blues and Bitter Sweet Symphony withhold
-  it as `no_sustained_pitch`, Praise You as `one_harmonic_series`, One More Time as
+  of the six showcase recordings (`fixtures/replays/*.json`, recorded from the golden run at
+  analyzer 2.3.6) gets a measured key: Hung Up, Natural Blues, Bitter Sweet Symphony and Gangnam
+  Style withhold it as `no_sustained_pitch`, Praise You as `one_harmonic_series`, One More Time as
   `speech_like`. The recordings keep only those codes and their reasons, not
   the measurements behind them. Without a beat, a pitch track of the harmonic part also
   decides: no key for one

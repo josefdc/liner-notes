@@ -770,7 +770,14 @@ const App: React.FC = () => {
       // The full-size map takes the window down to its bottom edge.
       footer={link !== null || phase !== AppPhase.MAP}
     >
-      <div id="main-content" className="flex-1 min-h-0 w-full flex flex-col">
+      {/* The page's one main landmark, around whichever screen is shown: the skip link's
+          target, so it takes the focus (tabIndex -1, out of the Tab order) without an outline,
+          as the screens' headings do; forced-colors mode draws one, inside its edges. */}
+      <main
+        id="main-content"
+        tabIndex={-1}
+        className="flex-1 min-h-0 w-full flex flex-col focus-visible:outline-hidden forced-colors:focus-visible:-outline-offset-2"
+      >
         {/* The tracks explored in this chain, above the result's view */}
         {shownTrailOf && (
           <ExploredTrail
@@ -793,6 +800,7 @@ const App: React.FC = () => {
           message="This screen could not be shown"
           action={{ label: 'New search', onClick: handleNewSearch }}
           loadFailedMessage="This screen could not be loaded"
+          isScreen
           onRetried={handleScreenRetried}
           className="flex-1 min-h-0 w-full bg-void"
         >
@@ -808,7 +816,7 @@ const App: React.FC = () => {
             {renderScreen()}
           </Suspense>
         </ErrorBoundary>
-      </div>
+      </main>
     </Layout>
   );
 };

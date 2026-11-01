@@ -41,6 +41,11 @@ interface ErrorBoundaryProps {
    * not kept at its address).
    */
   offersReload?: boolean;
+  /**
+   * Whether the fallback says what failed as the page's h1 (false by default): true for a whole
+   * screen's boundary, whose screen would have had the h1. A part's fallback says it in words.
+   */
+  isScreen?: boolean;
   children: ReactNode;
 }
 
@@ -143,6 +148,12 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     this.setState({ failed: false, chunk: false, attempt: {} });
   };
 
+  /** What failed, the fallback's first line: a screen's h1, else a paragraph. */
+  private headline(text: string) {
+    const Tag = this.props.isScreen ? 'h1' : 'p';
+    return <Tag className="text-sm text-text-primary">{text}.</Tag>;
+  }
+
   render() {
     if (!this.state.failed) {
       return (
@@ -157,7 +168,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
           role="alert"
           className={`flex flex-col items-center justify-center gap-3 p-6 text-center ${this.props.className ?? ''}`}
         >
-          <p className="text-sm text-text-primary">{this.loadFailedMessage}.</p>
+          {this.headline(this.loadFailedMessage)}
           <p className="text-xs text-text-secondary">
             The connection may have dropped, or the site was updated since this page was opened.
           </p>
@@ -184,7 +195,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
         role="alert"
         className={`flex flex-col items-center justify-center gap-3 p-6 text-center ${this.props.className ?? ''}`}
       >
-        <p className="text-sm text-text-primary">{this.props.message}.</p>
+        {this.headline(this.props.message)}
         <Button ref={this.actionRef} variant="neutral" size="sm" onClick={this.retry}>
           {this.props.action.label}
         </Button>

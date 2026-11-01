@@ -25,4 +25,17 @@ describe('the screen error boundary', () => {
     expect(screen.getByRole('alert').textContent).toContain('This screen could not be shown');
     expect(screen.getByRole('button', { name: /new search/i })).toBeTruthy();
   });
+
+  it("says it as the page's one h1, inside the main landmark", () => {
+    render(<App />);
+    const main = screen.getByRole('main');
+    expect(main.id).toBe('main-content');
+    expect(main.tabIndex).toBe(-1);
+    expect(screen.getAllByRole('main')).toHaveLength(1);
+    const headings = screen.getAllByRole('heading', { level: 1 });
+    expect(headings.map((heading) => heading.textContent)).toEqual([
+      'This screen could not be shown.',
+    ]);
+    expect(main.contains(headings[0])).toBe(true);
+  });
 });

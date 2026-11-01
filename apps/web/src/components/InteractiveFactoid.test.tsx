@@ -189,7 +189,7 @@ describe('InteractiveFactoid with its claim', () => {
     (about, badge) => {
       // A relation is stated whole: a source that supports only part of it does not confirm it.
       // The claim as the Player shows it, read from a result stored before the API wrote such a
-      // claim as inferred (#191): still marked sourced.
+      // claim as inferred (issue 191): still marked sourced.
       const partial = resultClaims({
         evidence: [cited()],
         claims: [

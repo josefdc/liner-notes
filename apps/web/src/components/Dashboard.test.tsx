@@ -6,6 +6,7 @@ import TargetScanOverlay from './TargetScanOverlay';
 import { claim, link, node, PACK } from './genealogy/testing';
 import { setReaderImport } from './genealogy/useLinkReader';
 import { PLACEHOLDER_NOTE } from '../styles/placeholder';
+import { colors } from '../styles/theme';
 
 afterEach(cleanup);
 
@@ -30,7 +31,7 @@ const missingTrack = {
   valence: null,
   danceability: null,
   acousticness: null,
-  segments: [{ label: 'Main', start: 0, end: 100, color: '#1F2937' }],
+  segments: [{ label: 'Main', start: 0, end: 100, color: colors.gray[800] }],
   segmentsSource: 'template',
   samples: [],
   factoids: [],

@@ -1,5 +1,6 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
+import { colors } from '../styles/theme';
 import type { TrackData } from '../types';
 import Dashboard from './Dashboard';
 import Player from './Player';
@@ -17,7 +18,7 @@ const complete = (): Record<string, unknown> => ({
   key: 'C Major',
   energy: 0.5,
   durationSeconds: 200,
-  segments: [{ label: 'Main', start: 0, end: 100, color: '#1F2937' }],
+  segments: [{ label: 'Main', start: 0, end: 100, color: colors.gray[800] }],
   segmentsSource: 'inferred',
   samples: [{ time: 30, description: 'A sample' }],
   keyMoments: [{ time: 5, type: 'onset', intensity: 0.5, description: 'Onset' }],

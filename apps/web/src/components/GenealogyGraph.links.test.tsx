@@ -226,6 +226,8 @@ describe('GenealogyGraph links', () => {
     expect(targets[0].getAttribute('aria-label')).toBe(
       `Bright Lines (2011) samples Older Record - Someone (1984). Sourced · cites ${MB_SOURCED}.`,
     );
+    // A role that takes a name: a path has none of its own.
+    expect(targets.map((target) => target.getAttribute('role'))).toEqual(targets.map(() => 'img'));
     // No native tooltip repeating the detail.
     expect(targets[0].querySelector('title')).toBeNull();
 

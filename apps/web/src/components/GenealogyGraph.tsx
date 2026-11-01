@@ -278,6 +278,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
   wheelZoom = 'plain',
   trackPreviewUrl = null,
   replay = false,
+  detailHeadingLevel = 3,
 }) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -1087,6 +1088,8 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
 
     // A wider, invisible line over each link: pointing at it or focusing it shows the link's
     // relation and where it comes from; focused, it shows a band of its own as a focus ring.
+    // A picture's role, as the analysed track's card has: a path has none of its own, and
+    // without one its name is not exposed.
     const linkTarget = g
       .append('g')
       .attr('class', 'link-targets')
@@ -1104,6 +1107,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       .call(withoutOutline)
       .attr('tabindex', -1)
       .attr('data-mid', (d) => `${d.route.mid.x},${d.route.mid.y}`)
+      .attr('role', 'img')
       .attr('aria-label', (d) => describeLink(d.shown, nameOf));
 
     // The chips' leaders, under the cards: a leader never runs over a card's words.
@@ -2184,6 +2188,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       onStopListening={ab.stop}
       onAnalyse={() => analyseRef.current(selectedNode)}
       onClose={closeSelection}
+      headingLevel={detailHeadingLevel}
     />
   );
   // Every link hidden by the filters: what is hidden, and a way back.

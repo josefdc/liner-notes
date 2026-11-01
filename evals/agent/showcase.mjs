@@ -32,10 +32,10 @@
 // lower-cased (styleKey).
 //
 // The choice (chooseShowcase): every eligible row that is already a showcase (CURRENT_SHOWCASES,
-// so the specs keep their anchors), then every eligible row whose style is not yet chosen, the
-// most code-built sourced links first (ties by ISRC), each style once. The choice must reach at
-// least MIN_TRACKS tracks and MIN_STYLES styles; when it cannot, nothing is chosen and the script
-// exits 1. A style is the MusicBrainz genre name as written, compared exactly (styleKey): "house",
+// so the specs keep their anchors), then the eligible rows whose style is not yet chosen, the
+// most code-built sourced links first (ties by ISRC), until at least MIN_TRACKS tracks and
+// MIN_STYLES styles are chosen. When the eligible rows cannot reach both, nothing is chosen and
+// the script exits 1. A style is the MusicBrainz genre name as written, compared exactly (styleKey): "house",
 // "electro house" and "big beat" are three styles, though each is electronic music.
 //
 // No network, no model call. Needs the contract package built (lib/app.mjs).
@@ -257,9 +257,9 @@ export function possibleRelations(track, web) {
 }
 
 /**
- * The showcase from the selected rows (see the header): the eligible current showcases, then
- * every eligible row that adds a style, the richest maps first, by slug; null when that does not
- * reach `minTracks` tracks and `minStyles` styles.
+ * The showcase from the selected rows (see the header): the eligible current showcases, then the
+ * richest maps that add a style, until `minTracks` tracks and `minStyles` styles, by slug; null
+ * when the eligible rows cannot reach both.
  */
 export function chooseShowcase(rows, { minTracks = MIN_TRACKS, minStyles = MIN_STYLES } = {}) {
   const eligible = rows.filter((row) => row.eligible);
@@ -269,13 +269,14 @@ export function chooseShowcase(rows, { minTracks = MIN_TRACKS, minStyles = MIN_S
   const others = eligible
     .filter((row) => !current.has(row.isrc))
     .sort((a, b) => b.codeSourcedLinks - a.codeSourcedLinks || byString(a.isrc, b.isrc));
+  const met = () => chosen.length >= minTracks && styles.size >= minStyles;
   for (const row of others) {
+    if (met()) break;
     if (styles.has(styleKey(row.style))) continue;
     chosen.push(row);
     styles.add(styleKey(row.style));
   }
-  const met = chosen.length >= minTracks && styles.size >= minStyles;
-  return met ? chosen.sort((a, b) => byString(a.slug, b.slug)) : null;
+  return met() ? chosen.sort((a, b) => byString(a.slug, b.slug)) : null;
 }
 
 /** Code-built sourced links in each recording of `dir` (the threshold's reference). */

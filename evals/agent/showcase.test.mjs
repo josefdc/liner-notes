@@ -31,7 +31,7 @@ test("styles are one when equal lower-cased, and no closer", () => {
   assert.notEqual(styleKey("house"), styleKey("electro house"));
 });
 
-test("the eligible current showcases come first, then every row that adds a style", () => {
+test("the eligible current showcases come first, then the richest maps that add a style", () => {
   const rows = [
     row(omt, "house", 9),
     row(bss, "alternative rock", 5),
@@ -44,11 +44,8 @@ test("the eligible current showcases come first, then every row that adds a styl
     row("AAAAA0000005", "k-pop", 7),
   ];
   const chosen = chooseShowcase(rows).map((r) => r.isrc);
-  // Past the bar too: each style once, the richest map of each.
-  assert.deepEqual(
-    chosen.sort(),
-    [omt, bss, hung, "AAAAA0000002", "AAAAA0000003", "AAAAA0000004", "AAAAA0000005"].sort(),
-  );
+  // Up to the bar (5 tracks, 4 styles) and no further: big beat and k-pop are left out.
+  assert.deepEqual(chosen.sort(), [omt, bss, hung, "AAAAA0000002", "AAAAA0000003"].sort());
 });
 
 test("of two maps as rich with one style, the first ISRC's; nothing when the bar cannot be met", () => {
@@ -138,8 +135,17 @@ test("a slug that would hold a query the result does not make public puts the ar
 // The committed showcase is the rule's own choice on the committed run and styles: a change to
 // either (a style, a threshold, a run record) that would choose another set fails here.
 test("the committed showcase recordings are the ones the rule chooses from the committed run", async () => {
-  const chosen = chooseShowcase(await selectShowcase());
+  const rows = await selectShowcase();
+  const chosen = chooseShowcase(rows);
   assert.ok(chosen, "the rule chooses no showcase");
+  // The rows the page rule alone leaves out, as the README names them.
+  assert.deepEqual(
+    rows
+      .filter((r) => r.fails.length === 1 && r.fails[0].startsWith("page:"))
+      .map((r) => r.title)
+      .sort(),
+    ["Gangsta's Paradise", "The Less I Know the Better"],
+  );
   const dir = join(REPO_ROOT, "fixtures/replays");
   const files = readdirSync(dir)
     .filter((name) => name.endsWith(".json"))

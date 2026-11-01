@@ -308,11 +308,6 @@ test("the demo's notes as served now: sections in order, each relation by its re
 // "Possible"; every other fact is still listed once.
 type Fact = RegExp | { fact: RegExp; alsoIn: RegExp };
 const DOCUMENTED: Record<string, { facts: Fact[]; cards: RegExp[] }> = {
-  "gangnam-style-psy": {
-    facts: [/Afrojack remix/, /Diplo remix/, /GAMEnam Style/, /Ey Sexy Lady/],
-    // The model's connection card names two of the remixes: inferred and partly supported, shown so.
-    cards: [/^CONNECTION: .*remix lineage.*Partly supported/i],
-  },
   "hung-up-madonna": {
     facts: [
       /ABBA/,

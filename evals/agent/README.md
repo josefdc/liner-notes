@@ -336,8 +336,9 @@ node evals/agent/fetch-styles.mjs        # rewrites evals/showcase-styles.json (
   `genealogy/links.ts`, `genealogy/relationWords.ts`, as the Player names a card's or a claim's
   relation), and a row fails when any claim shown would read "Possible sample", "Possible cover"
   or "Possible remix". It keeps hedged relations off the demo so the notes spec can check that
-  each relation a record documents is stated once. It excludes 13 of the 24 rows; for two it is
-  the only reason (Gangsta's Paradise, The Less I Know the Better). Gangsta's Paradise is a known
+  each relation a record documents is stated once. How many rows it excludes is in the table
+  `showcase.mjs` prints; for two it is the only reason, Gangsta's Paradise and The Less I Know the
+  Better (`showcase.test.mjs` checks that). Gangsta's Paradise is a known
   limitation of the restatement reader (`apps/api/src/agent/restatements.ts`): its model claim
   "Coolio's recording draws on Stevie Wonder's 'Pastime Paradise'", partly supported, states the
   relation its MusicBrainz record documents ("samples 'Pastime Paradise'") in words the reader's
@@ -352,14 +353,13 @@ node evals/agent/fetch-styles.mjs        # rewrites evals/showcase-styles.json (
   service's style classifier (which `showcase.mjs` prints for reference: it is a model estimate,
   and it is wrong for some rows). Styles are MusicBrainz genre names compared exactly (equal
   lower-cased): "house", "electro house", "big beat" and "electronic" are four styles, though all
-  are electronic music, so "six styles" counts MusicBrainz's genres, not families of them.
+  are electronic music, so the showcase's styles count MusicBrainz's genres, not families of them.
 - **The choice**: the eligible rows that were already showcases (so the specs keep their
-  anchors), then every eligible row that adds a style not chosen yet, the most code-built sourced
-  links first (ties by ISRC). It must reach at least 5 tracks and 4 styles; when it cannot, the
-  script exits 1 and nothing is recorded. On the committed records it chooses six: One More
-  Time, Bitter Sweet Symphony and Hung Up, then Praise You (big beat), Natural Blues
-  (electronic) and Gangnam Style (k-pop); Running Up That Hill is eligible, but its style (pop)
-  is Hung Up's. A row keeps its showcase slug, or takes its title and first artist; when that
+  anchors), then the eligible rows that add a style not chosen yet, the most code-built sourced
+  links first (ties by ISRC), until at least 5 tracks and 4 styles. When that cannot be reached
+  the script exits 1 and nothing is recorded. What it chooses on the committed records is the
+  last lines `showcase.mjs` prints, and the files in `fixtures/replays` (`showcase.test.mjs`
+  fails when they differ). A row keeps its showcase slug, or takes its title and first artist; when that
   slug would hold the query its run was asked and the result does not make that query public
   (the recorder refuses a typed query anywhere in a record), the artist comes first (Bitter
   Sweet Symphony's run was asked "Bitter Sweet Symphony The Verve" and resolved to "Bitter Sweet
@@ -375,8 +375,11 @@ node evals/agent/fetch-styles.mjs        # rewrites evals/showcase-styles.json (
   `apps/api/src/replay/restated-showcases.test.ts`: teaching the reader those words changes what
   the golden run's own replay serves, so it waits for the golden run to be recorded again), and
   its album is stated by its record and by model claims in their own words. MusicBrainz's
-  relations include user-added recordings whose artists are pseudonyms (One More Time's and
-  Gangnam Style's maps), shown as MusicBrainz documents them.
+  relations include user-added recordings, and a map draws each as a documented relation: One
+  More Time's names artists by pseudonyms, and the golden run's Gangnam Style result (not in the
+  showcase) draws a 2025 keyword-stuffed listing (recording
+  a72d108d-7d1d-43ca-be60-b8aec81bc303) as a documented sample. The app shows them as
+  MusicBrainz documents them; it does not judge whether a user-added recording is a real one.
 
 ## Pending
 

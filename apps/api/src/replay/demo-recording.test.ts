@@ -134,10 +134,9 @@ function uncleanRecordings(dir: string): string[] {
 }
 
 describe("every committed recording", () => {
-  it("are the golden run's six showcases, no more and no fewer: a change to the set is made here", () => {
+  it("are the golden run's five showcases, no more and no fewer: a change to the set is made here", () => {
     // As evals/agent/showcase.mjs chooses them (evals/agent/showcase.test.mjs checks it does).
     expect(SLUGS).toEqual([
-      "gangnam-style-psy",
       "hung-up-madonna",
       "natural-blues-moby",
       "one-more-time-daft-punk",

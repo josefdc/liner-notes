@@ -1,7 +1,8 @@
 # Changelog
 
-All notable changes to Liner Notes are recorded here. The format follows
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
+All notable changes to Liner Notes are recorded here. The format is based on
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), with entries grouped by area rather
+than by type of change, and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
@@ -16,7 +17,8 @@ inferred, or as missing with its reason.
   missing, with its reason (#46, #47).
 - An honesty guard counts placeholder and prototype patterns in CI, and the counts only go down
   (#42, #109).
-- Spotify is a search and metadata source only: its previews are never analysed.
+- Spotify's audio is never analysed: Spotify gives search, track metadata and album covers, and
+  related tracks' clips that the song-relations map only plays.
 
 ### Agent and API
 
@@ -87,8 +89,9 @@ inferred, or as missing with its reason.
 
 - One production compose file behind Caddy, with a content security policy and Cloudflare-only
   client addresses (#200).
-- A two-stage audio image without ffmpeg or wget, image size budgets, and a runbook with backup
-  and restore scripts (#169, #212, #267).
+- A two-stage audio image without the ffmpeg binary or wget (the FFmpeg libraries Essentia links
+  in remain), image size budgets, and a runbook with backup and restore scripts (#169, #212,
+  #267).
 
 ### Tooling and CI
 

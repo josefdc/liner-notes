@@ -16,6 +16,9 @@ test("the committed golden run's pages: counts by kind", () => {
   const rows = byLabel(countKinds(results));
   assert.deepEqual(rows.Claims.counts, { measured: 0, sourced: 232, inferred: 44, missing: 0 });
   assert.deepEqual(rows.Claims.origins, { code: 164, model: 68 });
+  // Contradicted claims are inferred, and shown only in the rejected panel; one is a link's.
+  assert.equal(rows.Claims.rejected, 3);
+  assert.equal(rows["Song-relation links"].hidden, 1);
   assert.deepEqual(rows["Song-relation links"].counts, {
     measured: 0,
     sourced: 86,
@@ -70,6 +73,22 @@ test("the audio values come from the v2 block, not the flat audioSource field", 
   assert.deepEqual(rows.Claims.counts, { measured: 0, sourced: 1, inferred: 1, missing: 0 });
   assert.equal(rows["Song-relation links"].n, 1);
   assert.throws(() => countKinds([{ result: { claims: [{ kind: "guessed" }] } }]), /guessed/);
+  // A loudness of zero has no dBFS value: missing, as the web app shows it.
+  const silent = {
+    claims: [],
+    genealogy: { links: [] },
+    audio: { tempo: null, key: null, loudness: { rmsMean: 0 }, withheld: {} },
+  };
+  assert.deepEqual(byLabel(countKinds([{ result: silent }])).Loudness.reasons, { zero_level: 1 });
+  // A contradicted claim counts as rejected, and its link as hidden.
+  const contradicted = {
+    claims: [{ id: "c1", kind: "inferred", origin: "model", verdict: "contradicted" }],
+    genealogy: { links: [{ kind: "inferred", claimId: "c1" }] },
+    audio: null,
+  };
+  const counted = byLabel(countKinds([{ result: contradicted }]));
+  assert.equal(counted.Claims.rejected, 1);
+  assert.equal(counted["Song-relation links"].hidden, 1);
 });
 
 test("shares carry a Wilson interval from n = 10, counts only below", () => {

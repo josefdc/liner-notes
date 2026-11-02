@@ -1,12 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="800" height="356" viewBox="0 0 800 356" role="img" aria-labelledby="title desc" font-family="Inter, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
-<title id="title">What the pages show, by kind: golden run 2026-10-31</title>
+<title id="title">What the results hold, by kind: golden run 2026-10-31</title>
 <desc id="desc">Claims (276 claims): 232 sourced, 44 inferred; Song-relation links (102 links): 86 sourced, 16 inferred; Tempo (24 tracks): 22 measured, 2 missing; Key (24 tracks): 24 missing; Loudness (24 tracks): 23 measured, 1 missing.</desc>
 <defs>
 <pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="#8c8c8c"/><line x1="0" y1="0" x2="0" y2="6" stroke="#121212" stroke-width="2"/></pattern>
 </defs>
 <rect width="800" height="356" rx="8" fill="#121212"/>
-<text x="20" y="32" fill="#f2f2f2" font-size="16" font-weight="600">What the pages show, by kind</text>
-<text x="20" y="52" fill="#b3b3b3" font-size="12">Golden run 2026-10-31, the 24 live-subset tracks of evals/golden.jsonl, as each page shows them (row d)</text>
+<text x="20" y="32" fill="#f2f2f2" font-size="16" font-weight="600">What the results hold, by kind</text>
+<text x="20" y="52" fill="#b3b3b3" font-size="12">Golden run 2026-10-31, the 24 live-subset tracks of evals/golden.jsonl, as each result records them (row d)</text>
 <rect x="20" y="66" width="12" height="12" rx="2" fill="#00f0ff"/>
 <text x="38" y="76" fill="#d9d9d9" font-size="12">measured</text>
 <rect x="116" y="66" width="12" height="12" rx="2" fill="#ffb000"/>

@@ -1,8 +1,10 @@
-// What the pages of a golden run show, by kind: how many of their claims and song-relation links
-// are sourced or inferred, and how many of their tracks have a measured tempo, key and loudness
-// or have none (missing, with the reason). Read from the committed normalised results of the
-// run (evals/agent/runs/<date>/results/<isrc>.json: row d, the result each page shows, first
-// run), so it needs no network and no model.
+// What the results of a golden run hold, by kind: how many of their claims and song-relation
+// links are sourced or inferred, and how many of their tracks have a measured tempo, key and
+// loudness or have none (missing, with the reason). Read from the committed normalised results
+// of the run (evals/agent/runs/<date>/results/<isrc>.json: row d, the result a page is drawn
+// from, first run), so it needs no network and no model. A claim the verifier found
+// contradicted is counted with its kind (inferred) and also apart: the page shows it only in the
+// rejected panel, and does not draw a link whose claim it is.
 //
 //   node evals/agent/kinds.mjs              writes evals/reports/agent-kinds.md and
 //                                           docs/images/agent-kinds.svg
@@ -13,7 +15,8 @@
 // the block has it, and missing otherwise, with the block's reason for withholding it
 // (`audio.withheld`), or the result's reason for having no block (`audioUnavailableReason`).
 // The flat `audioSource` field is not used: it reads "unavailable" whenever no key is measured,
-// even beside a measured tempo. The style and mood scores (classifier outputs, which the app
+// even beside a measured tempo. A loudness of zero (`rmsMean` 0) counts as missing, as the web
+// app shows it (it has no dBFS value). The style and mood scores (classifier outputs, which the app
 // shows as inferred) are not counted.
 //
 // The claims are those the result keeps (one per fact, after the verifier), each with its kind;
@@ -23,7 +26,8 @@
 
 import { createHash } from "node:crypto";
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join, relative } from "node:path";
+import { join, relative, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
 import { REPO_ROOT } from "./lib/golden.mjs";
@@ -65,8 +69,8 @@ const empty = () => Object.fromEntries(KINDS.map((kind) => [kind, 0]));
  * who wrote them (code-built from a record, or a model claim the judge found supported).
  */
 export function countKinds(results) {
-  const claims = { label: "Claims", unit: "claims", counts: empty(), origins: {} };
-  const links = { label: "Song-relation links", unit: "links", counts: empty() };
+  const claims = { label: "Claims", unit: "claims", counts: empty(), origins: {}, rejected: 0 };
+  const links = { label: "Song-relation links", unit: "links", counts: empty(), hidden: 0 };
   const audio = AUDIO_FIELDS.map(([field, label]) => ({
     field,
     label,
@@ -75,9 +79,14 @@ export function countKinds(results) {
     reasons: {},
   }));
   for (const { result } of results) {
+    const rejected = new Set();
     for (const claim of result.claims ?? []) {
       if (!(claim.kind in claims.counts)) throw new Error(`a claim of kind ${claim.kind}`);
       claims.counts[claim.kind]++;
+      if (claim.verdict === "contradicted" || claim.numericCheck === "contradicted") {
+        claims.rejected++;
+        rejected.add(claim.id);
+      }
       if (claim.kind === "sourced") {
         claims.origins[claim.origin] = (claims.origins[claim.origin] ?? 0) + 1;
       }
@@ -85,17 +94,22 @@ export function countKinds(results) {
     for (const link of result.genealogy?.links ?? []) {
       if (!(link.kind in links.counts)) throw new Error(`a link of kind ${link.kind}`);
       links.counts[link.kind]++;
+      if (link.claimId && rejected.has(link.claimId)) links.hidden++;
     }
     for (const row of audio) {
       const block = result.audio;
-      if (block?.[row.field] != null) {
+      const value = block?.[row.field];
+      const zeroLevel = row.field === "loudness" && value != null && !(value.rmsMean > 0);
+      if (value != null && !zeroLevel) {
         row.counts.measured++;
         continue;
       }
       row.counts.missing++;
-      const reason = block
-        ? (block.withheld?.[row.field]?.code ?? "not given")
-        : (result.audioUnavailableReason ?? "not given");
+      const reason = zeroLevel
+        ? "zero_level"
+        : block
+          ? (block.withheld?.[row.field]?.code ?? "not given")
+          : (result.audioUnavailableReason ?? "not given");
       row.reasons[reason] = (row.reasons[reason] ?? 0) + 1;
     }
   }
@@ -130,10 +144,10 @@ export function renderReport(rows, { runs, sha256, count, date, commit }) {
     return never ? "never" : share(row.counts[kind], row.n);
   };
   const lines = [
-    `# What the pages show, by kind (golden run ${date})`,
+    `# What the results hold, by kind (golden run ${date})`,
     "",
     `- **Dataset**: the live subset of \`evals/golden.jsonl\` (24 of its 45 rows), as the golden run analysed it.`,
-    `- **Run records**: \`${runsPath}/results\`, ${count} normalised results (row d, the result each page shows, first run); sha256 of the files in name order \`${sha256}\`.`,
+    `- **Run records**: \`${runsPath}/results\`, ${count} normalised results (row d, the result a page is drawn from, first run); sha256 of the files in name order \`${sha256}\`.`,
     `- **Date**: ${date}`,
     `- **Commit**: \`${commit}\`, the commit the run was recorded at, kept by the tag \`${RUN_TAG}\` (it is not in main's history; \`evals/reports/agent-2026-10-31.md\` says why).`,
     "- **Written by**: `node evals/agent/kinds.mjs`, with no network and no model call; `evals/agent/kinds.test.mjs` pins these counts to the committed records.",
@@ -143,7 +157,7 @@ export function renderReport(rows, { runs, sha256, count, date, commit }) {
     "",
     "- **Measured**: a value the audio service measured from the track's 30 s Deezer preview. Only tempo, key and loudness are counted; the style and mood scores (classifier outputs, which the app shows as inferred) are not.",
     "- **Sourced**: a claim or link backed by what it cites: built by code from a primary record, or written by the model and support-checked against the cited excerpt by the verifier's judge (`supported`; or `partial` for a claim that asserts no relation).",
-    "- **Inferred**: a claim or link the verifier did not source. It is shown, labelled as model inference.",
+    "- **Inferred**: a claim or link the verifier did not source. It is shown labelled as model inference, unless the verifier found its claim contradicted (below).",
     "- **Missing**: a value the page shows as missing, with its reason: withheld by the audio service's checks, or not measured because there was no preview.",
     "- **never**: a kind the row cannot have. A claim or link is never measured; an audio value is never sourced or inferred.",
     "",
@@ -158,14 +172,17 @@ export function renderReport(rows, { runs, sha256, count, date, commit }) {
     "",
   ];
   const claims = rows.find((row) => row.unit === "claims");
+  const links = rows.find((row) => row.unit === "links");
   lines.push(
     `Sourced claims by origin: ${Object.entries(claims.origins)
       .sort((a, b) => (a[0] < b[0] ? -1 : 1))
       .map(
         ([origin, count]) =>
-          `${origin === "code" ? "built by code from a record" : origin === "model" ? "written by the model and supported by its excerpt" : origin} ${count}`,
+          `${origin === "code" ? "built by code from a record" : origin === "model" ? "written by the model and support-checked against its excerpt" : origin} ${count}`,
       )
       .join(", ")}.`,
+    "",
+    `Contradicted: ${claims.rejected} of the ${claims.counts.inferred} inferred claims were found contradicted (by the judge or the numeric check). The page shows them only in its rejected panel, and does not draw the ${links.hidden} link(s) whose claim is one of them, so the map shows ${links.n - links.hidden} links.`,
     "",
     "Why each missing audio value is missing (the audio block's `withheld` code, or the result's reason for having no block):",
     "",
@@ -178,7 +195,7 @@ export function renderReport(rows, { runs, sha256, count, date, commit }) {
     "",
     `No key is served on this set: the key is measured on ${key.counts.measured} of ${key.n} tracks. On GiantSteps+ Key the service withholds the key of 202 of 250 clips (\`evals/reports/audio-2026-10-29.md\`), so a missing key is the usual outcome, not a fault of this run.`,
     "",
-    "The chart `docs/images/agent-kinds.svg` draws the table above.",
+    "The chart `docs/images/agent-kinds.svg` draws the counts table.",
     "",
   );
   return lines.join("\n");
@@ -209,7 +226,7 @@ export function renderChart(rows, { date }) {
   const height = top + rows.length * rowHeight + 34;
   const parts = [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-labelledby="title desc" font-family="Inter, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">`,
-    `<title id="title">What the pages show, by kind: golden run ${xmlText(date)}</title>`,
+    `<title id="title">What the results hold, by kind: golden run ${xmlText(date)}</title>`,
     `<desc id="desc">${xmlText(
       rows
         .map(
@@ -224,8 +241,8 @@ export function renderChart(rows, { date }) {
     `<pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="${colours.missing}"/><line x1="0" y1="0" x2="0" y2="6" stroke="#121212" stroke-width="2"/></pattern>`,
     "</defs>",
     `<rect width="${width}" height="${height}" rx="8" fill="#121212"/>`,
-    `<text x="20" y="32" fill="#f2f2f2" font-size="16" font-weight="600">What the pages show, by kind</text>`,
-    `<text x="20" y="52" fill="#b3b3b3" font-size="12">Golden run ${xmlText(date)}, the 24 live-subset tracks of evals/golden.jsonl, as each page shows them (row d)</text>`,
+    `<text x="20" y="32" fill="#f2f2f2" font-size="16" font-weight="600">What the results hold, by kind</text>`,
+    `<text x="20" y="52" fill="#b3b3b3" font-size="12">Golden run ${xmlText(date)}, the 24 live-subset tracks of evals/golden.jsonl, as each result records them (row d)</text>`,
   ];
   // The legend, in kind order.
   let x = 20;
@@ -318,4 +335,6 @@ function main() {
   return 0;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) process.exitCode = main();
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  process.exitCode = main();
+}

@@ -307,8 +307,10 @@ flowchart LR
   engineer -.-> deezer["Deezer<br/>preview clip"]
   engineer -.-> audio["Audio service<br/>FastAPI, Essentia"]
   historian -.-> records["MusicBrainz, Discogs, SecondHandSongs,<br/>Genius, ListenBrainz, Last.fm, Tavily"]
-  composer -.-> llm["Azure OpenAI<br/>composer, judge"]
+  historian -.->|research planner| llm
+  composer -.-> llm["Azure OpenAI<br/>research planner, composer,<br/>judge, More facts"]
   verifier -.-> llm
+  api -.->|More facts| llm
   api --- db[("SQLite<br/>runs, caches,<br/>checkpoints")]
   api --- replays[("fixtures/replays<br/>recorded runs")]
 ```

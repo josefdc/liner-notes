@@ -113,17 +113,18 @@ is chosen by a rule from the golden run (`evals/agent/showcase.mjs`), not by han
   or default is used in its place.
 - **beat-this as the default tempo estimator.** On GiantSteps Tempo it gave more correct tempos
   than Essentia over all 400 clips (Acc1 109/400 = 27.3 % [23.1, 31.8] against 93/400 = 23.2 %
-  [19.4, 27.6], paired McNemar p = 0.033; analyzer 2.1.0,
-  [`evals/reports/audio-2026-10-25.md`](../evals/reports/audio-2026-10-25.md), "Default
-  estimator"), but the gain was not stable across the report's calibration and evaluation
-  halves: 49/206 = 23.8 % [18.5, 30.0] against 54/206 = 26.2 % [20.7, 32.6] (p = 0.424), then
-  60/194 = 30.9 % [24.8, 37.7] against 39/194 = 20.1 % [15.1, 26.3] (p < 0.001). The intervals
-  of the calibration half are Wilson intervals computed here from the report's counts; the
-  others are the report's. It has no key estimate, would add 745.0 MB installed plus an 81.1 MB
-  model to the audio image, and took 12 times Essentia's time per clip in the report's single
-  cost run (median 3.39 s against 0.29 s; the report's table calls this wall time and its text
-  CPU time, so which it is is not settled here). Its Ballroom figures are on its own training
-  data. Essentia stays the default, librosa the fallback.
+  [19.4, 27.6], paired McNemar p = 0.033), but the gain was not stable across the report's
+  calibration and evaluation halves: 49/206 = 23.8 % [18.5, 30.0] against 54/206 = 26.2 %
+  [20.7, 32.6] (p = 0.424), then 60/194 = 30.9 % [24.8, 37.7] against 39/194 = 20.1 %
+  [15.1, 26.3] (p < 0.001). Every figure here is from the runs of
+  [`evals/reports/audio-2026-10-25.md`](../evals/reports/audio-2026-10-25.md) ("Default
+  estimator"), at analyzer 2.1.0 and commit `78555ce` of #89 (merged as `28cdaaf`). The
+  intervals of the calibration half are Wilson intervals computed here from the report's
+  counts; the others are the report's. It has no key estimate, would add 745.0 MB installed plus
+  an 81.1 MB model to the audio image, and took 12 times Essentia's time per clip in the
+  report's single cost run (median 3.39 s against 0.29 s; the report's table calls this wall
+  time and its text CPU time, so which it is is not settled here). Its Ballroom figures are on
+  its own training data. Essentia stays the default, librosa the fallback.
 - **Analysing Spotify's previews.** Spotify's terms restrict using its content for machine
   learning. Only Deezer previews are measured, and Spotify's audio is no longer analysed (runs
   measured on it before can still be served by run link until retention removes them; see the

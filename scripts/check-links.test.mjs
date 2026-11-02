@@ -81,6 +81,37 @@ describe("linksOf", () => {
       { target: "docs/a_(b).md", line: 10 },
     ]);
   });
+
+  it("reads a list item's continuation paragraph, and code only 4 columns past its content", () => {
+    expect(linksOf("1. Step\n\n    See [x](missing1.md)\n")).toEqual([
+      { target: "missing1.md", line: 3 },
+    ]);
+    expect(linksOf("- item\n\n  See [y](missing2.md)\n\n      [code](not-read.md)\n")).toEqual([
+      { target: "missing2.md", line: 3 },
+    ]);
+    // A paragraph back at the margin ends the list: its indented code is code again.
+    expect(linksOf("- item\n\nText.\n\n    [code](not-read.md)\n")).toEqual([]);
+    // A nested item continues the list, and a fence inside an item is code.
+    expect(
+      linksOf("- a\n\n  - b\n\n    [nested](n.md)\n\n    ```\n    [fenced](f.md)\n    ```\n"),
+    ).toEqual([{ target: "n.md", line: 5 }]);
+  });
+
+  it("reads definitions with an angle-bracketed target, on the next line, or in a blockquote", () => {
+    expect(linksOf('[r]: <a b.md> "title"')).toEqual([{ target: "a b.md", line: 1 }]);
+    expect(linksOf("[r]:\n  next-line.md\n")).toEqual([{ target: "next-line.md", line: 2 }]);
+    expect(linksOf("> [r]: quoted.md\n> > [s]: <deeper.md>\n")).toEqual([
+      { target: "quoted.md", line: 1 },
+      { target: "deeper.md", line: 2 },
+    ]);
+  });
+
+  it("reads unquoted HTML attributes", () => {
+    expect(linksOf('<a href=x.md>x</a> <img src=docs/y.png alt="">')).toEqual([
+      { target: "x.md", line: 1 },
+      { target: "docs/y.png", line: 1 },
+    ]);
+  });
 });
 
 describe("brokenLinks", () => {
@@ -152,6 +183,11 @@ describe("brokenLinks", () => {
         reason: "docs/images/b.png is not a tracked file or directory",
       },
     ]);
+  });
+
+  it("fails a broken link in a list item's continuation; a spaced definition target passes", () => {
+    const tree = { "a.md": "1. Step\n\n    See [x](missing1.md)\n\n[r]: <a b.md>\n", "a b.md": "" };
+    expect(check(tree).map((b) => [b.line, b.target])).toEqual([[3, "missing1.md"]]);
   });
 
   it("does not read the anchors of a file that is not Markdown", () => {

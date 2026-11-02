@@ -7,8 +7,10 @@
 // A link fails when the file or directory it names is not tracked, or when its #anchor names no
 // heading (and no `id` or `name` attribute) of the Markdown file it points at, or of its own
 // file for a bare `#anchor`. Links are inline links and images (`[text](target)`,
-// `![alt](target)`), reference definitions (`[label]: target`) and the `href` and `src`
-// attributes of HTML tags. Fenced code blocks, indented code blocks and inline code are not read.
+// `![alt](target)`), reference definitions (`[label]: target`, `[label]: <target>`, in a
+// blockquote or with the target on the next line too) and the `href` and `src` attributes of
+// HTML tags, quoted or not. Fenced code blocks, indented code blocks (inside list items, 4
+// columns past the item's content) and inline code are not read.
 // A target that starts with `/` is taken from the repository root, as GitHub does.
 //
 // External URLs (any scheme: https:, mailto: …) are not fetched or checked: CI runs this with
@@ -41,30 +43,59 @@ export function proseLines(text) {
   const out = [];
   let fence = null;
   let previousBlank = true;
+  // The content column of the open list item, or null: a line indented to it continues the item
+  // (its continuation paragraphs are prose), and only 4 columns past it starts code.
+  let item = null;
   for (const line of lines) {
     if (fence) {
-      const close = line.match(/^ {0,3}(`{3,}|~{3,})\s*$/);
+      const close = line.match(/^\s*(`{3,}|~{3,})\s*$/);
       if (close && close[1][0] === fence[0] && close[1].length >= fence.length) fence = null;
       out.push("");
       continue;
     }
-    const open = line.match(/^ {0,3}(`{3,}|~{3,})/);
-    if (open) {
+    if (line.trim() === "") {
+      previousBlank = true;
+      out.push("");
+      continue;
+    }
+    const indent = indentOf(line);
+    const marker = line.match(/^(\s*)([-*+]|\d{1,9}[.)])( +|$)/);
+    // After a blank line, a line left of the item's content that is not an item of its own ends
+    // the list; without the blank it is a lazy continuation of the item's paragraph.
+    if (item !== null && indent < item && previousBlank && !marker) item = null;
+    const base = item !== null && indent >= item ? item : 0;
+    const open = line.match(/^\s*(`{3,}|~{3,})/);
+    if (open && indent - base <= 3) {
       fence = open[1];
       out.push("");
       previousBlank = false;
       continue;
     }
-    // An indented code block starts after a blank line (a list item's continuation is indented
-    // too, but follows its item, not a blank line, or starts with a list marker of its own).
-    if (previousBlank && /^( {4}|\t)/.test(line) && !/^\s*([-*+]|\d+[.)])\s/.test(line)) {
+    // An indented code block starts after a blank line, 4 columns past the enclosing item's
+    // content (or the margin).
+    if (previousBlank && indent - base >= 4) {
       out.push("");
       continue;
     }
-    previousBlank = line.trim() === "";
+    if (marker && indentOf(marker[1]) - base <= 3) {
+      const spaces = marker[3].length;
+      item = indentOf(marker[1]) + marker[2].length + (spaces >= 1 && spaces <= 4 ? spaces : 1);
+    }
+    previousBlank = false;
     out.push(stripInlineCode(line));
   }
   return out;
+}
+
+/** The width of a line's leading whitespace, a tab advancing to the next multiple of 4. */
+function indentOf(line) {
+  let width = 0;
+  for (const char of line) {
+    if (char === " ") width++;
+    else if (char === "\t") width += 4 - (width % 4);
+    else break;
+  }
+  return width;
 }
 
 /** The line with each inline code span (`…`, ``…``) replaced by spaces. */
@@ -212,11 +243,22 @@ export function linksOf(text) {
       }
       at = start + 2;
     }
-    // A reference definition; a footnote ("[^1]: text") is not one.
-    const definition = line.match(/^ {0,3}\[(?!\^)[^\]]+\]:\s*(\S+)/);
-    if (definition) links.push({ target: cleanTarget(definition[1]), line: lineNumber });
-    for (const match of line.matchAll(/<[a-z][^>]*?\s(?:href|src)\s*=\s*["']([^"']*)["']/gi)) {
-      links.push({ target: match[1], line: lineNumber });
+    // A reference definition, in a blockquote or a list item too; its target may be on the next
+    // line. A footnote ("[^1]: text") is not one.
+    const definition = line.match(/^\s*(?:>\s?)*\s{0,3}\[(?!\^)[^\]]+\]:(.*)$/);
+    if (definition) {
+      let rest = definition[1].trim();
+      let at = lineNumber;
+      if (rest === "" && index + 1 < prose.length) {
+        rest = prose[index + 1].replace(/^\s*(?:>\s?)*/, "").trim();
+        at = lineNumber + 1;
+      }
+      if (rest !== "") links.push({ target: cleanTarget(rest), line: at });
+    }
+    // HTML href and src attributes, quoted or not.
+    const attribute = /<[a-z][^>]*?\s(?:href|src)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/gi;
+    for (const match of line.matchAll(attribute)) {
+      links.push({ target: match[1] ?? match[2] ?? match[3], line: lineNumber });
     }
   });
   return links.filter((link) => link.target !== "");

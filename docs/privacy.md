@@ -72,15 +72,28 @@ measurement after 30 days and a low-confidence one after 24 hours, research answ
 
 ## What other services see
 
+- **Cloudflare's proxy**, in the deployment the runbook describes (`deploy/RUNBOOK.md`), sits in
+  front of the site: it terminates TLS and sees every request, with the visitor's address, the
+  typed text in `?query=` and the run token. Caddy takes the visitor's address from its
+  `CF-Connecting-IP` header (`apps/web/Caddyfile`, `trusted_proxies`).
 - **Cloudflare Turnstile** sees the visitor's browser when it asks for a run token
-  (`POST /api/runs`).
-- **Spotify** receives the text the visitor typed, as a search query from the API (the scout,
-  `apps/api/src/agent/nodes/scoutNode.ts`), and not the visitor's address.
+  (`POST /api/runs`), and the API sends it the visitor's address with the token it checks
+  (`remoteip` in `apps/api/src/http/turnstile.ts`, from `routes/runTokens.ts`).
+- **Spotify** receives the text the visitor typed, from the API and not with the visitor's
+  address: as it is typed, through the suggestions route (`GET /api/search/suggest`,
+  `searchTracks` in `apps/api/src/http/routes/search.ts`), and as a search query when a run
+  starts (the scout, `apps/api/src/agent/nodes/scoutNode.ts`). When live analysis is refused
+  (`REPLAY_MODE=only`, no Spotify keys, or the model budget spent), the suggestions come from the
+  recorded runs and Spotify is not asked.
 - **The other music and search sources** (Deezer, MusicBrainz and the Cover Art Archive,
   Last.fm, Genius, ListenBrainz, SecondHandSongs, Discogs and Tavily) receive track titles,
   artists and identifiers from the API, not the visitor's address.
 - **Azure OpenAI** receives the prompts: the chosen track and the evidence gathered for it. The
   typed text is not part of them.
+- **A tracing service** (LangSmith) receives prompts and answers only if an operator turns
+  LangChain/LangSmith tracing on. It is off by default, and the API refuses every model call
+  while it is on unless `LLM_ALLOW_TRACING=1` is also set (`apps/api/.env.example`,
+  `assertProviderConfigured` in `apps/api/src/llm/factory.ts`).
 - **The browser** loads cover images from the Cover Art Archive or Spotify, the Player's clip
   from Deezer, and the map's preview clips from Deezer or Spotify, directly: those services see
   the visitor's address.

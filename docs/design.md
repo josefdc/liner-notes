@@ -45,7 +45,7 @@ when they differ; it never moves the model's number into a measured field.
 
 A measured value is shown as the analyzer gave it, even when it is likely wrong: Bitter Sweet
 Symphony is measured at 171.15 BPM, about twice its usual tempo
-([failure cases](failures.md#tempo-octave-error-bitter-sweet-symphony)). Correcting it from a
+([failure cases](failures.md#a-measured-tempo-to-read-with-care-bitter-sweet-symphony-gbaaa9700049)). Correcting it from a
 description would make a described value look measured.
 
 ## The verifier
@@ -112,16 +112,24 @@ is chosen by a rule from the golden run (`evals/agent/showcase.mjs`), not by han
 - **A model that fills gaps.** A missing value stays missing with its reason; no source, model
   or default is used in its place.
 - **beat-this as the default tempo estimator.** On GiantSteps Tempo it gave more correct tempos
-  than Essentia over all 400 clips (Acc1 109/400 against 93/400, analyzer 2.1.0,
-  [`evals/reports/audio-2026-10-25.md`](../evals/reports/audio-2026-10-25.md)), but the gain was
-  not stable across the report's calibration and evaluation halves (49 against 54 of 206 clips, 60 against 39 of 194). It has
-  no key estimate, would add 745.0 MB installed plus an 81.1 MB model to the audio image, and
-  took a median 3.39 s of CPU time per clip against Essentia's 0.29 s (the report's cost run);
-  its Ballroom figures are on its own training data. Essentia stays the default, librosa the
-  fallback.
+  than Essentia over all 400 clips (Acc1 109/400 = 27.3 % [23.1, 31.8] against 93/400 = 23.2 %
+  [19.4, 27.6], paired McNemar p = 0.033; analyzer 2.1.0,
+  [`evals/reports/audio-2026-10-25.md`](../evals/reports/audio-2026-10-25.md), "Default
+  estimator"), but the gain was not stable across the report's calibration and evaluation
+  halves: 49/206 = 23.8 % [18.5, 30.0] against 54/206 = 26.2 % [20.7, 32.6] (p = 0.424), then
+  60/194 = 30.9 % [24.8, 37.7] against 39/194 = 20.1 % [15.1, 26.3] (p < 0.001). The intervals
+  of the calibration half are Wilson intervals computed here from the report's counts; the
+  others are the report's. It has no key estimate, would add 745.0 MB installed plus an 81.1 MB
+  model to the audio image, and took 12 times Essentia's time per clip in the report's single
+  cost run (median 3.39 s against 0.29 s; the report's table calls this wall time and its text
+  CPU time, so which it is is not settled here). Its Ballroom figures are on its own training
+  data. Essentia stays the default, librosa the fallback.
 - **Analysing Spotify's previews.** Spotify's terms restrict using its content for machine
-  learning. Only Deezer previews are measured; Spotify supplies search, track metadata, cover
-  images and the preview clips the map plays, with attribution (see [NOTICE](../NOTICE)).
+  learning. Only Deezer previews are measured, and Spotify's audio is no longer analysed (runs
+  measured on it before can still be served by run link until retention removes them; see the
+  README's known limitations). Spotify supplies search, track metadata, cover images and the
+  preview clips the map plays; the Player credits those clips, the full-size map does not
+  ([README](../README.md#known-limitations); [NOTICE](../NOTICE)).
 - **Lyrics.** Not shown and not sent to a model: publishers' rights apply to the text, and the
   app's claims do not need it. Genius is read for song relationships only.
 - **A second judge from another model family.** Not rejected but unavailable: the Gemini

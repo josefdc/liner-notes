@@ -45,9 +45,13 @@ On the release commit, checked out from `main`:
   `apps/api/.env`, then each of `fixtures/replays/*.json` by its query);
 - `node evals/agent/showcase.mjs` chooses exactly the committed showcase
   (`node --test evals/agent/showcase.test.mjs`);
-- `node evals/agent/kinds.mjs --check` and `npm run check:links` pass, so the README's figures
-  and links match the committed reports;
-- every number in the README's "Evaluation" section is the one in the report it cites;
+- `node evals/agent/kinds.mjs --check` passes: `evals/reports/agent-kinds.md` and
+  `docs/images/agent-kinds.svg` are what the committed run records give. It does not read the
+  README;
+- `npm run check:links` passes: every relative link and anchor in the tracked Markdown files
+  points at a tracked file or heading. It checks no figure and no external link;
+- checked by hand, since no script reads the README's prose: every number in its "What the
+  results hold, by kind" and "Evaluation" sections is the one in the report it cites;
 - `git status` is clean.
 
 ## 3. CHANGELOG

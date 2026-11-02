@@ -10,7 +10,13 @@ built (`npm run build -w packages/contract`). Every known limitation, including 
 the [README](../README.md#known-limitations).
 
 The second part of this page, "Unmatched edges in the agent eval", is written for the agent
-evaluation: its report links here for each proposal the scorer did not match to gold.
+evaluation: its report links here for each proposal the scorer did not match to gold. Its last
+section, [Bitter Sweet Symphony's tempo](#a-measured-tempo-to-read-with-care-bitter-sweet-symphony-gbaaa9700049),
+is also the README's tempo octave error case; the showcase replay holds the same value:
+
+```bash
+node -p 'require("./fixtures/replays/the-verve-bitter-sweet-symphony.json").analysis.audio.tempo'
+```
 
 ## One fact stated twice: One More Time
 
@@ -33,21 +39,6 @@ evaluation: its report links here for each proposal the scorer did not match to 
 node -e 'for (const c of require("./fixtures/replays/one-more-time-daft-punk.json").analysis.claims)
   if (/More Spell on You|Discovery/.test(c.text)) console.log(c.origin, c.kind, c.verdict, "|", c.text)'
 node evals/agent/showcase.mjs | grep -E "Gangsta's|One More Time"
-```
-
-## Tempo octave error: Bitter Sweet Symphony
-
-- **What shows**: a measured tempo of 171.15 BPM. The song is usually given as about 86 BPM,
-  half of that, so the analyzer most likely counted two beats per felt beat.
-- **Why**: the value is the audio service's output on the 30 s preview
-  (`essentia.RhythmExtractor2013+beat-regression`, confidence 0.617), and a measured value is
-  never replaced by a described one. Acc2 in the audio evaluation forgives such errors; Acc1, the
-  README's headline, does not.
-- **Record**: `fixtures/replays/the-verve-bitter-sweet-symphony.json`; the same value in the
-  golden run is described under "A measured tempo to read with care" below.
-
-```bash
-node -p 'require("./fixtures/replays/the-verve-bitter-sweet-symphony.json").analysis.audio.tempo'
 ```
 
 ## Verifier reason misstates its excerpt: Praise You
@@ -94,7 +85,10 @@ node evals/agent/showcase.mjs | grep Juicy
 ## SecondHandSongs without its key
 
 - **What shows**: no SecondHandSongs relations in any of the golden run's 24 runs. The 12 runs
-  that asked SecondHandSongs were refused with HTTP 403; the other 12 did not ask it.
+  that asked SecondHandSongs were refused with HTTP 403; the other 12 did not ask it. The report
+  counts SecondHandSongs unavailable on 14 of 24 (58.3 % [38.8, 75.5]; `sourceErrors` in the
+  run's `d.json`): the 12 refused runs, and 2 runs that sent it no request but report it
+  unavailable, as they report MusicBrainz (`FR10F1200080`, `USIR10001280`).
 - **Why**: the runs had no `SHS_API_KEY`, and SecondHandSongs refused the anonymous requests.
   The report counts it apart from source errors ("Sources the runs could not read" in
   `evals/reports/agent-2026-10-31.md`).

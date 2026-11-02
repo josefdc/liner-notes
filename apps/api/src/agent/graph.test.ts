@@ -1071,15 +1071,15 @@ describe("the analysis graph's stored results", () => {
       delete process.env.AUDIO_ANALYSIS_URL;
       tools.analyzeAudioPreview.invoke.mockReset();
     });
-    // The real analysis tool, given Spotify's own clip and a service that answered its health
-    // check; the service refuses the clip as it does an M4A, with the sentence only (an older
-    // service, without the code).
+    // The real analysis tool, given the Deezer clip for the ISRC and a service that answered its
+    // health check; the service refuses the clip as it does an M4A, with the sentence only (an
+    // older service, without the code).
     tools.analyzeAudioPreview.invoke.mockImplementationOnce(async (...args: unknown[]) => {
       const [input, config] = args as Parameters<typeof audio.analyzeAudioPreview.invoke>;
       const audioRun = {
         preview: {
-          previewUrl: "https://p.scdn.co/mp3-preview/own",
-          match: { provider: "spotify", method: "id", score: null },
+          previewUrl: "https://cdnt-preview.dzcdn.net/api/1/1/a/b/c/own.mp3?hdnea=exp=1",
+          match: { provider: "deezer", method: "isrc", deezerId: 3366332, score: null },
         },
         serviceAvailable: true,
       };
@@ -1151,8 +1151,8 @@ describe("the analysis graph's stored results", () => {
       const [input, config] = args as Parameters<typeof audio.analyzeAudioPreview.invoke>;
       const audioRun = {
         preview: {
-          previewUrl: "https://p.scdn.co/mp3-preview/own",
-          match: { provider: "spotify", method: "id", score: null },
+          previewUrl: "https://cdnt-preview.dzcdn.net/api/1/1/a/b/c/own.mp3?hdnea=exp=1",
+          match: { provider: "deezer", method: "isrc", deezerId: 3366332, score: null },
         },
         serviceAvailable: true,
       };

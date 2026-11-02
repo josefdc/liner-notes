@@ -153,10 +153,13 @@ router.get("/api/runs/:id", (req, res) => {
  * result of its own, or replayed a recording that is still served unchanged (runs that sent a cached
  * result are not counted). When that run's stored result no longer fits the contract, or holds
  * text the readers of stored evidence now refuse (as on GET /api/runs/:id; never served in
- * part), the next most recent one that can be served is served instead. Only the
+ * part), or was measured on Spotify's own clip (which the API no longer measures; GET
+ * /api/runs/:id still serves such a run as it was recorded), the next most recent one that can
+ * be served is served instead. Only the
  * BY_TRACK_CANDIDATES latest runs are tried, those that cannot be served included: a run older
  * than them is not reached. 404 not_found when the track has no such run, or when every one tried
- * was refused (nothing is broken: those results are no longer served); 500 failed when none can
+ * was refused or measured on Spotify's clip (nothing is broken: those results are no longer
+ * served as the track's run); 500 failed when none can
  * be served and at least one of them no longer fits the contract, whether or not others were
  * refused; 400 invalid_input for an id that is not a Spotify track id.
  */
@@ -181,8 +184,9 @@ router.get("/api/runs/by-track/:spotifyId", (req, res) => {
       continue;
     }
     // A refused result is no longer served; a replayed run whose recording is no longer served
-    // has no result to show.
-    if (body !== "refused" && body.analysis) {
+    // has no result to show; a result measured on Spotify's own clip is not shown as the
+    // track's run (a direct link to it still shows it as it was recorded).
+    if (body !== "refused" && body.analysis && body.analysis.preview?.provider !== "spotify") {
       res.json(body);
       return;
     }

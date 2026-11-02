@@ -4,6 +4,8 @@ name = "liner-notes-evals-audio"
 version = "0.0.0"
 description = "Accuracy of the audio service's tempo and key estimates on annotated datasets"
 readme = "README.md"
+# SPDX expression (PEP 639); the full text is LICENSE at the repository root.
+license = "AGPL-3.0-only"
 requires-python = ">=3.12,<3.13"
 # The harness imports the service's own modules (services/audio is put on sys.path, see
 # evals_audio/service.py), so the service's runtime dependencies are needed here, at the

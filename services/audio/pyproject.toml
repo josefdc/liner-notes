@@ -4,6 +4,8 @@ name = "liner-notes-audio"
 version = "0.0.0"
 description = "Liner Notes audio analysis service: measures tempo, key and audio features from 30-second previews"
 readme = "README.md"
+# SPDX expression (PEP 639); the full text is LICENSE at the repository root.
+license = "AGPL-3.0-only"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.125.0",

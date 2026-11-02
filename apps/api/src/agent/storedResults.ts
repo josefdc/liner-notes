@@ -19,6 +19,11 @@
  * reasonIssue), stored by older code, is not served: it is composed again (heldTextIssue, which
  * the run routes also apply). A result is stored with its source errors' messages as plain lines
  * (plainSourceError), so one stored now is never refused.
+ *
+ * A result whose audio was measured on Spotify's own clip (`preview.provider` "spotify"), stored
+ * before Spotify's clips were no longer measured, is not served either: it is composed again, and
+ * its tempo and key are measured on a Deezer clip, or not at all. Spotify's terms restrict using
+ * its content for machine learning.
  */
 
 import type { BaseStore } from "@langchain/langgraph";
@@ -117,6 +122,10 @@ export async function readStoredResult(
     }
     if (checked.data.id !== trackId) {
       log.warn(`Stored result for ${trackId} is about another track; ignored`);
+      return null;
+    }
+    if (checked.data.preview?.provider === "spotify") {
+      log.info("Stored result was measured on Spotify's clip; composing again");
       return null;
     }
     const sourceErrors = storedErrors(value.sourceErrors);

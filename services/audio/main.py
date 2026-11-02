@@ -1,7 +1,7 @@
 """
 Audio analysis service for Liner Notes.
 
-Downloads a 30-second Deezer or Spotify preview and analyses it. The preview is decoded once
+Downloads a 30-second Deezer preview and analyses it. The preview is decoded once
 (soundfile, libsndfile) and every step shares that signal. MP4 (M4A) and AAC previews are
 refused as a format the service does not decode (libsndfile cannot read them; the preview hosts
 serve MP3).
@@ -632,10 +632,10 @@ async def health_check():
 
 async def analyze_preview(request: AnalyzeRequest, http_request: Request):
     """
-    Analyze a Deezer or Spotify preview URL.
+    Analyze a Deezer preview URL.
 
     Returns {"v2": the AudioFeatures v2 block}, with why each null value is null in
-    `v2.withheld`. Only https URLs on the preview CDNs (p.scdn.co, *.dzcdn.net) are accepted.
+    `v2.withheld`. Only https URLs on Deezer's preview CDN (*.dzcdn.net) are accepted.
     A preview refused for what the file is gets a 422 with `code` beside its `detail`
     (UNSUPPORTED_FORMAT_CODE, DECODE_INCOMPLETE_CODE).
     """

@@ -133,8 +133,9 @@ export interface KeyMoment {
 
 /**
  * Why measured audio values are missing:
- * - no_preview: no preview clip of the chosen recording was found (by its ISRC on Deezer, as
- *   Spotify's own clip, or as a Deezer search result that is strictly the same recording)
+ * - no_preview: no preview clip of the chosen recording was found (by its ISRC on Deezer, or as
+ *   a Deezer search result that is strictly the same recording; Spotify's own clip is never
+ *   measured)
  * - preview_rejected: the preview URL is not on an allowed audio CDN host
  * - service_unavailable: the audio analysis service did not answer its health check
  * - analysis_failed: the service was reached but the analysis failed, or its answer carried no
@@ -144,10 +145,10 @@ export interface KeyMoment {
  * - not_detected: the analysis ran but found no tempo or no key (e.g. unpitched audio), or its
  *   gate measured nothing (silence, noise, too short: the block says which)
  * - not_run: audio analysis did not run for this track
- * - preview_lookup_incomplete: Spotify has no clip of the track and the lookup on Deezer could
- *   not be finished: a request was not sent (its pace had no slot in time, sources/pacing.ts) or
- *   Deezer could not be read. Whether a clip exists is unknown, so this is never "no_preview"
- *   (every request answered, no clip), and the result is not stored
+ * - preview_lookup_incomplete: the lookup on Deezer could not be finished: a request was not
+ *   sent (its pace had no slot in time, sources/pacing.ts) or Deezer could not be read. Whether a
+ *   clip exists is unknown, so this is never "no_preview" (every request answered, no clip), and
+ *   the result is not stored
  * - unsupported_format: the service refused the preview as a format it does not decode (an MP4
  *   (M4A) or AAC file). The file stays what it is, so the result is stored like any other
  * - decode_incomplete: the service refused the preview, an MP3, because it does not decode to
@@ -585,8 +586,8 @@ export const SonicAgentState = Annotation.Root({
     default: () => null,
   }),
 
-  // The run's preview clip of the chosen recording, for the player; null when there is none.
-  // Spotify's own clip is used here only when the engineer chose it.
+  // The run's preview clip of the chosen recording, for the player: the Deezer clip the engineer
+  // resolved; null when there is none (Spotify's own clip is not given in its place).
   // The URL is signed and expires within minutes: the checkpointer never saves it
   // (store/checkpointer.ts) and stored results drop it.
   previewUrl: Annotation<string | null>({

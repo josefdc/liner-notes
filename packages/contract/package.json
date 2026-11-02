@@ -2,6 +2,7 @@
   "name": "@liner-notes/contract",
   "private": true,
   "version": "0.0.0",
+  "license": "AGPL-3.0-only",
   "type": "module",
   "description": "Schemas shared by the web app, the API and the audio service",
   "main": "./dist/index.js",

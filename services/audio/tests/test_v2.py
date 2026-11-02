@@ -118,7 +118,9 @@ def test_analyze_endpoint_returns_a_valid_v2_block(monkeypatch, tmp_path):
     monkeypatch.delenv("AUDIO_SERVICE_TOKEN", raising=False)
     monkeypatch.setattr(main, "download_preview", fake_download)
     with TestClient(main.app) as client:
-        response = client.post("/analyze", json={"preview_url": "https://p.scdn.co/a.mp3"})
+        response = client.post(
+            "/analyze", json={"preview_url": "https://cdnt-preview.dzcdn.net/a.mp3"}
+        )
         health = client.get("/health").json()
     assert response.status_code == 200, response.text
     body = response.json()
@@ -208,7 +210,9 @@ def test_non_finite_samples_are_refused_with_422(monkeypatch, tmp_path):
     monkeypatch.delenv("AUDIO_SERVICE_TOKEN", raising=False)
     monkeypatch.setattr(main, "download_preview", fake_download)
     with TestClient(main.app) as client:
-        response = client.post("/analyze", json={"preview_url": "https://p.scdn.co/a.mp3"})
+        response = client.post(
+            "/analyze", json={"preview_url": "https://cdnt-preview.dzcdn.net/a.mp3"}
+        )
     assert response.status_code == 422
     assert "non-finite" in response.json()["detail"]
 
@@ -3342,7 +3346,9 @@ def test_a_non_finite_head_is_not_a_server_error(monkeypatch, tmp_path):
     monkeypatch.delenv("AUDIO_SERVICE_TOKEN", raising=False)
     monkeypatch.setattr(main, "download_preview", fake_download)
     with TestClient(main.app) as client:
-        response = client.post("/analyze", json={"preview_url": "https://p.scdn.co/a.mp3"})
+        response = client.post(
+            "/analyze", json={"preview_url": "https://cdnt-preview.dzcdn.net/a.mp3"}
+        )
     assert response.status_code == 200, response.text
     body = response.json()
     v2 = check_result(body)

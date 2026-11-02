@@ -47,8 +47,14 @@ export type CachedAudio = AudioMeasurement & {
   previewMatch: PreviewSourceMatch;
 };
 
-/** How the measured clip was matched to the track (sources/audio.ts PreviewSourceMatch). */
+/**
+ * How the measured clip was matched to the track (sources/audio.ts PreviewSourceMatch): a Deezer
+ * clip. A row measured on Spotify's own clip, written before Spotify's clips were no longer
+ * measured, is neither served nor written: the track is measured again on a Deezer clip, or not
+ * at all.
+ */
 const PreviewSourceMatchSchema = PreviewMatch.extend({
+  provider: z.literal("deezer"),
   deezerId: z.number().optional(),
 });
 

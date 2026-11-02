@@ -690,14 +690,42 @@ describe("engineerNode", () => {
       expect(out.preview).toBeNull();
     });
 
-    it("records Spotify's own clip as matched by id", async () => {
-      stubNetwork("up", null);
+    it("never measures Spotify's own clip: with no Deezer preview it says there is none", async () => {
+      const stub = stubNetwork("up", null);
       const spotifyClip = "https://p.scdn.co/mp3-preview/own";
       const state = stateFor("S", "USSB29000129");
       state.spotifyData = { ...state.spotifyData, previewUrl: spotifyClip } as never;
-      const out = await engineerNode(state, { writer: () => {} } as never);
-      expect(out.previewUrl).toBe(spotifyClip);
-      expect(out.preview).toEqual({ provider: "spotify", method: "id", score: null });
+      const lines: string[] = [];
+      const writer = (event: { message?: string }) => lines.push(event.message ?? "");
+      const out = await engineerNode(state, { writer } as never);
+
+      // Spotify's audio is never analysed: its clip is never sent to the service.
+      expect(stub.calls).not.toContain(`${AUDIO_URL}/analyze`);
+      expect(out.audioFeatures).toMatchObject({ audio: null, unavailableReason: "no_preview" });
+      expect(out.audioFeatures?.unavailableDetail).not.toMatch(/spotify/i);
+      expect(out.preview).toBeNull();
+      expect(out.previewUrl).toBeNull();
+      expect(cache.putAudio).not.toHaveBeenCalled();
+      const text = [...lines, ...(out.statusMessages ?? [])].join("\n");
+      expect(text).toContain(
+        "Tempo and key not measured: no preview clip of this recording was found",
+      );
+      expect(text).not.toContain("Measuring tempo and key");
+    });
+
+    it("says it is measuring only for a clip the service is sent: never for one on Spotify's CDN", async () => {
+      const spotifyClip = "https://p.scdn.co/mp3-preview/own";
+      const stub = stubNetwork("up", spotifyClip);
+      const { out, codes, text } = await run("SC");
+
+      expect(stub.calls).not.toContain(`${AUDIO_URL}/analyze`);
+      expect(codes).not.toContain("AUDIO-INIT");
+      expect(text).not.toContain("Measuring tempo and key");
+      expect(out.audioFeatures).toMatchObject({
+        audio: null,
+        unavailableReason: "preview_rejected",
+      });
+      expect(out.previewUrl).toBeNull();
     });
 
     it("reports a Deezer outage as a source error and the lookup as incomplete, never as a missing clip", async () => {
@@ -777,20 +805,20 @@ describe("engineerNode", () => {
       expect(out.sourceErrors).toBeUndefined();
     });
 
-    it("measures Spotify's own clip when Deezer's pace refused the ISRC request", async () => {
+    it("does not measure Spotify's own clip when Deezer's pace refused the ISRC request", async () => {
       const stub = stubNetwork("up", null);
       const signal = fillDeezerPace();
       const spotifyClip = "https://p.scdn.co/mp3-preview/own";
       const state = stateFor("S2", "USSB29000129");
       state.spotifyData = { ...state.spotifyData, previewUrl: spotifyClip } as never;
-      const out = await engineerNode(state, { writer: () => {}, signal } as never);
+      const lines: string[] = [];
+      const writer = (event: { message?: string }) => lines.push(event.message ?? "");
+      const out = await engineerNode(state, { writer, signal } as never);
 
       expect(stub.calls).not.toContain("https://api.deezer.com/track/isrc:USSB29000129");
-      expect(stub.calls).toContain(`${AUDIO_URL}/analyze`);
-      expect(out.audioFeatures?.audio).toEqual(SIGNAL_ONLY);
-      expect(out.audioFeatures).not.toHaveProperty("unavailableReason");
-      expect(out.previewUrl).toBe(spotifyClip);
-      expect(out.preview).toEqual({ provider: "spotify", method: "id", score: null });
+      expect(stub.calls).not.toContain(`${AUDIO_URL}/analyze`);
+      expectIncomplete(out, [...lines, ...(out.statusMessages ?? [])].join("\n"));
+      expect(out.preview).toBeNull();
     });
 
     it("says no clip was found only when Deezer answered every request of the lookup", async () => {
@@ -1002,7 +1030,7 @@ describe("engineerNode", () => {
     expect(cache.putAudio).not.toHaveBeenCalled();
   });
 
-  it("reports no_preview when neither Deezer nor Spotify has a preview", async () => {
+  it("reports no_preview when Deezer has no preview of the recording", async () => {
     const stub = stubNetwork("up", null);
     const { out, text } = await run("F");
     expect(out.audioFeatures).toMatchObject({ audio: null, unavailableReason: "no_preview" });

@@ -172,7 +172,7 @@ async function main() {
   const apiPort = Number(api.match[1]);
 
   // The web app's dev server, forwarding /api to that API.
-  const web = await start(
+  await start(
     "the web app",
     [
       join(ROOT, "node_modules", "vite", "bin", "vite.js"),

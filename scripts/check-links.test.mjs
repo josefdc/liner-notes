@@ -112,7 +112,9 @@ describe("linksOf", () => {
       { target: "later.md", line: 3 },
     ]);
     // A tilde fence's info string may hold backticks, and a backtick fence's may hold tildes.
-    expect(linksOf("~~~ a`b\n[c](in-fence.md)\n~~~\n```js ~x\n[d](in-fence.md)\n```\n")).toEqual([]);
+    expect(linksOf("~~~ a`b\n[c](in-fence.md)\n~~~\n```js ~x\n[d](in-fence.md)\n```\n")).toEqual(
+      [],
+    );
   });
 
   it("reads unquoted HTML attributes", () => {

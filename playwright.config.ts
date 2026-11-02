@@ -76,6 +76,8 @@ export default defineConfig({
             // The container's own Chromium (it has no Google Chrome).
             channel: "chromium",
             reducedMotion: "reduce",
+            // A failure's evidence is its expected, actual and diff images; no traces.
+            trace: "off",
             // Dates and times read the same whatever the machine's zone and language.
             timezoneId: "UTC",
             locale: "en-US",
@@ -85,9 +87,9 @@ export default defineConfig({
               animations: "disabled",
               caret: "hide",
               // A pixel differs when its colour moves by more than 2% (Playwright's YIQ
-              // distance; its default, 20%, let the measured cyan turn teal, #00f0ff to
-              // #00f0e0, on all 78 window screenshots, and a map card's border 1 px wider
-              // fail 2). At most 10 pixels may differ in a screenshot: the smallest change
+              // distance; at its default, 20%, the measured cyan could turn teal, #00f0ff to
+              // #00f0e0, with every window screenshot still passing, and a map card's border
+              // 1 px wider failed only two). At most 10 pixels may differ in a screenshot: the smallest change
               // tried, the track picker's ▶ marker gone, differs by 26 pixels, and two runs in
               // the same container differed by none at this threshold. Measured on one CPU
               // (AMD EPYC, AVX-512); a runner whose rasteriser antialiases differently may

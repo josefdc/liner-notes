@@ -179,10 +179,13 @@ digest (its linux/amd64 manifest) in `scripts/visual.mjs`, the one CI's visual j
 the checkout mounted. It needs Linux on x64 and Docker, and `npm ci` run first: the mounted
 `node_modules` must hold the linux-x64 builds of esbuild, rollup and lightningcss, and an arm64
 image draws differently. After a change that is meant to change a view, run
-`npm run test:visual:update`, look at the PNGs it rewrote and commit them. Write baselines only
-this way: the `visual` project exists only in that container (`PLAYWRIGHT_VISUAL=1` stops any
-other run), and a baseline drawn by another browser, or outside the container, would not match
-CI's.
+`npm run test:visual:update`, look at the PNGs it rewrote and commit them. Off Linux x64, push
+the change and take the `*-actual.png` files from the `visual-report` artifact of CI's failed
+visual job (drawn by the same image), look at them, and copy each over its baseline in
+`tests/web/__screenshots__/visual.spec.ts/` without the `-actual` in its name. Baselines come
+only from that image: the `visual` project exists only in its container (`PLAYWRIGHT_VISUAL=1`
+stops any other run), and a baseline drawn by another browser, or outside the container, would
+not match CI's.
 
 The honesty guard (`scripts/guard-honest.mjs`) counts patterns that may only go down: placeholder
 data (random values, stock images, unscoped colours), the prototype's old copy and product name, and

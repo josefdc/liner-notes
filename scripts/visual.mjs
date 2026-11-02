@@ -88,13 +88,27 @@ function run() {
     );
     process.exit(2);
   }
-  // 125-127: docker run itself failed (daemon, permissions, image) before any test ran.
-  if (result.status !== null && result.status >= 125) {
+  const status = result.status;
+  if (status === 125) {
+    // docker run itself failed (daemon, permissions, image) before the container started.
     console.error(
       "docker run failed before the tests started: check that the Docker daemon runs and that " +
         "this user may use it (the docker group, or rootless Docker, where the container's user " +
         `must still be able to write the checkout), and that it can pull ${IMAGE}.`,
     );
+  } else if (status === 126 || status === 127) {
+    console.error(
+      "The container could not run the tests (exit " +
+        `${status}): run \`npm ci\` in the checkout first, so that its node_modules holds npm's ` +
+        "and Playwright's commands.",
+    );
+  } else if (status !== null && status > 128) {
+    console.error(
+      `The tests were stopped by signal ${status - 128} (exit ${status}; 137 is usually the ` +
+        "container running out of memory).",
+    );
+  } else if (result.signal) {
+    console.error(`docker run was stopped by ${result.signal}.`);
   }
   process.exit(result.status ?? 1);
 }

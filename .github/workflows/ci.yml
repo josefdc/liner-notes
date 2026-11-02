@@ -198,6 +198,12 @@ jobs:
             npm install -g npm@11.19.1
           fi
           npm --version
+      # The rasteriser picks its code by the CPU's instruction set: name the CPU, so a diff can
+      # be told from a runner of another kind (the baselines were drawn with AVX-512).
+      - name: Runner CPU
+        run: |
+          grep -m1 'model name' /proc/cpuinfo
+          if grep -qw avx512f /proc/cpuinfo; then echo 'avx512f: yes'; else echo 'avx512f: no'; fi
       - run: npm ci
       - run: npm run build -w packages/contract
       - run: npx playwright test --project=visual

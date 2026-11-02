@@ -2,6 +2,7 @@
   "name": "@liner-notes/api",
   "private": true,
   "version": "0.1.0",
+  "license": "AGPL-3.0-only",
   "description": "LangGraph backend for Liner Notes",
   "type": "module",
   "scripts": {

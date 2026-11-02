@@ -193,7 +193,7 @@ export function renderReport(rows, { runs, sha256, count, date, commit }) {
   const key = rows.find((row) => row.field === "key");
   lines.push(
     "",
-    `No key is served on this set: the key is measured on ${key.counts.measured} of ${key.n} tracks. On GiantSteps+ Key the service withholds the key of 202 of 250 clips (\`evals/reports/audio-2026-10-29.md\`), so a missing key is the usual outcome, not a fault of this run.`,
+    `No key is served on this set: the key is measured on ${key.counts.measured} of ${key.n} tracks. On GiantSteps+ Key the service answers a key for 48 of 250 clips (19.2 % [14.8, 24.5], \`evals/reports/audio-2026-10-29.md\`), so a missing key is the usual outcome, not a fault of this run.`,
     "",
     "The chart `docs/images/agent-kinds.svg` draws the counts table.",
     "",

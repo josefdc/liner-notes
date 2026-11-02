@@ -35,6 +35,6 @@ Why each missing audio value is missing (the audio block's `withheld` code, or t
 - Key: `no_sustained_pitch` 19, `speech_like` 2, `few_pitch_classes` 1, `no_preview` 1, `one_harmonic_series` 1.
 - Loudness: `no_preview` 1.
 
-No key is served on this set: the key is measured on 0 of 24 tracks. On GiantSteps+ Key the service withholds the key of 202 of 250 clips (`evals/reports/audio-2026-10-29.md`), so a missing key is the usual outcome, not a fault of this run.
+No key is served on this set: the key is measured on 0 of 24 tracks. On GiantSteps+ Key the service answers a key for 48 of 250 clips (19.2 % [14.8, 24.5], `evals/reports/audio-2026-10-29.md`), so a missing key is the usual outcome, not a fault of this run.
 
 The chart `docs/images/agent-kinds.svg` draws the counts table.

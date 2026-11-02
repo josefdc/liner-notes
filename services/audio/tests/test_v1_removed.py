@@ -49,7 +49,9 @@ def analyse_over_http(monkeypatch, tmp_path, y: np.ndarray) -> dict:
     monkeypatch.delenv("AUDIO_SERVICE_TOKEN", raising=False)
     monkeypatch.setattr(main, "download_preview", fake_download)
     with TestClient(main.app) as client:
-        response = client.post("/analyze", json={"preview_url": "https://p.scdn.co/a.mp3"})
+        response = client.post(
+            "/analyze", json={"preview_url": "https://cdnt-preview.dzcdn.net/a.mp3"}
+        )
     assert response.status_code == 200, response.text
     return response.json()
 

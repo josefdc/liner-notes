@@ -14,6 +14,12 @@ DEEZER = (
 ACCEPTED = [
     DEEZER,
     "https://cdns-preview-d.dzcdn.net/stream/c-deda7fa9316d9e9e880d2c6207e92260-8.mp3",
+    "https://cdnt-preview.dzcdn.net:443/api/1/1/f/8/c/0/f8c5dc3837912dba37c9a1ab3170cc3f.mp3",
+]
+
+# Spotify's preview CDN. Spotify is a search and metadata source only: its terms restrict using
+# its content for machine learning, so its previews are never analysed.
+SPOTIFY = [
     "https://p.scdn.co/mp3-preview/3eb16018c2a700240e9dfb8817b6f2d041f15eb1?cid=774b29d4f13844c495f206cafdad9c86",
     "https://p.scdn.co:443/mp3-preview/abc",
 ]
@@ -83,6 +89,22 @@ def test_rejects_crafted_urls(url):
     with pytest.raises(PreviewURLError):
         validate_preview_url(url)
     assert not is_allowed_preview_url(url)
+
+
+@pytest.mark.parametrize("url", SPOTIFY)
+def test_refuses_spotify_previews(url):
+    with pytest.raises(PreviewURLError, match="not a supported preview CDN"):
+        validate_preview_url(url)
+    assert not is_allowed_preview_url(url)
+
+
+def test_download_preview_refuses_a_spotify_preview_before_connecting(monkeypatch):
+    async def must_not_fetch(*args, **kwargs):
+        raise AssertionError("fetch_to_file called for a Spotify preview")
+
+    monkeypatch.setattr(preview, "fetch_to_file", must_not_fetch)
+    with pytest.raises(PreviewURLError):
+        asyncio.run(preview.download_preview(SPOTIFY[0]))
 
 
 @pytest.mark.parametrize("value", [None, 123, b"https://p.scdn.co/a.mp3"])

@@ -1,8 +1,8 @@
 """
 Preview URL validation and bounded download.
 
-The service only fetches 30-second previews from the Deezer and Spotify CDNs. A URL is
-accepted when it is an https URL whose parsed host is one of the preview hosts below, with
+The service only fetches 30-second previews from Deezer's CDN. A URL is accepted when it is
+an https URL whose parsed host is one of the preview hosts below, with
 no userinfo, no IP literal and no port other than 443. Downloads never follow redirects,
 must declare an audio content type the service decodes and a body framed by a Content-Length or
 chunking (so a cut transfer raises), are capped at MAX_PREVIEW_BYTES and must finish within
@@ -26,9 +26,10 @@ CONNECT_TIMEOUT_S = 5.0
 READ_TIMEOUT_S = 10.0
 DOWNLOAD_DEADLINE_S = 20.0
 
-# Spotify serves previews from p.scdn.co; Deezer from subdomains of dzcdn.net
-# (for example cdnt-preview.dzcdn.net and cdns-preview-<x>.dzcdn.net).
-ALLOWED_HOSTS = frozenset({"p.scdn.co"})
+# Deezer serves previews from subdomains of dzcdn.net (for example cdnt-preview.dzcdn.net and
+# cdns-preview-<x>.dzcdn.net). Spotify's preview CDN is refused: Spotify's terms restrict using
+# its content for machine learning, so Spotify is a search and metadata source only.
+ALLOWED_HOSTS: frozenset[str] = frozenset()
 ALLOWED_HOST_SUFFIXES = (".dzcdn.net",)
 
 # Only unreserved, reserved and percent characters from RFC 3986: no whitespace, control

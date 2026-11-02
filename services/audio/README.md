@@ -1,6 +1,6 @@
 # Audio analysis service
 
-A Python FastAPI service that downloads a 30-second Deezer or Spotify preview and measures its
+A Python FastAPI service that downloads a 30-second Deezer preview and measures its
 tempo and key (each with a confidence), loudness, beat grid, energy contour, neutral sections
 and notable moments, with Essentia or `librosa`. When the Essentia TensorFlow models are present
 and verified, it also reports a model fingerprint: Discogs style activations, MusiCNN tags and
@@ -716,8 +716,10 @@ refusals carry none.
 
 - the scheme is `https` and the port is the default (443);
 - there is no userinfo (`user:pass@`);
-- the host is a lowercase DNS name, not an IP literal, and is either `p.scdn.co` (Spotify) or a
-  subdomain of `dzcdn.net` (Deezer, for example `cdnt-preview.dzcdn.net`);
+- the host is a lowercase DNS name, not an IP literal, and is a subdomain of `dzcdn.net`
+  (Deezer, for example `cdnt-preview.dzcdn.net`). Spotify's previews (`p.scdn.co`) are refused:
+  Spotify's terms restrict using its content for machine learning, so it is a search and
+  metadata source only;
 - the URL only contains RFC 3986 characters and is at most 2048 characters long.
 
 The download does not follow redirects, ignores proxy settings from the environment, requires a

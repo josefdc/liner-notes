@@ -72,23 +72,59 @@ function stripInlineCode(line) {
   return line.replace(/(`+)([\s\S]*?[^`])\1(?!`)/g, (span) => " ".repeat(span.length));
 }
 
-/** The text of a heading as GitHub reads it for its anchor: Markdown and HTML markup removed. */
-function headingText(raw) {
-  return raw
-    .replace(/<[^>]+>/g, "")
-    .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
-    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
-    .replace(/\[([^\]]*)\]\[[^\]]*\]/g, "$1")
-    .replace(/`+/g, "")
-    .replace(/(\*\*|__|\*|_|~~)(?=\S)([\s\S]*?\S)\1/g, "$2")
-    .trim();
+const ENTITIES = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: "\u00a0" };
+
+/** `text` with HTML character references decoded (named ones above, and numeric ones). */
+function decodeEntities(text) {
+  return text.replace(/&(#x[0-9a-f]+|#[0-9]+|[a-z]+);/gi, (whole, name) => {
+    if (name[0] === "#") {
+      const code =
+        name[1].toLowerCase() === "x" ? Number.parseInt(name.slice(2), 16) : Number(name.slice(1));
+      return Number.isFinite(code) && code <= 0x10ffff ? String.fromCodePoint(code) : whole;
+    }
+    return ENTITIES[name.toLowerCase()] ?? whole;
+  });
 }
 
-/** GitHub's anchor for a heading's text (github-slugger): lower-cased, symbols out, spaces to "-". */
+/** Markup of the text outside code spans removed: tags, links (their text kept), emphasis. */
+function plainText(part) {
+  return decodeEntities(
+    part
+      .replace(/<[^>]+>/g, "")
+      .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
+      .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+      .replace(/\[([^\]]*)\]\[[^\]]*\]/g, "$1")
+      .replace(/\*+|~~/g, "")
+      // An underscore marks emphasis only at a word's edge ("_word_"), never inside one.
+      .replace(/(^|[^\p{L}\p{N}_])_+(?=\S)/gu, "$1")
+      .replace(/(?<=\S)_+(?=$|[^\p{L}\p{N}_])/gu, ""),
+  );
+}
+
+/**
+ * The text of a heading as GitHub renders it, which its anchor is made from: a code span's text
+ * as written, and the rest without its Markdown and HTML markup.
+ */
+function headingText(raw) {
+  let text = "";
+  let at = 0;
+  for (const match of raw.matchAll(/(`+)([\s\S]*?[^`])\1(?!`)/g)) {
+    text += plainText(raw.slice(at, match.index)) + match[2].replace(/^ (.*) $/, "$1");
+    at = match.index + match[0].length;
+  }
+  return (text + plainText(raw.slice(at))).trim();
+}
+
+/**
+ * GitHub's anchor for a heading's text (github-slugger): lower-cased; every character that is not
+ * alphabetic (letters, letter numbers, and symbols such as Ⓐ), a mark, a decimal digit,
+ * connector punctuation, a space or "-" removed; each space turned into "-". Letters added to
+ * Unicode after github-slugger's tables are kept here and dropped there.
+ */
 export function slug(text) {
   return headingText(text)
     .toLowerCase()
-    .replace(/[^\p{L}\p{M}\p{N}\p{Pc} -]/gu, "")
+    .replace(/[^\p{Alphabetic}\p{M}\p{Nd}\p{Nl}\p{Pc} -]/gu, "")
     .replace(/ /g, "-");
 }
 
@@ -110,7 +146,10 @@ export function anchorsOf(text) {
   const prose = proseLines(text);
   for (let i = 0; i < lines.length; i++) {
     if (prose[i] === "" && lines[i] !== "") continue; // code
-    const atx = lines[i].match(/^ {0,3}#{1,6}[ \t]+(.*?)(?:[ \t]+#+)?[ \t]*$/);
+    // A heading may sit in a blockquote ("> ## Title").
+    const atx = lines[i]
+      .replace(/^ {0,3}(> ?)+/, "")
+      .match(/^ {0,3}#{1,6}[ \t]+(.*?)(?:[ \t]+#+)?[ \t]*$/);
     if (atx) {
       add(slug(atx[1]));
       continue;
@@ -173,7 +212,8 @@ export function linksOf(text) {
       }
       at = start + 2;
     }
-    const definition = line.match(/^ {0,3}\[[^\]]+\]:\s*(\S+)/);
+    // A reference definition; a footnote ("[^1]: text") is not one.
+    const definition = line.match(/^ {0,3}\[(?!\^)[^\]]+\]:\s*(\S+)/);
     if (definition) links.push({ target: cleanTarget(definition[1]), line: lineNumber });
     for (const match of line.matchAll(/<[a-z][^>]*?\s(?:href|src)\s*=\s*["']([^"']*)["']/gi)) {
       links.push({ target: match[1], line: lineNumber });

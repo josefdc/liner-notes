@@ -29,6 +29,13 @@ describe("slug", () => {
     );
     expect(slug("snake_case stays")).toBe("snake_case-stays");
     expect(slug("Ünïcode words")).toBe("ünïcode-words");
+    // As github-slugger 2.0.0 gives them.
+    expect(slug("Set `SHS_API_KEY`")).toBe("set-shs_api_key");
+    expect(slug("snake_case_name here")).toBe("snake_case_name-here");
+    expect(slug("_emphasis_ and __strong__")).toBe("emphasis-and-strong");
+    expect(slug("The `/t/<id>/map` view")).toBe("the-tidmap-view");
+    expect(slug("Tom &amp; Jerry")).toBe("tom--jerry");
+    expect(slug("acc1² Ⓐ")).toBe("acc1-ⓐ");
   });
 
   it("numbers repeated headings as GitHub does", () => {
@@ -41,6 +48,12 @@ describe("slug", () => {
       'Title\n=====\n\nSub\n---\n\n<a id="kept"></a>\n\n```\n# not a heading\n```\n',
     );
     expect([...anchors].sort()).toEqual(["kept", "sub", "title"]);
+  });
+});
+
+describe("anchorsOf, more", () => {
+  it("reads a heading inside a blockquote", () => {
+    expect([...anchorsOf("> ## Quoted heading\n")]).toEqual(["quoted-heading"]);
   });
 });
 
@@ -57,6 +70,7 @@ describe("linksOf", () => {
       "",
       "    [not](indented-code.md)",
       "[parens](docs/a_(b).md)",
+      "[^1]: A footnote, not a link definition.",
     ].join("\n");
     expect(linksOf(text)).toEqual([
       { target: "docs/design.md#evidence", line: 1 },

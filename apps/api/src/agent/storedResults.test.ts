@@ -43,6 +43,25 @@ describe("stored results", () => {
     expect(await served("unchecked", UNCHECKED_RESULT_TTL_MS)).toBe(false);
   });
 
+  it("never serves a result measured on Spotify's own clip, and serves one measured on Deezer's", async () => {
+    // Stored before Spotify's clips were no longer measured: its tempo and key were measured on
+    // Spotify's audio, so the track is composed again.
+    const store = new InMemoryStore();
+    const measured = (id: string, provider: "spotify" | "deezer") => ({
+      ...createEmptyTrackData(id, "T", "A"),
+      preview:
+        provider === "spotify"
+          ? { provider, method: "id" as const, score: null }
+          : { provider, method: "isrc" as const, score: null },
+    });
+    await storeResult(store, measured("spotify-clip", "spotify"), at);
+    await storeResult(store, measured("deezer-clip", "deezer"), at);
+
+    expect(await readStoredResult(store, "spotify-clip", later(1000))).toBeNull();
+    const served = await readStoredResult(store, "deezer-clip", later(1000));
+    expect(served?.trackData.preview).toEqual({ provider: "deezer", method: "isrc", score: null });
+  });
+
   it("never serves a result past 24 hours, whatever lifetime it was stored with", async () => {
     const store = new InMemoryStore();
     await storeResult(

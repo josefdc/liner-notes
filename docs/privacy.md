@@ -20,7 +20,10 @@ The API keeps one SQLite database (`SQLITE_DB_PATH`; tables in `apps/api/src/sto
   remembered across visitors were removed (schema version 8).
 - **Checkpoints** (LangGraph's SQLite saver, `apps/api/src/store/checkpointer.ts`): the state of
   a run in progress, so it can resume after the track picker. Preview links are removed before a
-  checkpoint is written.
+  checkpoint is written, with one known exception: the percent-encoded clip link a failed
+  download's detail can hold ([README, "Known limitations"](../README.md#known-limitations)) is
+  kept in the run's checkpoint until the checkpoint is deleted. The link is a
+  signed CDN URL that expires in about 15 minutes.
 - **Caches** (`audio_cache`, `research_cache`, `artwork_cache`, `musicbrainz_recording_cache`):
   measurements and source answers about tracks, never about visitors. No preview link is stored
   (`artwork_cache.preview_url` is always null since schema version 6).
@@ -78,7 +81,8 @@ measurement after 30 days and a low-confidence one after 24 hours, research answ
   artists and identifiers from the API, not the visitor's address.
 - **Azure OpenAI** receives the prompts: the chosen track and the evidence gathered for it. The
   typed text is not part of them.
-- **The browser** loads cover images from the Cover Art Archive or Spotify, and the map's
-  preview clips from Deezer or Spotify, directly: those services see the visitor's address.
+- **The browser** loads cover images from the Cover Art Archive or Spotify, the Player's clip
+  from Deezer, and the map's preview clips from Deezer or Spotify, directly: those services see
+  the visitor's address.
 
 The licences and terms of these services are in [NOTICE](../NOTICE).

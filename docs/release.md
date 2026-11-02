@@ -9,9 +9,8 @@ steps below prepare a draft; they never publish it.
 
 ## 1. Local CI on the release commit
 
-GitHub Actions is not available for this account, so the jobs of `.github/workflows/ci.yml` are
-run locally, on a clean checkout of the commit to be released, with Node 24 and npm 11.18 or
-later:
+Run the jobs of `.github/workflows/ci.yml` on a clean checkout of the commit to be released,
+with Node 24 and npm 11.18 or later, locally when GitHub Actions cannot run them:
 
 ```bash
 npm ci
@@ -30,8 +29,8 @@ npm run test:visual            # Linux x64 with Docker
 cd services/audio && uv sync --frozen && uv run ruff check . && uv run ruff format --check . && uv run pytest -q
 ```
 
-For the first release there is no previous tag: use `--base origin/main` on the release commit's
-parent. Also run the agent eval replay with the network denied, as CI does (the "Agent eval
+For the first release there is no previous tag: use `--base <release commit>^`, the release
+commit's parent. Also run the agent eval replay with the network denied, as CI does (the "Agent eval
 replay" and "Agent eval report and judge replay" steps of the `node` job), and
 `docker compose -f deploy/compose.prod.yml build` followed by `deploy/check-stack.sh` (README,
 "Deploying"), as `.github/workflows/docker.yml` does.

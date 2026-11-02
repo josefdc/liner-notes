@@ -5,8 +5,9 @@ are **measured**, **sourced** or **inferred**.
 
 You type a song. The app finds the recording, measures its tempo, key and loudness from a 30 s
 preview, reads what primary records (MusicBrainz, Discogs, SecondHandSongs, Genius and others)
-say about it, and has a model write liner notes from that evidence. A verifier then checks each
-of the model's claims against the excerpt it cites. Every value on the page says how it is
+say about it, and has a model write liner notes from that evidence. A verifier then checks the
+model's claims against the excerpts they cite (one judge call per run, up to a fixed number of
+claims; any left over get no verdict and are not shown as sourced). Every value on the page says how it is
 known, and a value nobody knows is shown as missing, with the reason.
 
 It is a working web app with an evaluation behind each figure below. Its deployment files are
@@ -74,22 +75,24 @@ most code-built links first, until there are at least 5 tracks and 4 styles.
 The showcase is a demonstration, not a sample of how the app does in general: the rule keeps the
 runs that went well. The evaluation below covers every row.
 
-## What the pages show, by kind
+## What the results hold, by kind
 
 Over the golden run (24 tracks, the live subset of `evals/golden.jsonl`; 2026-10-31, commit
-`5fd193fa7a64`, tag `golden-run-2026-10-31`), by kind, as each page shows it:
+`5fd193fa7a64`, tag `golden-run-2026-10-31`), by kind, as each result records it:
 
-![What the pages show, by kind: claims 232 sourced and 44 inferred; song-relation links 86 sourced and 16 inferred; tempo 22 measured and 2 missing; key 24 missing; loudness 23 measured and 1 missing](docs/images/agent-kinds.svg)
+![What the results hold, by kind: claims 232 sourced and 44 inferred; song-relation links 86 sourced and 16 inferred; tempo 22 measured and 2 missing; key 24 missing; loudness 23 measured and 1 missing](docs/images/agent-kinds.svg)
 
 - Claims: 232 of 276 sourced (84.1 %, 95 % CI [79.3, 87.9]): 164 built by code from a record, 68
-  written by the model and support-checked against their excerpts; 44 inferred.
-- Song-relation links: 86 of 102 sourced (84.3 % [76.0, 90.1]), 16 inferred.
+  written by the model and support-checked against their excerpts; 44 inferred. 3 of the
+  inferred claims were found contradicted, and the page shows them only in its rejected panel.
+- Song-relation links: 86 of 102 sourced (84.3 % [76.0, 90.1]), 16 inferred. One inferred link,
+  whose claim was contradicted, is not drawn, so the maps show 101.
 - Tempo: measured on 22 of 24 tracks (91.7 % [74.2, 97.7]); one track had no Deezer preview and
   one tempo was withheld as unsteady.
 - **Key: never served on the golden set** (0 of 24). The audio service withheld it on all 23
   previews it analysed (19 for no sustained pitch, 2 as speech-like, 1 with too few pitch
   classes, 1 with one harmonic series); the 24th track had no preview.
-- Loudness: measured on 23 of 24.
+- Loudness: measured on 23 of 24 (95.8 % [79.8, 99.3]); the 24th track had no preview.
 
 Counts, intervals and reasons are in [`evals/reports/agent-kinds.md`](evals/reports/agent-kinds.md),
 written with the chart by `node evals/agent/kinds.mjs` from the committed run records (no
@@ -98,7 +101,8 @@ network, no model); `evals/agent/kinds.test.mjs` pins the counts.
 ## Evaluation
 
 Every figure gives its dataset, n and a 95 % interval (Wilson for proportions, a percentile
-bootstrap over tracks for means), with the date and commit of the run. Rows with n < 10 are
+bootstrap over tracks for the agent's means, a BCa bootstrap for the MIREX key scores), with the
+date and commit of the run. Rows with n < 10 are
 counts only. The full reports, with how to read them, are in [`evals/reports/`](evals/reports/).
 
 ### The agent
@@ -138,8 +142,8 @@ row proposed):
 Row a runs on a different model from rows c and d, so it changes the model as well as the tools.
 Its edges are the model's recollection: none is shown as sourced (0/70 claims). The verifier
 trades recall for precision: from c to d, recall falls from 14 to 8 of 16 and precision rises
-from 70.0 % to 80.0 %. At n = 16 the intervals overlap widely, so neither change is
-established. Only one gold edge is held out from every source the pipeline queries, so
+from 70.0 % to 80.0 %. The intervals overlap widely (recall on 16 gold edges, precision on 20
+and 10 proposed edges), so neither change is established. Only one gold edge is held out from every source the pipeline queries, so
 held-out recall is not reported as a rate.
 
 The verifier as a classifier, on [`evals/perturb.jsonl`](evals/perturb.jsonl) (81 claim cases:
@@ -179,13 +183,13 @@ GiantSteps+ Key) and [`evals/reports/audio-2026-10-25.md`](evals/reports/audio-2
   labels for the whole excerpt, with ambiguous key labels left out. The figures cannot be
   compared with published ones for these datasets.
 - **Keys are mostly withheld**: the service answers a key for 48 of 250 GiantSteps+ clips
-  (MIREX 80.8 % on those it answers). It withheld the key on every golden-run preview (above).
+  (MIREX 80.8 % on those it answers).
 - **beat-this**, measured as a candidate and not shipped, was trained on Ballroom: its Ballroom
   figure (148/200) is on its own training data. On GiantSteps Tempo it had Acc1 109/400 = 27.3 %
   [23.1, 31.8] (`docs/design.md`, "Alternatives that were rejected").
 - **Analyzer versions**: the service is now at 2.3.6. A controls run at 2.3.6 gave the same
-  outputs as at 2.3.4 (`evals/reports/audio-2026-10-30.md`); GiantSteps Tempo was last measured
-  at 2.1.0.
+  outputs as at 2.3.4 (`evals/audio/README.md`; the run is
+  `evals/reports/audio-2026-10-30.md`); GiantSteps Tempo was last measured at 2.1.0.
 - The audio is commercial excerpts, fetched for evaluation only and never committed; the
   annotations' licences are in [NOTICE](NOTICE).
 
@@ -207,9 +211,11 @@ ones marked "case" from a committed replay or run record.
 - **A verifier reason can misstate its excerpt** (case). On Praise You a production claim is
   shown as partly supported, and the judge's reason says the excerpt does not name "Balance &
   Rehearsal", although it does.
-- **Identity can resolve a later reissue** (case). In the evaluation, Juicy and six other rows
-  resolved to a later recording of the same song. A later recording often carries none of the
-  original's MusicBrainz relations, so those pages show no sample links.
+- **Identity can miss the original recording** (case). In the evaluation, 7 of 24 rows did not
+  resolve the row's own MusicBrainz recording: 3 took a later reissue (Juicy, Ice Ice Baby, I'll
+  Be Missing You), 2 had the right ISRC but reached another MusicBrainz recording (U Can't Touch
+  This, Take On Me), and 2 reached no MusicBrainz recording at all (Levels, Crazy). None of the 7
+  pages has a sample link built from a record.
 - **Keys are rarely served.** The service withholds a key unless the clip has clear, steady
   pitch: 202 of 250 GiantSteps+ clips, and every golden-run preview.
 - **The flat `audioSource` field reads "unavailable" whenever no key is measured**, even beside
@@ -238,8 +244,8 @@ ones marked "case" from a committed replay or run record.
   failed." Nothing is stored, and the next run tries again (#291).
 - **A failed download's detail can hold the clip link.** For some 502 answers from the preview
   host, the API keeps the response's percent-encoded clip link in the analysis's
-  `unavailableDetail`. The link is a short-lived signed CDN URL (about 15 minutes) and is never
-  recorded in a cassette.
+  `unavailableDetail`, a field of the run's state that its checkpoint keeps. The link is a
+  short-lived signed CDN URL (about 15 minutes) and is never recorded in a cassette.
 - **Old runs measured on Spotify's clip.** A direct run link (`/api/runs/:id`) still serves a
   run that was measured on Spotify's clip before Spotify's audio stopped being analysed, as
   recorded and labelled `preview.provider: "spotify"`, until retention removes it (30 days by
@@ -318,7 +324,7 @@ flowchart LR
 | --- | --- |
 | Web app | React 19, TypeScript, Vite, Tailwind CSS v4; the map drawn with `d3-selection`, `d3-zoom`, `d3-drag` and `d3-transition`; Recharts for the fingerprint chart; Lucide icons; self-hosted Inter and IBM Plex Mono |
 | API | Node.js 24, Express 5, LangGraph 1.5, zod (the shared contract in `packages/contract`), SQLite through `better-sqlite3` |
-| Models | Azure OpenAI through the API's provider layer (`apps/api/src/llm`), with a shared spend log and budget caps; the composer and the judge on different deployments |
+| Models | Azure OpenAI through the API's provider layer (`apps/api/src/llm`), with a shared spend log and budget caps; the composer and the judge on different deployments by default |
 | Audio service | Python 3.12, FastAPI; Essentia (`RhythmExtractor2013` and `KeyExtractor`) by default, librosa as the fallback; Essentia's TensorFlow models for the style and mood scores |
 | Deployment | Docker Compose, Caddy, Cloudflare Turnstile (`deploy/`) |
 | Tooling | npm workspaces, uv, Biome, ruff, Vitest, pytest, Playwright |
@@ -375,7 +381,7 @@ variable `apps/api/.env.example` lists, where it explains each one in full:
 | `LLM_PROVIDER` | the model provider: `azure` (default); `gemini` is not implemented and refuses every call |
 | `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT` | the Azure OpenAI resource's key and root URL (`https://<resource>.cognitiveservices.azure.com/`); calls use its v1 API |
 | `AZURE_OPENAI_BASE_URL`, `AZURE_OPENAI_API_VERSION` | a v1 base URL used instead of the endpoint's; the API version is accepted and not used |
-| `AZURE_OPENAI_DEPLOYMENT_FAST`, `_MAIN`, `_RESEARCH`, `_JUDGE`, `_PRO` | the deployment of each tier (fast: scout, classification, research planner; main: composer; research; judge: verifier). Defaults `gpt-6-luna` for fast and main, `gpt-6-sol` for research and judge |
+| `AZURE_OPENAI_DEPLOYMENT_FAST`, `_MAIN`, `_RESEARCH`, `_JUDGE`, `_PRO` | the deployment of each tier (fast: scout, classification, research planner; main: composer; research: summaries; judge: verifier). `_PRO` is the fallback for research and judge, and `_FAST` for main. Defaults `gpt-6-luna` for fast and main, `gpt-6-sol` for research and judge |
 | `LLM_SPEND_LOG` | absolute path of the spend log (JSONL) shared by every process; live model calls are refused while it is unset or missing. Create it once with `npm run smoke:llm -w apps/api -- --init` |
 | `BUDGET_TOTAL_USD`, `BUDGET_DAILY_USD`, `BUDGET_EVAL_FLOOR_USD`, `BUDGET_EVAL_GOLDEN_USD`, `BUDGET_EVAL_BASELINE_USD`, `BUDGET_EVAL_PERTURB_USD`, `BUDGET_EVAL_VARIANCE_USD` | budget caps in USD over the spend log: total, per UTC day, the evaluation floor and each evaluation's own cap |
 | `LLM_TIMEOUT_MS`, `MAX_LLM_CALLS_PER_RUN`, `LLM_CONCURRENCY` | one attempt's timeout, model calls per analysis, calls in flight per process |

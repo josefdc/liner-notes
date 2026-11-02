@@ -61,8 +61,10 @@ draft, and is the only node that completes a composed run. It has three tiers:
    contradicted; it is never dropped.
 3. **One judge call** (`judge.ts`) on the model claims that still cite evidence. The judge reads
    each claim with the excerpts it cites, and only those, and answers supported, partial,
-   unsupported or contradicted, with a reason. It runs on a different deployment from the
-   composer (in the golden run: judge `gpt-6-sol`, composer `gpt-6-luna`).
+   unsupported or contradicted, with a reason. By default it runs on a different deployment from
+   the composer (in the golden run: judge `gpt-6-sol`, composer `gpt-6-luna`); the API warns,
+   and does not refuse, when both are set to the same one. The call takes at most a fixed number
+   of claims (`JUDGE_BATCH_MAX`, the links' claims first); the rest get no verdict.
 
 A model claim is then **sourced** when the judge found it supported by its excerpts (or partly
 supported, for a claim that asserts no relation); otherwise it is **inferred**. A claim that
@@ -110,11 +112,13 @@ is chosen by a rule from the golden run (`evals/agent/showcase.mjs`), not by han
 - **A model that fills gaps.** A missing value stays missing with its reason; no source, model
   or default is used in its place.
 - **beat-this as the default tempo estimator.** On GiantSteps Tempo it gave more correct tempos
-  than Essentia (Acc1 109/400 against 93/400, analyzer 2.1.0,
-  [`evals/reports/audio-2026-10-25.md`](../evals/reports/audio-2026-10-25.md)), but it has no
-  key estimate, would add 745.0 MB installed plus an 81.1 MB model to the audio image, took
-  3.39 s per clip against Essentia's 0.29 s, and its Ballroom figures are on its own training
-  data. Essentia stays the default, librosa the fallback.
+  than Essentia over all 400 clips (Acc1 109/400 against 93/400, analyzer 2.1.0,
+  [`evals/reports/audio-2026-10-25.md`](../evals/reports/audio-2026-10-25.md)), but the gain was
+  not stable across the report's calibration and evaluation halves (49 against 54 of 206 clips, 60 against 39 of 194). It has
+  no key estimate, would add 745.0 MB installed plus an 81.1 MB model to the audio image, and
+  took a median 3.39 s of CPU time per clip against Essentia's 0.29 s (the report's cost run);
+  its Ballroom figures are on its own training data. Essentia stays the default, librosa the
+  fallback.
 - **Analysing Spotify's previews.** Spotify's terms restrict using its content for machine
   learning. Only Deezer previews are measured; Spotify supplies search, track metadata, cover
   images and the preview clips the map plays, with attribution (see [NOTICE](../NOTICE)).

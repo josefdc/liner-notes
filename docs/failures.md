@@ -5,7 +5,8 @@ recording or run record that shows it and a command that prints it from the repo
 network and no model call. Run the commands from the repository root. The replays
 (`fixtures/replays`) are the showcase runs the app serves; the run records
 (`evals/agent/runs/2026-10-31`) are the golden run's, recorded at the commit kept by the tag
-`golden-run-2026-10-31`. Every known limitation, including those with no case here, is listed in
+`golden-run-2026-10-31`. The `showcase.mjs` commands need `npm ci` and the contract package
+built (`npm run build -w packages/contract`). Every known limitation, including those with no case here, is listed in
 the [README](../README.md#known-limitations).
 
 The second part of this page, "Unmatched edges in the agent eval", is written for the agent
@@ -75,8 +76,10 @@ node -e 'const a = require("./fixtures/replays/praise-you-fatboy-slim.json").ana
   recording of the same song. That recording carries none of the original's MusicBrainz
   relations, so the page has no code-built sample links.
 - **How often**: identity is right on 17 of 24 rows (70.8 %, 95 % CI [50.8, 85.1],
-  `evals/reports/agent-2026-10-31.md`); Juicy is one of the 7 rows that resolved to another
-  recording of the song.
+  `evals/reports/agent-2026-10-31.md`). Of the 7 misses, 3 took a later reissue (Juicy, Ice Ice
+  Baby, I'll Be Missing You), 2 had the row's ISRC but reached another MusicBrainz recording
+  (U Can't Touch This, Take On Me), and 2 reached no MusicBrainz recording (Levels, Crazy). None
+  of the 7 has a code-built link.
 - **Why**: the track the run went on with was the reissue: the evaluation answers the
   clarification step with its top-ranked candidate, and the identity chain follows the chosen
   track's ISRC to its MusicBrainz recording.
@@ -90,8 +93,8 @@ node evals/agent/showcase.mjs | grep Juicy
 
 ## SecondHandSongs without its key
 
-- **What shows**: no SecondHandSongs relations in 12 of the golden run's 24 runs. Every request
-  those runs made to SecondHandSongs was refused with HTTP 403.
+- **What shows**: no SecondHandSongs relations in any of the golden run's 24 runs. The 12 runs
+  that asked SecondHandSongs were refused with HTTP 403; the other 12 did not ask it.
 - **Why**: the runs had no `SHS_API_KEY`, and SecondHandSongs refused the anonymous requests.
   The report counts it apart from source errors ("Sources the runs could not read" in
   `evals/reports/agent-2026-10-31.md`).

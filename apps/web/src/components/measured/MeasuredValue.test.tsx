@@ -202,8 +202,8 @@ describe('MeasuredValue, compact, without a confidence or basis', () => {
       />,
     );
     const pair = container.querySelector('[data-value-pair]') as HTMLElement;
-    // One line from md up; on a narrow screen the chip right under the value, for every value.
-    expect(pair.className).toContain('md:flex-nowrap');
+    // One line from lg up; below it the chip right under the value, for every value.
+    expect(pair.className).toContain('lg:flex-nowrap');
     expect(pair.className).toContain('flex-col');
     expect(pair.className).toContain('gap-1');
     expect(pair.children).toHaveLength(2);

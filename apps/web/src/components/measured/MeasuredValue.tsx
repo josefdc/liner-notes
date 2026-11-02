@@ -186,14 +186,14 @@ export const MeasuredValue: React.FC<MeasuredValueProps> = ({
       }
     >
       {/* Compact: the value and its chip are one unit, closer to each other than to the next
-          value. From md up they share a line; on a narrow screen, where a value and its chip
-          together are wider than the screen, every chip sits right under its value, at the
-          same edge */}
+          value. From lg up they share a line; below lg, where a value and its chip together
+          can be wider than the Dashboard's hero beside the cover (a tablet at 768 px), every
+          chip sits right under its value, at the same edge */}
       <span
         data-value-pair={compact || undefined}
         className={
           compact
-            ? 'flex max-w-full flex-col items-start gap-1 md:flex-row md:flex-nowrap md:items-center'
+            ? 'flex max-w-full flex-col items-start gap-1 lg:flex-row lg:flex-nowrap lg:items-center'
             : 'inline-flex flex-wrap items-center gap-1.5 max-w-full'
         }
       >

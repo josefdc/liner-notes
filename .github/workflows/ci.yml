@@ -178,6 +178,50 @@ jobs:
           path: playwright-report/
           retention-days: 7
 
+  # The visual baselines (tests/web/visual.spec.ts), compared in the image that drew them: its
+  # linux/amd64 manifest, pinned by digest (scripts/visual.mjs runs the same one locally;
+  # scripts/visual.test.mjs checks they agree). The image has Node, npm and Playwright's browsers.
+  visual:
+    name: visual baselines
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    container:
+      image: mcr.microsoft.com/playwright:v1.64.1-noble@sha256:ee15712262f017b8157421b212b12099146645f44b1bc5c0514cbbe6a229b1d0
+      options: --platform linux/amd64 --init --shm-size 1g
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Use npm 11.18 or later
+        run: |
+          if ! npx -y semver@7.7.3 -r '>=11.18.0' "$(npm --version)" >/dev/null; then
+            npm install -g npm@11.19.1
+          fi
+          npm --version
+      # The rasteriser picks its code by the CPU's instruction set: name the CPU, so a diff can
+      # be told from a runner of another kind (the baselines were drawn with AVX-512).
+      - name: Runner CPU
+        run: |
+          grep -m1 'model name' /proc/cpuinfo
+          if grep -qw avx512f /proc/cpuinfo; then echo 'avx512f: yes'; else echo 'avx512f: no'; fi
+      - run: npm ci
+      - run: npm run build -w packages/contract
+      - run: npx playwright test --project=visual
+        env:
+          CI: "true"
+          PLAYWRIGHT_VISUAL: "1"
+          # The image's browsers (its own default too), whatever HOME the runner sets.
+          PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
+      # The report, with each failed view's expected, actual and diff images.
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: visual-report
+          path: |
+            playwright-report-visual/
+            test-results-visual/
+          retention-days: 7
+
   python:
     name: audio service (ruff, pytest)
     runs-on: ubuntu-latest

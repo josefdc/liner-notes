@@ -40,12 +40,14 @@ values never come from the model.
 | --- | --- |
 | ![The search page](docs/images/search.png) | ![The Player of One More Time, with its sourced notes](docs/images/player.png) |
 
-![The song-relations map of One More Time, with its retrieved sample and remix links](docs/images/map.png)
+![The song-relations map of Hung Up (Madonna), with its retrieved sample and remix links](docs/images/map.png)
 
 The screenshots are taken from the showcase replays by `node scripts/readme-shots.mjs` (it starts
-the API with `REPLAY_MODE=only` and dummy keys, and the web app, on free local ports; see the
-script's header). The browser loads nothing from outside the page's origin, so the album cover
-shows as not available; `--covers` lets the Cover Art Archive's image load.
+the API with `REPLAY_MODE=only` and dummy keys, and the web app, on free local ports, with
+outbound network denied; see the script's header). The map is Hung Up's, whose timeline fits the
+1440 px window; One More Time's runs past its right edge. The browser loads nothing from outside
+the page's origin, so the album cover shows as not available; `--covers` lets the Cover Art
+Archive's image load.
 
 ## The showcase
 

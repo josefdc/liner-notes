@@ -4,36 +4,51 @@
 //
 //   node scripts/readme-shots.mjs [--out docs/images] [--covers] [--channel chrome]
 //
-// Starts the API with REPLAY_MODE=only, dummy keys and a scratch database (as
-// scripts/replay-e2e.mjs does, with tests/deny-network.mjs preloaded, so the API cannot reach the
-// network), and the web app's Vite dev server forwarding /api to it, both on free loopback ports.
+// Refuses to start while the API's settings file (apps/api/.env) exists, so nothing of a
+// developer's settings or keys can reach the API it starts; it checks only that the file exists,
+// and never reads it. Starts the API with the environment scripts/replay-e2e.mjs gives it
+// (scripts/replay-api-env.mjs: REPLAY_MODE=only, dummy keys, every setting pinned, a scratch
+// database, tests/deny-network.mjs preloaded), and the web app's Vite dev server forwarding /api
+// to it, with the same network guard, both on free loopback ports.
 // Then, in Playwright's Chromium (`--channel chrome` for Google Chrome) at 1440 x 900, device pixel
 // ratio 1, motion reduced, it opens and saves:
 //
 //   search.png      the landing page
 //   dashboard.png   the Dashboard of the demo replay, One More Time (Daft Punk)
 //   player.png      its Player ("View full analysis")
-//   map.png         its song-relations map, full size (/t/<id>/map)
+//   map.png         the song-relations map of Hung Up (Madonna), full size (/t/<id>/map)
 //
 // The browser may load only the page's own origin: every other request is aborted, so nothing
 // leaves the machine and the album cover shows as not loaded. `--covers` lets the Cover Art
 // Archive's images load (coverartarchive.org and archive.org), to show the cover as the app does.
 //
-// The PNGs are what Chromium writes, unmodified. Exits 1 when a view does not show.
+// The dashboard is saved down to its "Connections" heading and the map with the whole graph in
+// view (the map's own "Fit graph to view"), so neither is cut by the window's edge.
+//
+// The PNGs are what Chromium writes, unmodified. Once both servers have exited, it reads the
+// network guard's report: any outbound attempt by either fails the run. Exits 1 when a view does
+// not show or the guard counted an attempt.
 
 import { spawn } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
+import { replayApiEnv } from "./replay-api-env.mjs";
+import { readReportFile } from "./stop-server.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const DEMO = "one-more-time-daft-punk";
+// The map's showcase: its timeline fits 1440 px (4 year columns), where One More Time's (9 years)
+// runs off the right edge, and the map cannot zoom out below 1.
+const MAP_DEMO = "hung-up-madonna";
 const VIEWPORT = { width: 1440, height: 900 };
 const LISTENING = /"msg":"Liner Notes API listening on port (\d+)"/;
 const COVER_HOSTS = /(^|\.)(coverartarchive\.org|archive\.org)$/;
+// The unspecified addresses (0.0.0.0, ::, and :: written out in full).
+const UNSPECIFIED = /^(0\.0\.0\.0|::|0000(:0000){7})$/;
 
 const { values } = parseArgs({
   options: {
@@ -85,13 +100,33 @@ function start(name, args, { cwd, env, ready, timeoutMs = 120_000 }) {
   });
 }
 
+const SETTINGS_FILE = join(ROOT, "apps", "api", ".env");
 const scratch = mkdtempSync(join(tmpdir(), "readme-shots-"));
+const report = join(scratch, "deny-network.jsonl");
 const children = [];
 let browser;
 
-async function cleanUp() {
+/** Stops the servers and waits for them to exit (SIGKILL after 10 s). */
+async function stopChildren() {
   await browser?.close().catch(() => {});
-  for (const child of children) if (child.exitCode === null) child.kill("SIGTERM");
+  await Promise.all(
+    children.map(
+      (child) =>
+        new Promise((done) => {
+          if (child.exitCode !== null || child.signalCode !== null) return done();
+          const kill = setTimeout(() => child.kill("SIGKILL"), 10_000);
+          child.once("exit", () => {
+            clearTimeout(kill);
+            done();
+          });
+          child.kill("SIGTERM");
+        }),
+    ),
+  );
+}
+
+async function cleanUp() {
+  await stopChildren();
   rmSync(scratch, { recursive: true, force: true });
 }
 for (const signal of ["SIGINT", "SIGTERM"]) {
@@ -101,42 +136,28 @@ for (const signal of ["SIGINT", "SIGTERM"]) {
 }
 
 async function main() {
-  const recording = JSON.parse(
-    readFileSync(join(ROOT, "fixtures", "replays", `${DEMO}.json`), "utf8"),
-  );
-  const { id: trackId } = recording.analysis;
-  const query = recording.request.query;
+  if (existsSync(SETTINGS_FILE)) {
+    throw new Error(
+      `${relative(ROOT, SETTINGS_FILE)} exists: move it aside while the screenshots are taken, so ` +
+        "none of its settings or keys can reach the API this starts (it is not read).",
+    );
+  }
+  const recordingOf = (name) =>
+    JSON.parse(readFileSync(join(ROOT, "fixtures", "replays", `${name}.json`), "utf8"));
+  const { query } = recordingOf(DEMO).request;
+  const mapRecording = recordingOf(MAP_DEMO);
   const webPort = await freePort();
   const webOrigin = `http://127.0.0.1:${webPort}`;
 
   // The API, replaying recordings only, with every setting it reads pinned here.
   const api = await start("the API", ["--import", "tsx", "src/index.ts"], {
     cwd: join(ROOT, "apps", "api"),
-    env: {
-      PATH: process.env.PATH ?? "",
-      HOME: process.env.HOME ?? scratch,
-      NODE_OPTIONS: `--import ${join(ROOT, "tests", "deny-network.mjs")}`,
-      DENY_NETWORK_REPORT: join(scratch, "deny-network.jsonl"),
-      NODE_ENV: "development",
-      REPLAY_MODE: "only",
-      REPLAY_DIR: join(ROOT, "fixtures", "replays"),
-      HOST: "127.0.0.1",
-      PORT: "0",
-      SQLITE_DB_PATH: join(scratch, "api.db"),
-      SPOTIFY_CLIENT_ID: "dummy-spotify-client-id",
-      SPOTIFY_CLIENT_SECRET: "dummy-spotify-client-secret",
-      AZURE_OPENAI_API_KEY: "dummy-azure-key",
-      AZURE_OPENAI_ENDPOINT: "https://dummy-resource.openai.azure.com/",
-      LLM_CASSETTE: "off",
-      LLM_SPEND_LOG: join(scratch, "spend.jsonl"),
-      TAVILY_API_KEY: "dummy-tavily-key",
-      AUDIO_ANALYSIS_URL: "http://dummy-audio.invalid:3002",
-      CORS_ORIGINS: webOrigin,
-      TURNSTILE_SECRET_KEY: "",
-      RUN_TOKEN_SECRET: "",
-      LOG_LEVEL: "info",
-      LOG_FILE: join(scratch, "api.jsonl"),
-    },
+    env: replayApiEnv({
+      scratch,
+      report,
+      logFile: join(scratch, "api.jsonl"),
+      corsOrigins: webOrigin,
+    }),
     ready: (output) => output.match(LISTENING),
   });
   children.push(api.child);
@@ -156,6 +177,8 @@ async function main() {
       env: {
         PATH: process.env.PATH ?? "",
         HOME: process.env.HOME ?? scratch,
+        NODE_OPTIONS: `--import ${join(ROOT, "tests", "deny-network.mjs")}`,
+        DENY_NETWORK_REPORT: report,
         WEB_HOST: "127.0.0.1",
         API_PROXY_TARGET: `http://127.0.0.1:${apiPort}`,
         VITE_TURNSTILE_SITE_KEY: "",
@@ -209,10 +232,30 @@ async function main() {
   };
   mkdirSync(outDir, { recursive: true });
   const saved = [];
-  const shoot = async (name) => {
+  const shoot = async (name, clip) => {
     const path = join(outDir, `${name}.png`);
-    await page.screenshot({ path, animations: "disabled", caret: "hide" });
+    await page.screenshot({ path, animations: "disabled", caret: "hide", clip });
     saved.push(path);
+  };
+
+  /** Analyses `text` (a replay, at its recorded pace) and opens its Dashboard. */
+  const analyse = async (text) => {
+    await page.goto(`${webOrigin}/`);
+    await page.getByPlaceholder(/Song title/).fill(text);
+    await page.getByRole("button", { name: "Analyze", exact: true }).click();
+    const heading = page
+      .locator("section")
+      .filter({ has: page.getByRole("button", { name: "View full analysis" }) })
+      .getByRole("heading", { level: 1 });
+    const openButton = page.getByRole("button", { name: "Open the results" });
+    await expect(openButton.or(heading).first()).toBeVisible({ timeout: 180_000 });
+    await expect(async () => {
+      if (await heading.isVisible()) return;
+      if (await openButton.isVisible()) await openButton.click({ timeout: 2_000 });
+      await expect(heading).toBeVisible({ timeout: 2_000 });
+    }).toPass({ timeout: 30_000 });
+    await expect(page.locator('[aria-busy="true"]')).toHaveCount(0);
+    await settled();
   };
 
   // Search.
@@ -221,23 +264,24 @@ async function main() {
   await settled();
   await shoot("search");
 
-  // The Dashboard of the demo replay: the replay runs at its recorded pace.
-  await page.getByPlaceholder(/Song title/).fill(query);
-  await page.getByRole("button", { name: "Analyze", exact: true }).click();
-  const heading = page
-    .locator("section")
-    .filter({ has: page.getByRole("button", { name: "View full analysis" }) })
-    .getByRole("heading", { level: 1 });
-  const openButton = page.getByRole("button", { name: "Open the results" });
-  await expect(openButton.or(heading).first()).toBeVisible({ timeout: 180_000 });
-  await expect(async () => {
-    if (await heading.isVisible()) return;
-    if (await openButton.isVisible()) await openButton.click({ timeout: 2_000 });
-    await expect(heading).toBeVisible({ timeout: 2_000 });
-  }).toPass({ timeout: 30_000 });
-  await expect(page.locator('[aria-busy="true"]')).toHaveCount(0);
-  await settled();
-  await shoot("dashboard");
+  // The Dashboard of the demo replay, down to the row that holds "Connections": that row starts
+  // near the window's bottom edge, so it is left out whole rather than cut.
+  await analyse(query);
+  const rowTop = await page.evaluate(() => {
+    const heading = [...document.querySelectorAll("h2")].find(
+      (h) => h.textContent?.trim() === "Connections",
+    );
+    const grid = heading?.closest(".lg\\:col-span-2")?.parentElement;
+    if (!grid) return null;
+    return Math.min(...[...grid.children].map((child) => child.getBoundingClientRect().top));
+  });
+  if (rowTop === null) throw new Error('the Dashboard shows no "Connections" heading');
+  await shoot(
+    "dashboard",
+    rowTop < VIEWPORT.height
+      ? { x: 0, y: 0, width: VIEWPORT.width, height: Math.floor(rowTop) - 24 }
+      : undefined,
+  );
 
   // Its Player.
   await page.getByRole("button", { name: "View full analysis" }).click();
@@ -246,11 +290,17 @@ async function main() {
   await settled();
   await shoot("player");
 
-  // Its song-relations map, full size, from the run the replay stored for the track.
-  await page.goto(`${webOrigin}/t/${trackId}/map`);
+  // The map's showcase, full size, from the run its replay stored for the track; every track of
+  // it must be in view (no "N more" cue at an edge).
+  await analyse(mapRecording.request.query);
+  await page.goto(`${webOrigin}/t/${mapRecording.analysis.id}/map`);
   const graph = page.locator('[data-map-view] svg[aria-label="Connections graph"]');
   await expect(graph.locator("g.nodes > g").first()).toBeVisible();
   await settled();
+  const cues = page.locator("[data-map-view]").getByText(/^\s*(← )?\d+ more\b/);
+  if ((await cues.count()) > 0) {
+    throw new Error(`the map does not fit the window: ${await cues.first().innerText()}`);
+  }
   await shoot("map");
 
   for (const path of saved) {
@@ -260,8 +310,38 @@ async function main() {
     console.log(`requests aborted (not this origin): ${[...blocked].sort().join(", ")}`);
 }
 
+/** The guard's report once both servers have exited: throws on any outbound attempt. */
+function checkGuard() {
+  const { lines, unreadable } = readReportFile(report);
+  const pids = new Set(lines.map((line) => line.pid));
+  // Vite checks that its port is free by listening on each wildcard address, the unspecified IPv6
+  // address among them written out in full; the guard counts the lookup of that spelling. It is
+  // a bind on this machine, not a connection out, so it is printed and not counted.
+  const local = lines.filter(
+    (line) => (line.hosts ?? []).length > 0 && line.hosts.every((host) => UNSPECIFIED.test(host)),
+  );
+  for (const line of local)
+    console.log(`deny-network: not counted (a local bind): ${line.hosts.join(", ")}`);
+  const attempts = lines.filter(
+    (line) => !local.includes(line) && (line.event === "blocked" || line.attempts > 0),
+  );
+  console.log(
+    `deny-network: ${pids.size} guarded process(es), ${attempts.length} report line(s) with an attempt`,
+  );
+  if (pids.size === 0) throw new Error("the network guard wrote no report: was it loaded?");
+  if (unreadable.length > 0) throw new Error(`unreadable report lines: ${unreadable[0]}`);
+  if (attempts.length > 0) {
+    const named = attempts.map(
+      (line) => `${line.argv.join(" ")}: ${(line.hosts ?? []).join(", ") || "(hosts not named)"}`,
+    );
+    throw new Error(`outbound attempts by a server:\n  ${[...new Set(named)].join("\n  ")}`);
+  }
+}
+
 try {
   await main();
+  await stopChildren();
+  checkGuard();
   await cleanUp();
 } catch (error) {
   console.error(error instanceof Error ? error.message : error);

@@ -64,7 +64,8 @@ export function proseLines(text) {
     // the list; without the blank it is a lazy continuation of the item's paragraph.
     if (item !== null && indent < item && previousBlank && !marker) item = null;
     const base = item !== null && indent >= item ? item : 0;
-    const open = line.match(/^\s*(`{3,}|~{3,})/);
+    // A backtick fence's info string holds no backtick: "```x``` and …" opens an inline code span.
+    const open = line.match(/^\s*(`{3,}(?=[^`]*$)|~{3,})/);
     if (open && indent - base <= 3) {
       fence = open[1];
       out.push("");

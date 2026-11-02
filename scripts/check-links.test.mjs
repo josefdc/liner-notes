@@ -106,6 +106,15 @@ describe("linksOf", () => {
     ]);
   });
 
+  it("opens no fence on a line that starts with an inline code span", () => {
+    expect(linksOf("```x``` and [a](gone.md)\n\nLater [b](later.md)\n")).toEqual([
+      { target: "gone.md", line: 1 },
+      { target: "later.md", line: 3 },
+    ]);
+    // A tilde fence's info string may hold backticks, and a backtick fence's may hold tildes.
+    expect(linksOf("~~~ a`b\n[c](in-fence.md)\n~~~\n```js ~x\n[d](in-fence.md)\n```\n")).toEqual([]);
+  });
+
   it("reads unquoted HTML attributes", () => {
     expect(linksOf('<a href=x.md>x</a> <img src=docs/y.png alt="">')).toEqual([
       { target: "x.md", line: 1 },

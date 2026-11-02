@@ -73,9 +73,14 @@ function freePort() {
   });
 }
 
-/** Starts `args` with node in `cwd`; resolves with the child once `ready(output)` matches. */
+/**
+ * Starts `args` with node in `cwd`; resolves with the child once `ready(output)` matches. The
+ * child is in `children` from its spawn, so cleanUp() stops it whatever happens; when it is not
+ * ready within `timeoutMs`, it is stopped at once and the start fails.
+ */
 function start(name, args, { cwd, env, ready, timeoutMs = 120_000 }) {
   const child = spawn(process.execPath, args, { cwd, env, stdio: ["ignore", "pipe", "pipe"] });
+  children.push(child);
   let output = "";
   const append = (chunk) => {
     output += chunk;
@@ -84,6 +89,8 @@ function start(name, args, { cwd, env, ready, timeoutMs = 120_000 }) {
   child.stderr.on("data", append);
   return new Promise((resolveStart, reject) => {
     const timer = setTimeout(() => {
+      clearInterval(poll);
+      child.kill("SIGTERM");
       reject(new Error(`${name} did not start within ${timeoutMs / 1000} s:\n${output}`));
     }, timeoutMs);
     const poll = setInterval(() => {
@@ -162,7 +169,6 @@ async function main() {
     }),
     ready: (output) => output.match(LISTENING),
   });
-  children.push(api.child);
   const apiPort = Number(api.match[1]);
 
   // The web app's dev server, forwarding /api to that API.
@@ -188,7 +194,6 @@ async function main() {
       ready: (output) => output.includes(`:${webPort}`),
     },
   );
-  children.push(web.child);
 
   const { chromium, expect } = await import("@playwright/test");
   browser = await chromium.launch(values.channel ? { channel: values.channel } : {});

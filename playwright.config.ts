@@ -10,6 +10,12 @@ const port = Number(process.env.PLAYWRIGHT_WEB_PORT ?? 3290);
 // spec runs against the build without a site key, as development does.
 const turnstilePort = port + 1;
 const TURNSTILE_SPECS = "**/turnstile*.spec.ts";
+// The visual baselines (tests/web/visual*.spec.ts) are rendered and compared only in the pinned
+// Playwright container, which `npm run test:visual` (scripts/visual.mjs) and CI's visual job run
+// with PLAYWRIGHT_VISUAL=1: the `visual` project exists only there, and is then the only one, so
+// no other browser can compare with the baselines or write them. Everywhere else they are ignored.
+const VISUAL_SPECS = "**/visual*.spec.ts";
+const visual = process.env.PLAYWRIGHT_VISUAL === "1";
 
 export default defineConfig({
   testDir: "tests",
@@ -25,21 +31,54 @@ export default defineConfig({
     channel: "chrome",
     trace: "retain-on-failure",
   },
-  projects: [
-    { name: "no-site-key", testIgnore: TURNSTILE_SPECS },
-    {
-      name: "site-key",
-      testMatch: TURNSTILE_SPECS,
-      use: { baseURL: `http://127.0.0.1:${turnstilePort}` },
-    },
-  ],
+  // The visual project's workers share one preview server, in a container that may see every
+  // core of the machine; elsewhere Playwright's default.
+  workers: visual ? 4 : undefined,
+  projects: visual
+    ? [
+        {
+          name: "visual",
+          testMatch: VISUAL_SPECS,
+          // One file per view, size and ratio, named by the test, for every platform alike: the
+          // container is the only platform.
+          snapshotPathTemplate: "{testDir}/web/__screenshots__/{testFileName}/{arg}{ext}",
+          use: {
+            // The container's own Chromium (it has no Google Chrome).
+            channel: "chromium",
+            reducedMotion: "reduce",
+          },
+          expect: {
+            toHaveScreenshot: {
+              animations: "disabled",
+              caret: "hide",
+              // Up to 0.02% of the pixels may differ: two runs in the same container differ
+              // by up to 0.005% (a few dozen antialiased pixels on the map and the Dashboard's
+              // chart), and another CPU can differ a little more (Skia's software rasteriser
+              // picks its code by the CPU's instruction set). One card's padding 1 px larger
+              // changes 0.1-0.2% of the window.
+              maxDiffPixelRatio: 0.0002,
+            },
+          },
+        },
+      ]
+    : [
+        { name: "no-site-key", testIgnore: [TURNSTILE_SPECS, VISUAL_SPECS] },
+        {
+          name: "site-key",
+          testMatch: TURNSTILE_SPECS,
+          use: { baseURL: `http://127.0.0.1:${turnstilePort}` },
+        },
+      ],
   // Builds served by `vite preview`, made once per run before any worker starts: the dev server
   // compiles each module on its first request, and on a cold cache a page could fail to load a
   // lazy chunk (Dashboard, Player) while the workers' first pages were loading. The servers start
   // one after the other, so the two builds never run at the same time.
+  // The visual project needs only the build without a site key.
   webServer: [
     previewServer(port, {}),
-    previewServer(turnstilePort, { VITE_TURNSTILE_SITE_KEY: "1x00000000000000000000AA" }),
+    ...(visual
+      ? []
+      : [previewServer(turnstilePort, { VITE_TURNSTILE_SITE_KEY: "1x00000000000000000000AA" })]),
   ],
 });
 

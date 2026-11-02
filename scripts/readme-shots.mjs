@@ -22,12 +22,14 @@
 // leaves the machine and the album cover shows as not loaded. `--covers` lets the Cover Art
 // Archive's images load (coverartarchive.org and archive.org), to show the cover as the app does.
 //
-// The dashboard is saved down to its "Connections" heading and the map with the whole graph in
-// view (the map's own "Fit graph to view"), so neither is cut by the window's edge.
+// The dashboard is saved down to the row that holds its "Connections" heading, which starts near
+// the window's bottom edge, so the row is left out whole rather than cut. The map is Hung Up's,
+// whose timeline fits the window (the map cannot zoom out below 1); the run fails when an
+// "N more" cue shows that a track is out of view.
 //
-// The PNGs are what Chromium writes, unmodified. Once both servers have exited, it reads the
-// network guard's report: any outbound attempt by either fails the run. Exits 1 when a view does
-// not show or the guard counted an attempt.
+// The PNGs are what Chromium writes, unmodified (the dashboard's clipped by the screenshot call).
+// Once both servers have exited, it reads the network guard's report: any outbound attempt by
+// either fails the run. Exits 1 when a view does not show or the guard counted an attempt.
 
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";

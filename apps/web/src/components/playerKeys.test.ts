@@ -8,14 +8,14 @@ afterEach(() => {
 /** A Player root with a disclosure button, a `<details>`, and a page part outside it. */
 function page() {
   document.body.innerHTML = `
-    <div id="player">
+    <main id="main-content"><div id="player">
       <button id="toggle" aria-expanded="false" aria-controls="panel">Sources</button>
       <div id="panel"><a id="inside" href="#">A source</a></div>
       <details id="list"><summary id="summary">Links as a list</summary><a id="item" href="#">x</a></details>
       <input id="text" type="text" />
       <input id="box" type="checkbox" />
       <div id="editable" contenteditable="true"><span id="typed">text</span></div>
-    </div>
+    </div></main>
     <footer><a id="outside" href="#">Source code</a></footer>`;
   const toggle = document.getElementById('toggle') as HTMLButtonElement;
   // The button toggles its own state, as a React disclosure does.
@@ -61,6 +61,9 @@ describe('escapeAction', () => {
     const { root, el } = page();
     expect(escapeAction(escapeKey(el('toggle')), root)).toBe('back');
     expect(escapeAction(escapeKey(document.body), root)).toBe('back');
+    // The main landmark, focused by the skip link (or kept by a click on words in it), is the
+    // page too.
+    expect(escapeAction(escapeKey(el('main-content')), root)).toBe('back');
   });
 
   it('closes first when a disclosure is open', () => {

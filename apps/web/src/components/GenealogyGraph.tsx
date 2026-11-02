@@ -83,6 +83,7 @@ import { Button } from './ui/Button';
 import { isValidImageUrl } from '../utils/image';
 import { useReducedMotion } from '../utils/motion';
 import { useMdUp, useNoHover } from '../utils/layout';
+import { isPageFocus } from '../utils/pageFocus';
 import type { GenealogyNode, TrackData } from '../types';
 
 /** Something in the graph that keyboard focus or the pointer can be on: a track or a link. */
@@ -2094,7 +2095,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     const active = document.activeElement;
     const inPanel = active !== null && (panelRef.current?.contains(active) ?? false);
     setSelectedId(null);
-    if (id && (inPanel || active === document.body)) focusCard(id);
+    if (id && (inPanel || isPageFocus(active))) focusCard(id);
   };
   // Escape closes a list open over the panel first (the links, the previews), then stops A/B
   // listening, then closes the panel, then the hover box. With neither a selection nor a pair
@@ -2140,9 +2141,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || event.defaultPrevented) return;
       const target = event.target;
-      if (target !== document.body && target !== document.documentElement && target !== document) {
-        return;
-      }
+      if (!isPageFocus(target)) return;
       const root = rootRef.current;
       if (!root || (typeof root.checkVisibility === 'function' && !root.checkVisibility())) return;
       if (escapeRef.current()) event.preventDefault();
@@ -2474,7 +2473,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
                           // macOS), the focus is on no element while the cue stays.
                           requestAnimationFrame(() => {
                             if (button.isConnected) return;
-                            if (document.activeElement && document.activeElement !== document.body)
+                            if (document.activeElement && !isPageFocus(document.activeElement))
                               return;
                             focusMapRef.current?.();
                           });

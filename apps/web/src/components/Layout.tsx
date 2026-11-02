@@ -1,5 +1,6 @@
 import type React from 'react';
 import { SOURCE_URL } from '../sourceUrl';
+import { MAIN_CONTENT_ID } from '../utils/pageFocus';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -22,7 +23,7 @@ function followSkipLink(event: React.MouseEvent<HTMLAnchorElement>) {
   // A click with a modifier (a new tab or window) is left to the browser.
   if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
     return;
-  const main = document.getElementById('main-content');
+  const main = document.getElementById(MAIN_CONTENT_ID);
   if (!main) return;
   event.preventDefault();
   main.setAttribute('tabindex', '-1');

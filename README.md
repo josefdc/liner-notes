@@ -307,8 +307,8 @@ flowchart LR
   engineer -.-> deezer["Deezer<br/>preview clip"]
   engineer -.-> audio["Audio service<br/>FastAPI, Essentia"]
   historian -.-> records["MusicBrainz, Discogs, SecondHandSongs,<br/>Genius, ListenBrainz, Last.fm, Tavily"]
-  historian -.->|research planner| llm
   composer -.-> llm["Azure OpenAI<br/>research planner, composer,<br/>judge, More facts"]
+  historian -.->|research planner| llm
   verifier -.-> llm
   api -.->|More facts| llm
   api --- db[("SQLite<br/>runs, caches,<br/>checkpoints")]
@@ -320,11 +320,15 @@ flowchart LR
 - **engineer** finds the Deezer preview of the recording (by its ISRC, else a strict search
   match) and sends it to the audio service, which returns the measured block (or why it measured nothing).
 - **historian** resolves the recording on MusicBrainz and gathers primary records and search
-  excerpts into the run's evidence pack; code builds the sourced claims and links from it.
+  excerpts into the run's evidence pack; a model call (the fast tier's research planner) picks
+  its follow-up steps, and code builds the sourced claims and links from it.
 - **composer** writes the notes from the evidence; it has no field for a measured value.
 - **verifier** checks every claim (deterministic checks, the numeric check, one judge call),
   sets each claim's kind, writes the measurement in and completes the run
   ([`docs/design.md`](docs/design.md#the-verifier)).
+- **More facts** in the Player is a route of its own, outside the graph (`/api/factoids/more`
+  and its stream): one model call per focus on the main tier, then the judge checks the facts it
+  returns (`apps/api/src/factoids/service.ts`).
 - Results are stored in SQLite and served again by run or by track; recorded runs are replayed
   with `REPLAY_MODE`. In deployment, Caddy serves the built web app and forwards `/api` to the
   API, and only the API reaches the audio service.

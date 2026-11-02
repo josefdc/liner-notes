@@ -665,6 +665,40 @@ describe("runs routes", () => {
     expect(none.body).toMatchObject({ success: false, code: "failed" });
   });
 
+  it("serves a track's run measured on Spotify's clip by its id only, never as the track's run", async () => {
+    const older = await analyze("plain query");
+    const latest = await analyze("plain query again");
+    getDb()
+      .prepare("UPDATE runs SET finished_at = finished_at - 60 WHERE run_id = ?")
+      .run(older.runId);
+    const measuredOn = (runId: string, provider: "deezer" | "spotify") => {
+      const analysis = getRun(getDb(), runId)?.analysis as object;
+      const preview = { provider, method: provider === "spotify" ? "id" : "isrc", score: null };
+      getDb()
+        .prepare("UPDATE runs SET analysis = ? WHERE run_id = ?")
+        .run(JSON.stringify({ ...analysis, preview }), runId);
+    };
+    measuredOn(older.runId, "deezer");
+    measuredOn(latest.runId, "spotify");
+
+    // A direct link still shows the run as it was recorded.
+    const byId = await request(app).get(`/api/runs/${latest.runId}`);
+    expect(byId.status).toBe(200);
+    expect(byId.body.analysis.preview).toMatchObject({ provider: "spotify" });
+
+    // The track's latest run measured on Deezer's clip is served in its place.
+    const byTrack = await request(app).get(`/api/runs/by-track/${TRACK_ID}`);
+    expect(byTrack.status).toBe(200);
+    expect(byTrack.body.run.id).toBe(older.runId);
+    expect(byTrack.body.analysis.preview).toMatchObject({ provider: "deezer" });
+
+    // With none left, the web can offer a fresh analysis.
+    measuredOn(older.runId, "spotify");
+    const none = await request(app).get(`/api/runs/by-track/${TRACK_ID}`);
+    expect(none.status).toBe(404);
+    expect(none.body).toMatchObject({ success: false, code: "not_found" });
+  });
+
   it("serves neither a stored forum thread nor a social page, by id or by track", async () => {
     const older = await analyze("plain query");
     const latest = await analyze("plain query again");

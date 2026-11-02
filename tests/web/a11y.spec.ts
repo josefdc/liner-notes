@@ -23,9 +23,9 @@ import { offline } from "./offline";
 // picture's role (on the timeline or the map), and connected-track cards that are real buttons,
 // reached and pressed from the keyboard. A screen-reader pass is a manual check.
 //
-// What axe cannot decide (its "incomplete" results: mostly colour contrast over a gradient, an
-// image or a translucent layer) is logged, not failed. The theme's colour pairs are checked by
-// `npm run check:contrast` instead, within the limits that script states.
+// What axe cannot decide (its "incomplete" results) is logged, and fails unless its rule is in
+// REVIEW with the reason: today only colour contrast over a gradient, an image or a translucent
+// layer, whose colour pairs `npm run check:contrast` checks instead, within the limits it states.
 
 const ANALYZE = "/api/analyze/stream";
 const TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "best-practice"];
@@ -40,6 +40,31 @@ const WIDTHS = [
  * here that no longer fires on any view should be removed; one not listed fails the test.
  */
 const KNOWN: Record<string, string> = {};
+
+/**
+ * What axe may leave undecided ("incomplete", needs review), by rule id, with the reason. Any
+ * other rule axe cannot decide fails the test.
+ */
+const REVIEW: Record<string, string> = {
+  "color-contrast":
+    "Text over a gradient, an image or a translucent layer: axe cannot work out its background. " +
+    "The theme's colour pairs are checked by `npm run check:contrast`, within the limits it states.",
+};
+
+type Node = { id: string };
+type Link = { source: string; target: string };
+
+/** A copy of a fixture whose result's map is changed by `patch`. */
+function withGenealogy(name: string, patch: (genealogy: { nodes: Node[]; links: Link[] }) => void) {
+  const fixture = loadFixture(name);
+  for (const events of Object.values(fixture.streams) as unknown[]) {
+    if (!Array.isArray(events)) continue;
+    for (const event of events) {
+      if (event?.type === "complete") patch(event.data.genealogy);
+    }
+  }
+  return fixture;
+}
 
 /** The recorded demo run's track (One More Time), stored as a replayed run. */
 const OMT = "0DiWol3AO6WpXZgp0goxAV";
@@ -225,7 +250,28 @@ const VIEWS: View[] = [
     tabs: true,
   },
   {
-    // The two Player views above draw the compact row of cards: this one draws the map.
+    // The compact row of cards, two of them, each with an artist and a year.
+    name: "the Player with a compact row of two related tracks",
+    open: async (page) => {
+      const two = ["s2", "s3"];
+      await useMockApi(
+        page,
+        withGenealogy("genealogy-rich", (genealogy) => {
+          genealogy.nodes = genealogy.nodes.filter((node) => ["current", ...two].includes(node.id));
+          genealogy.links = genealogy.links.filter(
+            (link) => two.includes(link.source) && link.target === "current",
+          );
+        }),
+      );
+      await analyzeAndOpenDashboard(page, "Bright Lines");
+      await openPlayer(page);
+      await expect(page.locator("#panel-genealogy [data-lineage-card]")).toHaveCount(3);
+    },
+    shown: (page) => page.getByRole("button", { name: /Back to summary/ }),
+    tabs: true,
+  },
+  {
+    // The Player views above draw the compact row of cards: this one draws the map.
     name: "the Player of the replayed showcase, with its map",
     open: async (page) => {
       await useMockApi(page, storedApi());
@@ -313,7 +359,9 @@ type Found = {
  * axe's violations on the page as it is, each with its impact and where it fires, and what it
  * could not decide ("needs review"), by rule.
  */
-async function violations(page: Page): Promise<{ found: Found[]; review: string[] }> {
+async function violations(
+  page: Page,
+): Promise<{ found: Found[]; review: Array<{ id: string; line: string }> }> {
   const results = await new AxeBuilder({ page }).withTags(TAGS).analyze();
   const found = results.violations.map((violation) => ({
     id: violation.id,
@@ -322,9 +370,13 @@ async function violations(page: Page): Promise<{ found: Found[]; review: string[
     targets: violation.nodes.slice(0, 5).map((node) => node.target.join(" ")),
     first: `${violation.nodes[0]?.failureSummary ?? ""} | ${violation.nodes[0]?.html.slice(0, 300) ?? ""}`,
   }));
-  const review = results.incomplete.map(
-    (item) => `${item.id} (${item.impact ?? "unknown"}, ${item.nodes.length})`,
-  );
+  const review = results.incomplete.map((item) => ({
+    id: item.id,
+    line: `${item.id} (${item.impact ?? "unknown"}, ${item.nodes.length}) at ${item.nodes
+      .slice(0, 5)
+      .map((node) => node.target.join(" "))
+      .join(", ")}`,
+  }));
   return { found, review };
 }
 
@@ -379,8 +431,10 @@ for (const view of VIEWS) {
         const at = tab ? `${width} px, ${tab} tab` : `${width} px`;
         const { found, review } = await violations(page);
         console.log(`[axe] ${view.name} at ${at}: ${counts(found)}`);
-        if (review.length > 0)
-          console.log(`[axe]   ${view.name}, ${at}, needs review: ${review.join(", ")}`);
+        for (const item of review) {
+          console.log(`[axe]   ${view.name}, ${at}, needs review: ${item.line}`);
+          if (!(item.id in REVIEW)) failures.push(`${at}: needs review, not listed: ${item.line}`);
+        }
         for (const item of found) {
           const line = `${at}: ${item.id} (${item.impact}, ${item.nodes}) at ${item.targets.join(", ")}`;
           console.log(`[axe]   ${view.name}, ${line}`);

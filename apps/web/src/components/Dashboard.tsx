@@ -503,7 +503,8 @@ const Dashboard: React.FC<DashboardProps> = ({
                     {rec.img ? (
                       <img
                         src={rec.img}
-                        alt={rec.title}
+                        // Decorative: the button is named by the title it draws beside it.
+                        alt=""
                         className="w-full h-full object-cover opacity-80 group-hover:opacity-100 group-hover:scale-105 transition-all duration-(--duration-slow)"
                       />
                     ) : (

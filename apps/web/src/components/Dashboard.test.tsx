@@ -428,6 +428,7 @@ describe('Dashboard connected tracks', () => {
         ...node('older', 2, 'Older Record - Someone (1984)'),
         trackTitle: 'Older Record (2003 Remaster)',
         trackArtist: 'Someone & The Band',
+        img: 'https://i.scdn.co/image/ab67616d0000b273older',
       },
       // Only a label, written "Title - Artist (Year)": its title is read from it, never its
       // artist ("Song - Live at Wembley (1986)" has the same form).
@@ -444,6 +445,8 @@ describe('Dashboard connected tracks', () => {
       { title: 'Later Track', artist: null },
     ]);
     expect(shown[1].querySelector('img, [data-placeholder-note]')).not.toBeNull();
+    // The cover is decorative: the card's name is its drawn title, not the title twice.
+    expect(shown[0].querySelector('img')?.getAttribute('alt')).toBe('');
   });
 
   it('invents no artist: a label is read as "Title - Artist (Year)" only when it has that form', async () => {

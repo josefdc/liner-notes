@@ -39,7 +39,10 @@ repository.
   read from the wheel's binaries; licences marked "as stated by upstream" are the projects' own,
   not read from a file in the wheel:
   - TensorFlow 2.5.0 (libtensorflow, a separate library in the wheel): Apache-2.0, as stated by
-    upstream.
+    upstream. The library also contains third-party code under its own licences, among it
+    BoringSSL, libjpeg-turbo 2.0.0, Protocol Buffers, gRPC, oneDNN, Abseil, SQLite, libcurl and
+    Eigen (named in the binary); TensorFlow lists these and their licences in its third-party
+    licence files upstream (https://github.com/tensorflow/tensorflow, third_party/).
   - Linked into Essentia's extension module:
     - FFmpeg 2.8.12 (libavcodec, libavformat, libavutil, libswresample), built without its GPL
       parts: LGPL-2.1-or-later, as the libraries state in the binary;
@@ -51,12 +54,16 @@ repository.
     - Chromaprint: LGPL-2.1-or-later, as stated by upstream;
     - Gaia (Music Technology Group): AGPL-3.0, as stated by upstream;
     - Qt (QtCore, open-source edition): LGPL, as stated by upstream;
-    - libyaml: MIT, as stated by upstream.
+    - libyaml: MIT, as stated by upstream;
+    - Eigen (its Tensor module): MPL-2.0, as stated by upstream;
+    - zlib (inflate 1.2.12 and deflate 1.2.5, by their version strings): Zlib licence, as
+      stated by upstream.
 - soxr 1.0.0 (python-soxr, a dependency of librosa). Licence: LGPL-2.1-or-later (its package
   metadata).
 - libsndfile 1.2.2, bundled in the soundfile 0.13.1 wheel. Licence: LGPL-2.1 (the wheel's
-  _soundfile_data/COPYING). It is built with mpg123 and LAME (LGPL, as stated by upstream) and
-  Opus (BSD-3-Clause, as stated by upstream).
+  _soundfile_data/COPYING). It is built with mpg123 and LAME 3.100 (LGPL, as stated by
+  upstream), and with libFLAC 1.4.3, libogg, libVorbis 1.3.7 and Opus 1.4 (BSD-3-Clause,
+  Xiph.Org, as stated by upstream); names and versions read from the library's binary.
 - GCC runtime libraries bundled in wheels: libgfortran in numpy 2.3.5 and scipy 1.16.3,
   GPL-3.0-or-later WITH GCC-exception-3.1, and libquadmath in both, LGPL-2.1-or-later (their
   LICENSE.txt); libgomp in scikit-learn 1.8.0, GPLv3 with the GCC Runtime Library Exception
@@ -72,7 +79,10 @@ The web app serves these fonts from apps/web/public/fonts, unmodified:
 By their package metadata, the other npm and Python dependencies are under MIT, ISC, BSD,
 Apache-2.0 (llvmlite: Apache-2.0 WITH LLVM-exception), MPL-2.0 or PSF-2.0 licences, and one
 npm package under (MIT OR WTFPL) (package-lock.json, services/audio/uv.lock). Package metadata
-does not name the native libraries a wheel bundles; the ones above were read from the wheels.
+does not name the native libraries a wheel bundles. The bundled libraries named above were read
+from the Essentia, soundfile, numpy, scipy and scikit-learn wheels (the names, version and
+copyright strings in their binaries, and the licence files they carry); other wheels were not
+searched, and these lists may not be complete.
 
 
 Model weights
@@ -130,10 +140,10 @@ hold such data too, and are not under the code licence:
 
 - the recorded answers kept for tests and replays: fixtures/, apps/api/src/sources/fixtures/
   and evals/agent/runs/;
-- evals/golden.jsonl: the golden track set, with Deezer and MusicBrainz identifiers, tempo and
-  key labels for 9 of its 45 tracks taken from published sheet music (Musicnotes listings, and
-  one Wikipedia article citing the sheet music), and the pages each relation is cited from
-  (mostly Wikipedia, and MusicBrainz);
+- evals/golden.jsonl: the golden track set, with Deezer and MusicBrainz identifiers; a tempo
+  or a key label for 10 of its 45 tracks (both for 8, a tempo only for 1, a key only for 1),
+  taken from published sheet music (Musicnotes listings, and one Wikipedia article citing the
+  sheet music); and the pages each relation is cited from (mostly Wikipedia, and MusicBrainz);
 - evals/perturb.jsonl: claims with the MusicBrainz evidence they cite, and mutated copies of
   them.
 

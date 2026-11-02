@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="356" viewBox="0 0 800 356" role="img" aria-labelledby="title desc" font-family="Inter, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+<title id="title">What the pages show, by kind: golden run 2026-10-31</title>
+<desc id="desc">Claims (276 claims): 232 sourced, 44 inferred; Song-relation links (102 links): 86 sourced, 16 inferred; Tempo (24 tracks): 22 measured, 2 missing; Key (24 tracks): 24 missing; Loudness (24 tracks): 23 measured, 1 missing.</desc>
+<defs>
+<pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="#8c8c8c"/><line x1="0" y1="0" x2="0" y2="6" stroke="#121212" stroke-width="2"/></pattern>
+</defs>
+<rect width="800" height="356" rx="8" fill="#121212"/>
+<text x="20" y="32" fill="#f2f2f2" font-size="16" font-weight="600">What the pages show, by kind</text>
+<text x="20" y="52" fill="#b3b3b3" font-size="12">Golden run 2026-10-31, the 24 live-subset tracks of evals/golden.jsonl, as each page shows them (row d)</text>
+<rect x="20" y="66" width="12" height="12" rx="2" fill="#00f0ff"/>
+<text x="38" y="76" fill="#d9d9d9" font-size="12">measured</text>
+<rect x="116" y="66" width="12" height="12" rx="2" fill="#ffb000"/>
+<text x="134" y="76" fill="#d9d9d9" font-size="12">sourced</text>
+<rect x="205" y="66" width="12" height="12" rx="2" fill="#c4a4fc"/>
+<text x="223" y="76" fill="#d9d9d9" font-size="12">inferred</text>
+<rect x="301" y="66" width="12" height="12" rx="2" fill="url(#hatch)"/>
+<text x="319" y="76" fill="#d9d9d9" font-size="12">missing</text>
+<text x="20" y="108" fill="#f2f2f2" font-size="13">Claims</text>
+<text x="20" y="124" fill="#b3b3b3" font-size="11">n = 276 claims</text>
+<rect x="196.00" y="96" width="334.23" height="24" rx="3" fill="#ffb000"><title>Claims: 232 of 276 sourced</title></rect>
+<text x="363.12" y="113" text-anchor="middle" fill="#050505" font-size="12" font-weight="600">232</text>
+<rect x="532.23" y="96" width="63.77" height="24" rx="3" fill="#c4a4fc"><title>Claims: 44 of 276 inferred</title></rect>
+<text x="564.12" y="113" text-anchor="middle" fill="#050505" font-size="12" font-weight="600">44</text>
+<text x="608" y="113" fill="#d9d9d9" font-size="11">232 sourced · 44 inferred</text>
+<text x="20" y="154" fill="#f2f2f2" font-size="13">Song-relation links</text>
+<text x="20" y="170" fill="#b3b3b3" font-size="11">n = 102 links</text>
+<rect x="196.00" y="142" width="335.25" height="24" rx="3" fill="#ffb000"><title>Song-relation links: 86 of 102 sourced</title></rect>
+<text x="363.63" y="159" text-anchor="middle" fill="#050505" font-size="12" font-weight="600">86</text>
+<rect x="533.25" y="142" width="62.75" height="24" rx="3" fill="#c4a4fc"><title>Song-relation links: 16 of 102 inferred</title></rect>
+<text x="564.63" y="159" text-anchor="middle" fill="#050505" font-size="12" font-weight="600">16</text>
+<text x="608" y="159" fill="#d9d9d9" font-size="11">86 sourced · 16 inferred</text>
+<text x="20" y="200" fill="#f2f2f2" font-size="13">Tempo</text>
+<text x="20" y="216" fill="#b3b3b3" font-size="11">n = 24 tracks</text>
+<rect x="196.00" y="188" width="364.67" height="24" rx="3" fill="#00f0ff"><title>Tempo: 22 of 24 measured</title></rect>
+<text x="378.33" y="205" text-anchor="middle" fill="#050505" font-size="12" font-weight="600">22</text>
+<rect x="562.67" y="188" width="33.33" height="24" rx="3" fill="url(#hatch)"><title>Tempo: 2 of 24 missing</title></rect>
+<text x="579.33" y="205" text-anchor="middle" fill="#ffffff" font-size="12" font-weight="600" stroke="#121212" stroke-width="3" paint-order="stroke">2</text>
+<text x="608" y="205" fill="#d9d9d9" font-size="11">22 measured · 2 missing</text>
+<text x="20" y="246" fill="#f2f2f2" font-size="13">Key</text>
+<text x="20" y="262" fill="#b3b3b3" font-size="11">n = 24 tracks</text>
+<rect x="196.00" y="234" width="400.00" height="24" rx="3" fill="url(#hatch)"><title>Key: 24 of 24 missing</title></rect>
+<text x="396.00" y="251" text-anchor="middle" fill="#ffffff" font-size="12" font-weight="600" stroke="#121212" stroke-width="3" paint-order="stroke">24</text>
+<text x="608" y="251" fill="#d9d9d9" font-size="11">24 missing</text>
+<text x="20" y="292" fill="#f2f2f2" font-size="13">Loudness</text>
+<text x="20" y="308" fill="#b3b3b3" font-size="11">n = 24 tracks</text>
+<rect x="196.00" y="280" width="381.33" height="24" rx="3" fill="#00f0ff"><title>Loudness: 23 of 24 measured</title></rect>
+<text x="386.67" y="297" text-anchor="middle" fill="#050505" font-size="12" font-weight="600">23</text>
+<rect x="579.33" y="280" width="16.67" height="24" rx="3" fill="url(#hatch)"><title>Loudness: 1 of 24 missing</title></rect>
+<text x="608" y="297" fill="#d9d9d9" font-size="11">23 measured · 1 missing</text>
+<text x="20" y="342" fill="#b3b3b3" font-size="11">Source: evals/agent/runs/2026-10-31/results (24 files); table and reasons in evals/reports/agent-kinds.md</text>
+</svg>

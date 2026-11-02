@@ -178,6 +178,39 @@ jobs:
           path: playwright-report/
           retention-days: 7
 
+  # The visual baselines (tests/web/visual.spec.ts), compared in the image that drew them, pinned
+  # by digest (scripts/visual.mjs runs the same one locally; scripts/visual.test.mjs checks they
+  # agree). The image has Node, npm 11.18 or later and Playwright's browsers.
+  visual:
+    name: visual baselines
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    container:
+      image: mcr.microsoft.com/playwright:v1.64.1-noble@sha256:2f05f8a734509a7b3f26a912639488ee08f58a7b292d14d62271bcff9038768f
+      options: --init --shm-size 1g
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - run: npm --version && node --version
+      - run: npm ci
+      - run: npm run build -w packages/contract
+      - run: npx playwright test --project=visual
+        env:
+          CI: "true"
+          PLAYWRIGHT_VISUAL: "1"
+          # The image's browsers (its own default too), whatever HOME the runner sets.
+          PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
+      # The report, with each failed view's expected, actual and diff images.
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: visual-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+
   python:
     name: audio service (ruff, pytest)
     runs-on: ubuntu-latest

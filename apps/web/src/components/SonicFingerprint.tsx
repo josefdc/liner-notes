@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, ResponsiveContainer } from 'recharts';
 import type { GenreProfileItem } from '../types';
 import type { AudioReadings, ScoreListReading } from '../constants';
@@ -85,6 +85,29 @@ const AudioScores: React.FC<{ fingerprint: NonNullable<AudioReadings['fingerprin
   </div>
 );
 
+/** The radar's axis labels: their size (px), and the width of one IBM Plex Mono character. */
+const LABEL_SIZE = 12;
+const LABEL_CHAR = LABEL_SIZE * 0.6;
+/** From the outer ring to a label: Recharts' tick size (8 px), and a little room. */
+const LABEL_GAP = 12;
+
+/**
+ * The radar's radius in a chart of `size`: 70% of half its shorter side, as Recharts draws it,
+ * or less where the chart is narrow, so that a label of `longest` characters beside the outer
+ * ring still ends inside the chart and the card does not cut it. Before the chart is measured,
+ * the 70% alone.
+ */
+export function radarRadius(
+  size: { width: number; height: number } | null,
+  longest: number,
+): number | string {
+  if (!size) return '70%';
+  const fit = size.width / 2 - LABEL_GAP - longest * LABEL_CHAR;
+  // Recharts takes the 70% of the chart less its default 5 px margin on each side.
+  const usual = 0.35 * Math.min(size.width - 10, size.height - 10);
+  return Math.max(0, Math.min(usual, fit));
+}
+
 // The genre profile is written by the model. Without one there is nothing to draw: no
 // placeholder shape is shown in its place.
 function toRadarData(profile: GenreProfileItem[] | undefined) {
@@ -99,6 +122,8 @@ const SonicFingerprint: React.FC<SonicFingerprintProps> = ({
   fingerprint,
 }) => {
   const radarData = useMemo(() => toRadarData(genreProfile), [genreProfile]);
+  const [size, setSize] = useState<{ width: number; height: number } | null>(null);
+  const longest = Math.max(0, ...radarData.map((item) => item.subject.length));
 
   // A result with a measurement shows its audio-model scores; the model-written genre profile
   // (results of older APIs) only when it has one.
@@ -127,12 +152,17 @@ const SonicFingerprint: React.FC<SonicFingerprintProps> = ({
       <div className="flex-1 min-h-[250px] relative">
         <div className="absolute inset-0 bg-prov-inferred/10 blur-3xl rounded-full opacity-20 pointer-events-none"></div>
         {/* initialDimension avoids the width(-1)/height(-1) warning before the first measure */}
-        <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 1, height: 1 }}>
-          <RadarChart cx="50%" cy="50%" outerRadius="70%" data={radarData}>
+        <ResponsiveContainer
+          width="100%"
+          height="100%"
+          initialDimension={{ width: 1, height: 1 }}
+          onResize={(width, height) => setSize({ width, height })}
+        >
+          <RadarChart cx="50%" cy="50%" outerRadius={radarRadius(size, longest)} data={radarData}>
             <PolarGrid stroke={colors.gray[700]} />
             <PolarAngleAxis
               dataKey="subject"
-              tick={{ fill: colors.gray[400], fontSize: 12, fontFamily: 'IBM Plex Mono' }}
+              tick={{ fill: colors.gray[400], fontSize: LABEL_SIZE, fontFamily: 'IBM Plex Mono' }}
             />
             <Radar
               name="Genre affinity (model inference)"

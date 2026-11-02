@@ -24,8 +24,9 @@
 //     claimRelationKnown and claimRelationWords). A demo choice, not a rule of the product: the
 //     showcase shows no hedged relation, so the notes spec (tests/web/notes-view.spec.ts) can
 //     check each relation it states is stated once. It leaves out every row whose page hedges a
-//     model's relation the records do not mark, Gangsta's Paradise among them (README, "The
-//     showcase");
+//     model's relation as "Possible", even one its record documents (Gangsta's Paradise, whose
+//     page would show "Possible sample" next to the sample its MusicBrainz record states; README,
+//     "The showcase");
 //   - style: a MusicBrainz genre in evals/showcase-styles.json.
 // The style is that file's, never model text and never the audio service's style classifier
 // (printed beside it for reference only). Two styles are the same when their names are equal

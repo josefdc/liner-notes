@@ -1,3 +1,105 @@
+# Failure cases
+
+Cases where the app shows something wrong or less than it could, each with the committed
+recording or run record that shows it and a command that prints it from the repository, with no
+network and no model call. Run the commands from the repository root. The replays
+(`fixtures/replays`) are the showcase runs the app serves; the run records
+(`evals/agent/runs/2026-10-31`) are the golden run's, recorded at the commit kept by the tag
+`golden-run-2026-10-31`. The `showcase.mjs` commands need `npm ci` and the contract package
+built (`npm run build -w packages/contract`). Every known limitation, including those with no case here, is listed in
+the [README](../README.md#known-limitations).
+
+The second part of this page, "Unmatched edges in the agent eval", is written for the agent
+evaluation: its report links here for each proposal the scorer did not match to gold. Its last
+section, [Bitter Sweet Symphony's tempo](#a-measured-tempo-to-read-with-care-bitter-sweet-symphony-gbaaa9700049),
+is also the README's tempo octave error case; the showcase replay holds the same value:
+
+```bash
+node -p 'require("./fixtures/replays/the-verve-bitter-sweet-symphony.json").analysis.audio.tempo'
+```
+
+## One fact stated twice: One More Time
+
+- **What shows**: the Player's notes state that One More Time samples "More Spell on You" by
+  Eddie Johns twice: once as the code-built claim from the MusicBrainz record, and once as a
+  model claim, "MusicBrainz lists Eddie Johns's "More Spell on You" as a recording sampled in
+  "One More Time."", which the judge found supported. The album, Discovery, is likewise stated by
+  its record and by two model claims.
+- **Why**: one claim per fact (`apps/api/src/agent/restatements.ts`) leaves out a model claim
+  that restates a record only when the claim matches one of a fixed set of phrasings
+  (`apps/api/src/agent/relationText.ts`). "MusicBrainz lists X as a recording sampled in Y" and
+  "draws on X" are not among them, so the claim is kept as one that may add information.
+- **Also**: Gangsta's Paradise is left out of the showcase for the same reason: its page would
+  show "Possible sample" next to the documented sample (README, "The showcase").
+- **Record**: `fixtures/replays/one-more-time-daft-punk.json`, claims `5f2d565f…` (model) and
+  `a2e538c5…` (code); `evals/agent/runs/2026-10-31/results/USTB10250016.json` for Gangsta's
+  Paradise.
+
+```bash
+node -e 'for (const c of require("./fixtures/replays/one-more-time-daft-punk.json").analysis.claims)
+  if (/More Spell on You|Discovery/.test(c.text)) console.log(c.origin, c.kind, c.verdict, "|", c.text)'
+node evals/agent/showcase.mjs | grep -E "Gangsta's|One More Time"
+```
+
+## Verifier reason misstates its excerpt: Praise You
+
+- **What shows**: the claim "The piano progression is drawn from "Balance & Rehearsal," a track
+  on the JBL Sessions educational album …" is shown as partly supported, with the judge's
+  reason: "The Roland excerpt names JBL Sessions and Hoyt Axton, but not "Balance &
+  Rehearsal."" The cited excerpt does name it: "… including the track "Balance & Rehearsal,"
+  from which those magic piano chords originate".
+- **Why**: the judge is a model reading the claim and its excerpts; its verdict and its reason
+  can be wrong. Here the error made the verdict weaker, not stronger. "Sourced" means
+  support-checked against the cited excerpt by that judge, not checked by a person.
+- **Record**: `fixtures/replays/praise-you-fatboy-slim.json`, claim `e9f81441…`, evidence
+  `tavily:https://articles.roland.com/praise-you-fatboy-slim`.
+
+```bash
+node -e 'const a = require("./fixtures/replays/praise-you-fatboy-slim.json").analysis;
+  const c = a.claims.find((c) => c.id.startsWith("e9f81441")); console.log(c.verdict, "|", c.verdictReason);
+  const e = a.evidence.find((e) => e.id === c.evidenceIds[0]); console.log(e.excerpt.match(/[^.]*Balance[^.]*/)[0])'
+```
+
+## Identity resolves a later reissue: Juicy
+
+- **What shows**: the golden row is "Juicy" by The Notorious B.I.G. (`USBB40000359`); the run
+  analysed `USBB40706422`, the track on the 2007 "Greatest Hits", a different MusicBrainz
+  recording of the same song. That recording carries none of the original's MusicBrainz
+  relations, so the page has no code-built sample links.
+- **How often**: identity is right on 17 of 24 rows (70.8 %, 95 % CI [50.8, 85.1],
+  `evals/reports/agent-2026-10-31.md`). Of the 7 misses, 3 took a later reissue (Juicy, Ice Ice
+  Baby, I'll Be Missing You), 2 had the row's ISRC but reached another MusicBrainz recording
+  (U Can't Touch This, Take On Me), and 2 reached no MusicBrainz recording (Levels, Crazy). None
+  of the 7 has a code-built link.
+- **Why**: the track the run went on with was the reissue: the evaluation answers the
+  clarification step with its top-ranked candidate, and the identity chain follows the chosen
+  track's ISRC to its MusicBrainz recording.
+- **Record**: `evals/agent/runs/2026-10-31/results/USBB40000359.json` and the row's entry in
+  `evals/agent/runs/2026-10-31/d.json`.
+
+```bash
+node -p 'const r = require("./evals/agent/runs/2026-10-31/results/USBB40000359.json"); [r.isrc, r.album, r.releaseYear]'
+node evals/agent/showcase.mjs | grep Juicy
+```
+
+## SecondHandSongs without its key
+
+- **What shows**: no SecondHandSongs relations in any of the golden run's 24 runs. The 12 runs
+  that asked SecondHandSongs were refused with HTTP 403; the other 12 did not ask it. The report
+  counts SecondHandSongs unavailable on 14 of 24 (58.3 % [38.8, 75.5]; `sourceErrors` in the
+  run's `d.json`): the 12 refused runs, and 2 runs that sent it no request but report it
+  unavailable, as they report MusicBrainz (`FR10F1200080`, `USIR10001280`).
+- **Why**: the runs had no `SHS_API_KEY`, and SecondHandSongs refused the anonymous requests.
+  The report counts it apart from source errors ("Sources the runs could not read" in
+  `evals/reports/agent-2026-10-31.md`).
+- **Record**: `evals/agent/runs/2026-10-31/sources/*.json` (`unset` and `statuses`).
+
+```bash
+node -e 'const fs = require("fs"), d = "evals/agent/runs/2026-10-31/sources/";
+  for (const f of fs.readdirSync(d)) { const s = JSON.parse(fs.readFileSync(d + f));
+    if (s.statuses.secondhandsongs) console.log(f, JSON.stringify(s.statuses.secondhandsongs), s.unset.join(",")) }'
+```
+
 # Unmatched edges in the agent eval
 
 What the agent proposed that the scorer did not match to gold, in the golden run of 2026-10-31

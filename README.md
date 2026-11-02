@@ -165,9 +165,20 @@ npm run check:release-age -- --base origin/main   # changed lock entries are rel
 npm test               # Vitest: API, web and script tests
 npm run build && npm run check:css   # the built CSS is Tailwind output with no invalid values
 npm run test:e2e       # Playwright against a development build of the web app served by vite preview with a mocked API (Google Chrome; PLAYWRIGHT_WEB_PORT, default 3290)
+npm run test:visual    # the visual baselines, in the pinned Playwright container (Docker)
 cd services/audio && uv run ruff check . && uv run ruff format --check .
 cd services/audio && uv run pytest   # exits 5 ("no tests") until the audio test suite lands
 ```
+
+The visual baselines (`tests/web/visual.spec.ts`) compare the search, the track picker, the
+Dashboard, the Player and the song-relations map, at rest and with a track selected, drawn from the
+mock fixtures at 768, 1024, 1280, 1380, 1440 and 1680 px and at device pixel ratio 1 and 2, with
+the PNGs in `tests/web/__screenshots__/`. `npm run test:visual` runs them in the Playwright image
+pinned by digest in `scripts/visual.mjs`, the one CI's visual job runs in, with the checkout
+mounted (run `npm ci` first). After a change that is meant to change a view, run
+`npm run test:visual:update`, look at the PNGs it rewrote and commit them. Write baselines only
+this way: the `visual` project exists only in that container (`PLAYWRIGHT_VISUAL=1`), and a
+baseline drawn by another browser, or outside the container, would not match CI's.
 
 The honesty guard (`scripts/guard-honest.mjs`) counts patterns that may only go down: placeholder
 data (random values, stock images, unscoped colours), the prototype's old copy and product name, and

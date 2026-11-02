@@ -733,8 +733,8 @@ const STEP_REASONS: ReadonlySet<string> = new Set<AudioUnavailableReason>([
  */
 function recordedMatch(match: unknown): PreviewSourceMatch | null {
   if (match === null || typeof match !== "object") return null;
-  // A recorded match of Spotify's own clip (made before its clips were no longer measured) is
-  // none of these shapes: it is read as no match.
+  // A recorded match of Spotify's own clip is none of these shapes (replayedAudioStep misses
+  // such an entry before reading it).
   const { provider, method, deezerId, score } = match as Record<string, unknown>;
   const isScore = score === null || (typeof score === "number" && Number.isFinite(score));
   if (
@@ -794,7 +794,8 @@ type ReplayedStep = AudioAnalysisResult & { sentToService: boolean };
  * under `none` (a step that measured nothing while the service named no version or did not
  * answer). A measurement is served only from an entry of that version whose block names it and
  * the window; anything else is a miss, which fails the analysis (`analysis_failed`) as any
- * cassette miss does: no other measurement is served in its place.
+ * cassette miss does: no other measurement is served in its place. So is an entry recorded from
+ * Spotify's own clip (by older code): no run measures one now.
  */
 async function replayedAudioStep(
   track: string | null,
@@ -826,6 +827,13 @@ async function replayedAudioStep(
     }
     const { key, entry } = found;
     const step = (entry ?? {}) as Partial<Record<keyof RecordedAudioStep, unknown>>;
+    // A step recorded from Spotify's own clip, before its clips were no longer measured, is not
+    // what a run gives now: a miss, never a measurement served without its provenance.
+    if ((step.match as { provider?: unknown } | null | undefined)?.provider === "spotify") {
+      throw miss(
+        `the entry ${key} was recorded from Spotify's own clip, which is no longer measured`,
+      );
+    }
     const replayed = {
       sentToService: step.sent === true,
       previewMatch: recordedMatch(step.match),

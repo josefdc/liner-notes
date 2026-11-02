@@ -621,6 +621,27 @@ describe("the audio cassette", () => {
     expect((replayed.out.audioFeatures as AudioMeasurement).unavailableDetail).toContain(named);
   });
 
+  it("misses an entry recorded from Spotify's own clip, and serves no measurement of it", async () => {
+    // Recorded before Spotify's clips were no longer measured (Spotify's terms restrict using
+    // its content for machine learning): a miss, never a measurement without its provenance.
+    await live();
+    editAudioEntries((entries) => {
+      (entries[keyOf()].json as { match: unknown }).match = {
+        provider: "spotify",
+        method: "id",
+        score: null,
+      };
+    });
+    const replayed = await replay();
+    expect(replayed.out.audioFeatures).toEqual({
+      audio: null,
+      unavailableReason: "analysis_failed",
+      unavailableDetail: `audio: the entry ${keyOf()} was recorded from Spotify's own clip, which is no longer measured`,
+    });
+    expect(replayed.out.preview).toBeNull();
+    expect(replayed.events.join("\n")).not.toMatch(/\d+(\.\d+)? BPM/);
+  });
+
   it("misses a measurement filed under no analyzer version", async () => {
     await live();
     editAudioEntries((entries) => {

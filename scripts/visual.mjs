@@ -6,26 +6,38 @@
 //   npm run test:visual            compare with the committed baselines
 //   npm run test:visual:update     write the baselines that differ, or are missing
 //
-// Arguments go on to `playwright test` (a spec, `-g <title>`, `--workers <n>`). Needs Docker and
-// `npm ci` run first: the checkout, with its node_modules, is mounted at the same path. The
-// container runs as the calling user, with no network (the mocked API needs none), and is
-// removed when it exits. The image must match the @playwright/test version in package.json.
+// Arguments go on to `playwright test` (a spec, `-g <title>`, `--workers <n>`). Needs Linux on
+// x64, Docker and `npm ci` run first: the checkout, with its node_modules (built for linux-x64),
+// is mounted at the same path. The container runs as the calling user, with no network (the
+// mocked API needs none), and is removed when it exits. The image must match the
+// @playwright/test version in package.json.
 import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+/**
+ * The image's linux/amd64 manifest, by digest: the multi-platform tag also names an arm64 image,
+ * whose Chromium draws differently.
+ */
 export const IMAGE =
-  "mcr.microsoft.com/playwright:v1.64.1-noble@sha256:2f05f8a734509a7b3f26a912639488ee08f58a7b292d14d62271bcff9038768f";
+  "mcr.microsoft.com/playwright:v1.64.1-noble@sha256:ee15712262f017b8157421b212b12099146645f44b1bc5c0514cbbe6a229b1d0";
+export const PLATFORM = "linux/amd64";
 
-// Run, not imported (scripts/visual.test.mjs reads IMAGE).
+// Run, not imported (scripts/visual.test.mjs reads IMAGE and PLATFORM).
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) run();
 
 function run() {
+  // node_modules is mounted into the container as it is, so its native packages (esbuild,
+  // rollup, lightningcss) must be the linux-x64 ones; and amd64 emulated on another processor
+  // is not the rasteriser that drew the baselines.
+  if (process.platform !== "linux" || process.arch !== "x64") {
+    console.error(
+      `The visual baselines run only on Linux x64 (this is ${process.platform} ${process.arch}). ` +
+        "Use a Linux x64 machine, or let CI's visual job compare them.",
+    );
+    process.exit(2);
+  }
   const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-  const user =
-    typeof process.getuid === "function"
-      ? ["--user", `${process.getuid()}:${process.getgid()}`]
-      : [];
 
   const result = spawnSync(
     "docker",
@@ -33,6 +45,8 @@ function run() {
       "run",
       "--rm",
       "--init",
+      "--platform",
+      PLATFORM,
       "--name",
       `ln-visual-${process.pid}`,
       "--network",
@@ -40,18 +54,18 @@ function run() {
       // Chromium's shared memory; Docker's default 64 MB can crash a tab.
       "--shm-size",
       "1g",
-      ...user,
+      // The files it writes (baselines, reports, builds) belong to the caller.
+      "--user",
+      `${process.getuid?.()}:${process.getgid?.()}`,
       "--env",
       "HOME=/tmp",
       "--env",
       "PLAYWRIGHT_VISUAL=1",
       "--env",
       "npm_config_update_notifier=false",
-      // Passed on when set: CI's reporter and forbidOnly, the preview's port.
+      // Passed on when set: CI's reporter and forbidOnly.
       "--env",
       "CI",
-      "--env",
-      "PLAYWRIGHT_WEB_PORT",
       "--volume",
       `${root}:${root}`,
       "--workdir",
@@ -68,8 +82,19 @@ function run() {
     { stdio: "inherit" },
   );
   if (result.error) {
-    console.error(`could not run docker: ${result.error.message}`);
+    console.error(
+      `Could not run docker: ${result.error.message}. The visual baselines need the docker ` +
+        "command (Docker Engine; Podman's docker command is not tested).",
+    );
     process.exit(2);
+  }
+  // 125-127: docker run itself failed (daemon, permissions, image) before any test ran.
+  if (result.status !== null && result.status >= 125) {
+    console.error(
+      "docker run failed before the tests started: check that the Docker daemon runs and that " +
+        "this user may use it (the docker group, or rootless Docker, where the container's user " +
+        `must still be able to write the checkout), and that it can pull ${IMAGE}.`,
+    );
   }
   process.exit(result.status ?? 1);
 }

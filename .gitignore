@@ -85,6 +85,8 @@ apps/api/data/
 # Playwright output
 playwright-report/
 test-results/
+playwright-report-visual/
+test-results-visual/
 
 # Web app build the browser tests serve
 apps/web/dist-e2e*/

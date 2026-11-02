@@ -19,8 +19,11 @@ import {
 // stored at CSS-pixel size (`scale: "css"`), which keeps the layout of ratio 2 (where text wraps,
 // say) but is drawn at 1x by Chromium, so a view whose layout does not change with the ratio
 // gives the same file as at 1 (git stores it once); and at 2 stored at device-pixel size, drawn
-// at 2x, at 1440 px only. The page's clock is fixed and motion is reduced; the Dashboard's
-// activity log is masked, as its face is the run's live log.
+// at 2x, at 1440 px only. Parts of the Dashboard and the Player below the fold (the radar
+// chart, the connected tracks' cards, the preview's timeline, the Player's connections) are
+// compared on their own at 768, 1024 and 1440 px, at ratio 1. The page's clock is fixed, in UTC,
+// and motion is reduced. Nothing is masked: with the clock fixed nothing on these views changes
+// from run to run (the Dashboard's activity log shows no time while it is closed).
 
 const ANALYZE = "/api/analyze/stream";
 
@@ -79,8 +82,6 @@ type View = {
   name: string;
   /** Opens the view and waits until it is drawn. */
   open: (page: Page) => Promise<void>;
-  /** What changes from one run to the next, covered in the screenshot. */
-  mask?: (page: Page) => Locator[];
 };
 
 const VIEWS: View[] = [
@@ -106,8 +107,6 @@ const VIEWS: View[] = [
       await useMockApi(page, loadFixture("full-result"));
       await analyzeAndOpenDashboard(page, "Bright Lines");
     },
-    // The activity log's box: its toggle's parent.
-    mask: (page) => [page.locator("button[aria-controls='activity-log-content']").locator("..")],
   },
   {
     name: "player",
@@ -173,10 +172,7 @@ for (const [ratio, scale] of [
             await page.clock.setFixedTime(NOW);
             await view.open(page);
             await atRest(page);
-            await expect(page).toHaveScreenshot(`${view.name}-${width}-${suffix}.png`, {
-              scale,
-              mask: view.mask?.(page),
-            });
+            await expect(page).toHaveScreenshot(`${view.name}-${width}-${suffix}.png`, { scale });
             expect(problems).toEqual([]);
           });
         }
@@ -184,3 +180,100 @@ for (const [ratio, scale] of [
     }
   });
 }
+
+/** The widths whose sections below the fold are compared too, at ratio 1. */
+const SECTION_SIZES = SIZES.filter(([width]) => [768, 1024, 1440].includes(width));
+
+type Section = {
+  name: string;
+  view: "dashboard" | "player";
+  /** The section's parts: the screenshot covers the box around all of them. */
+  parts: (page: Page) => Locator[];
+};
+
+/** The Player's right column's direct child that holds `inner`. */
+const playerPart = (page: Page, inner: Locator) =>
+  page.locator("#panel-player > div").filter({ has: inner });
+
+// Parts of the Dashboard and the Player that no window-sized screenshot reaches at these sizes:
+// each is scrolled into view and compared on its own.
+const SECTIONS: Section[] = [
+  {
+    // The radar chart whole, with its labels.
+    name: "dashboard-fingerprint",
+    view: "dashboard",
+    parts: (page) => [page.getByRole("region", { name: "Sonic Fingerprint" })],
+  },
+  {
+    // The connected tracks' cards, each with its relation and provenance chip.
+    name: "dashboard-connections",
+    view: "dashboard",
+    parts: (page) => [
+      page
+        .locator("div")
+        .filter({ has: page.getByRole("heading", { level: 2, name: "Connections" }) })
+        .filter({ has: page.locator("[aria-busy]") })
+        .last(),
+    ],
+  },
+  {
+    // The preview's control and the song's timeline under it.
+    name: "player-preview",
+    view: "player",
+    parts: (page) => [
+      playerPart(
+        page,
+        page.getByRole("button", { name: /preview$/ }).or(page.getByText("Preview unavailable")),
+      ),
+      playerPart(page, page.locator('fieldset[aria-label="Song structure"]')),
+    ],
+  },
+  {
+    // The connections: the related tracks' row with its provenance chips, the legend and the
+    // list of links.
+    name: "player-connections",
+    view: "player",
+    parts: (page) => [page.locator("#panel-genealogy")],
+  },
+];
+
+test.describe("sections below the fold, device pixel ratio 1", () => {
+  for (const [width, height] of SECTION_SIZES) {
+    test.describe(`${width} px`, () => {
+      test.use({ viewport: { width, height } });
+      for (const section of SECTIONS) {
+        test(`${section.name} at ${width} px matches its baseline`, async ({ page }) => {
+          const problems = collectProblems(page);
+          await page.clock.setFixedTime(NOW);
+          await useMockApi(page, loadFixture("full-result"));
+          await analyzeAndOpenDashboard(page, "Bright Lines");
+          if (section.view === "player") await openPlayer(page);
+          const parts = section.parts(page);
+          for (const part of parts) await expect(part).toHaveCount(1);
+          await parts[parts.length - 1].scrollIntoViewIfNeeded();
+          await parts[0].scrollIntoViewIfNeeded();
+          await atRest(page);
+          const boxes = await Promise.all(parts.map((part) => part.boundingBox()));
+          const clip = {
+            x: Math.min(...boxes.map((box) => box?.x ?? Number.NaN)),
+            y: Math.min(...boxes.map((box) => box?.y ?? Number.NaN)),
+            right: Math.max(...boxes.map((box) => (box ? box.x + box.width : Number.NaN))),
+            bottom: Math.max(...boxes.map((box) => (box ? box.y + box.height : Number.NaN))),
+          };
+          // The whole section is in the window, so the screenshot shows all of it.
+          expect(clip.y, `${section.name} starts in the window`).toBeGreaterThanOrEqual(0);
+          expect(clip.bottom, `${section.name} ends in the window`).toBeLessThanOrEqual(height);
+          await expect(page).toHaveScreenshot(`${section.name}-${width}-dpr1.png`, {
+            clip: {
+              x: clip.x,
+              y: clip.y,
+              width: clip.right - clip.x,
+              height: clip.bottom - clip.y,
+            },
+          });
+          expect(problems).toEqual([]);
+        });
+      }
+    });
+  }
+});

@@ -339,6 +339,32 @@ describe("what Node reads of the service's answer: the v2 block only", () => {
     expect(net.calls.map((call) => call.url)).toEqual([`${SERVICE}/analyze`]);
   });
 
+  it("never sends Spotify's own clip to the service, even when the run already holds it", async () => {
+    const net = service(serviceAnswer(audioV2()));
+    const audioRun = {
+      preview: {
+        previewUrl: "https://p.scdn.co/mp3-preview/x",
+        match: { provider: "deezer", method: "isrc", deezerId: 1, score: null },
+      },
+      serviceAvailable: true,
+    };
+
+    const data = JSON.parse(
+      await analyzeAudioPreview.invoke(
+        { title: "Ice Ice Baby", artist: "Vanilla Ice", isrc: "USSB29000129" },
+        { configurable: { audioRun } },
+      ),
+    );
+
+    expect(data).toMatchObject({
+      source: "unavailable",
+      reason: "preview_rejected",
+      previewUrl: null,
+      previewMatch: null,
+    });
+    expect(net.calls).toEqual([]);
+  });
+
   it("measures nothing when the run knows the service did not answer", async () => {
     const net = service(serviceAnswer(audioV2()));
     const audioRun = {

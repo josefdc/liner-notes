@@ -713,6 +713,21 @@ describe("engineerNode", () => {
       expect(text).not.toContain("Measuring tempo and key");
     });
 
+    it("says it is measuring only for a clip the service is sent: never for one on Spotify's CDN", async () => {
+      const spotifyClip = "https://p.scdn.co/mp3-preview/own";
+      const stub = stubNetwork("up", spotifyClip);
+      const { out, codes, text } = await run("SC");
+
+      expect(stub.calls).not.toContain(`${AUDIO_URL}/analyze`);
+      expect(codes).not.toContain("AUDIO-INIT");
+      expect(text).not.toContain("Measuring tempo and key");
+      expect(out.audioFeatures).toMatchObject({
+        audio: null,
+        unavailableReason: "preview_rejected",
+      });
+      expect(out.previewUrl).toBeNull();
+    });
+
     it("reports a Deezer outage as a source error and the lookup as incomplete, never as a missing clip", async () => {
       const stub = stubNetwork("up");
       deezer.isrc = { error: { type: "Exception", message: "Quota limit exceeded", code: 4 } };

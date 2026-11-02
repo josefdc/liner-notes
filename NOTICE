@@ -1,0 +1,115 @@
+Liner Notes
+Copyright (C) 2026 Jose Felipe Duarte
+
+Liner Notes is free software: you can redistribute it and/or modify it under the terms of the
+GNU Affero General Public License, version 3 only (SPDX: AGPL-3.0-only), as published by the
+Free Software Foundation. It is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+PURPOSE. The full licence text is in LICENSE.
+
+The code licence covers this repository's source code. The files and data named under
+"Third-party software", "Model weights", "Evaluation reports" and "Data sources" below keep
+their own licences and terms.
+
+
+Source code for network users (AGPL-3.0, section 13)
+----------------------------------------------------
+
+If you use Liner Notes over a network, you can get the Corresponding Source of the version you
+are using, at no charge, from its repository:
+
+    https://github.com/josefdc/liner-notes
+
+The web app's footer links to it ("Source"). Anyone who runs a modified version for others
+must offer that version's source in the same way: setting VITE_SOURCE_URL when the web app is
+built points the footer link at it (see README.md).
+
+
+Third-party software
+--------------------
+
+The audio service's image (services/audio/Dockerfile) installs these. They are not part of this
+repository.
+
+- Essentia (essentia-tensorflow 2.1b6.dev1389, the "models" extra in
+  services/audio/pyproject.toml), by the Music Technology Group, Universitat Pompeu Fabra, and
+  contributors. Licence: AGPL-3.0-only. Source: https://github.com/MTG/essentia
+  The wheel also bundles libtensorflow 2.5.0; it carries no separate licence file for it.
+- soxr 1.0.0 (python-soxr, a dependency of librosa). Licence: LGPL-2.1-or-later.
+- libsndfile, bundled in the soundfile 0.13.1 wheel. Licence: LGPL-2.1 (the wheel's
+  _soundfile_data/COPYING).
+
+The web app serves these fonts from apps/web/public/fonts, unmodified:
+
+- Inter (@fontsource-variable/inter 5.3.0), Copyright 2016 The Inter Project Authors, and
+  IBM Plex Mono (@ibm/plex-mono 2.5.0), Copyright 2017 IBM Corp., with Reserved Font Name
+  "Plex". Licence: SIL Open Font License 1.1 (apps/web/public/fonts/OFL.txt).
+
+The other npm and Python dependencies are under MIT, ISC, BSD, Apache-2.0, MPL-2.0 or PSF-2.0
+licences, as their package metadata states (package-lock.json, services/audio/uv.lock).
+
+
+Model weights
+-------------
+
+The audio service's perceptual features use six Essentia models from the Music Technology
+Group (https://essentia.upf.edu/models): msd-musicnn-1, discogs-effnet-bs64-1,
+deam-msd-musicnn-2, danceability-msd-musicnn-1, mood_acoustic-discogs-effnet-1 and
+voice_instrumental-msd-musicnn-1.
+
+- Licence: CC BY-NC-SA 4.0 (https://creativecommons.org/licenses/by-nc-sa/4.0/); the Music
+  Technology Group offers a proprietary licence on request.
+- The weights are neither in this repository nor in any image. services/audio/
+  docker-entrypoint.sh downloads them when the container starts, into the /app/models volume,
+  and services/audio/download_models.py checks each file's SHA-256.
+- The non-commercial term binds any deployment that loads them. Without them
+  (AUDIO_FETCH_MODELS=0) the service still measures tempo and key, and /health reports
+  "degraded".
+
+
+Evaluation reports
+------------------
+
+These files hold per-clip results derived from annotated datasets. They are under the
+annotations' licences, not the code licence, and each report credits its datasets.
+
+- evals/reports/audio-2026-10-25.md and evals/reports/audio-2026-10-25.json: Ballroom, GiantSteps
+  Tempo and GiantSteps Key.
+- evals/reports/audio-2026-10-29.md and evals/reports/audio-2026-10-29.json: Ballroom and
+  GiantSteps Key.
+- evals/audio/tests/fixtures/audio-schema4.json and audio-schema4.md: the first report's
+  Ballroom and GiantSteps Key results, trimmed for a test.
+
+The annotation licences:
+
+- Ballroom (ISMIR 2004 tempo induction contest): CC BY-NC-SA 4.0, per mirdata 1.0.0; the
+  dataset itself states no licence.
+- GiantSteps Tempo: CC BY-SA 4.0, per mirdata 1.0.0; the annotation repository has no licence.
+- GiantSteps Key, as GiantSteps+: CC BY-SA 4.0, stated in its Zenodo record
+  (https://doi.org/10.5281/zenodo.1095691).
+
+The audio of these datasets is commercial excerpts. It is fetched for evaluation only and is
+never in this repository. evals/reports/audio-2026-10-30.* measures generated signals only and
+is under the code licence.
+
+
+Data sources
+------------
+
+The app reads these providers at run time. Their data stays under their terms. The recorded
+answers kept for tests and replays (fixtures/, apps/api/src/sources/fixtures/ and
+evals/agent/runs/) hold such data too, and are not under the code licence.
+
+- MusicBrainz: recordings, works, releases and their relationships. Core data CC0.
+- Cover Art Archive: release covers, shown with a credit. The images belong to their owners.
+- Deezer: 30-second previews, the only audio the service measures, and their metadata.
+- Spotify: search and track metadata only. Its previews are never analysed, since Spotify's
+  terms restrict using its content for machine learning.
+- Last.fm: tags, similar tracks and artists, artist information.
+- Genius: song relationships (samples, interpolations, covers, remixes); no lyrics.
+- ListenBrainz: similar artists (ListenBrainz Labs).
+- SecondHandSongs: originals and covers.
+- Discogs: release credits. Data provided by Discogs.
+- Tavily: web search results, quoted as evidence. The pages belong to their publishers.
+
+Cover art shown in the app, in recorded runs or in screenshots belongs to its owners.

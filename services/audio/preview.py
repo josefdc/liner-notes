@@ -28,7 +28,7 @@ DOWNLOAD_DEADLINE_S = 20.0
 
 # Deezer serves previews from subdomains of dzcdn.net (for example cdnt-preview.dzcdn.net and
 # cdns-preview-<x>.dzcdn.net). Spotify's preview CDN is refused: Spotify's terms restrict using
-# its content for machine learning, so Spotify is a search and metadata source only.
+# its content for machine learning, so its audio is never analysed.
 ALLOWED_HOSTS: frozenset[str] = frozenset()
 ALLOWED_HOST_SUFFIXES = (".dzcdn.net",)
 

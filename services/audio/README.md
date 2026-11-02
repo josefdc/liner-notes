@@ -718,8 +718,8 @@ refusals carry none.
 - there is no userinfo (`user:pass@`);
 - the host is a lowercase DNS name, not an IP literal, and is a subdomain of `dzcdn.net`
   (Deezer, for example `cdnt-preview.dzcdn.net`). Spotify's previews (`p.scdn.co`) are refused:
-  Spotify's terms restrict using its content for machine learning, so it is a search and
-  metadata source only;
+  Spotify's terms restrict using its content for machine learning, so its audio is never
+  analysed;
 - the URL only contains RFC 3986 characters and is at most 2048 characters long.
 
 The download does not follow redirects, ignores proxy settings from the environment, requires a

@@ -11,7 +11,8 @@
  * The clip is a preview of the chosen recording only (see resolvePreview): the Deezer entry for
  * its ISRC, or a Deezer search result that strictly matches it. Never another recording's clip:
  * with no such preview nothing is measured. Spotify's own clip is never measured: Spotify's terms
- * restrict using its content for machine learning, so Spotify is a search and metadata source.
+ * restrict using its content for machine learning, so its audio is never analysed (Spotify gives
+ * search, track metadata and cover images, and related tracks' clips the map only plays).
  * Calls the Python audio analysis service for the measurement. When there is no preview or
  * the service cannot measure it, the result has source "unavailable", no block and a reason;
  * nothing is estimated. A preview the service refuses for what the file is (a format it does not

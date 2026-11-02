@@ -699,7 +699,7 @@ describe("engineerNode", () => {
       const writer = (event: { message?: string }) => lines.push(event.message ?? "");
       const out = await engineerNode(state, { writer } as never);
 
-      // Spotify is a search and metadata source only: its clip is never sent for analysis.
+      // Spotify's audio is never analysed: its clip is never sent to the service.
       expect(stub.calls).not.toContain(`${AUDIO_URL}/analyze`);
       expect(out.audioFeatures).toMatchObject({ audio: null, unavailableReason: "no_preview" });
       expect(out.audioFeatures?.unavailableDetail).not.toMatch(/spotify/i);

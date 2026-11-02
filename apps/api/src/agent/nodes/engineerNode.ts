@@ -27,8 +27,8 @@
  * error, or a request had no slot of its pace in time and was not sent), nothing is measured,
  * the reason is `preview_lookup_incomplete`, and the result is not stored (composerNode.ts). A
  * cached measurement is still served when the lookup is unfinished. Spotify's own clip of the
- * track is never measured, nor given to the player in place of a Deezer clip: Spotify is a search
- * and metadata source only.
+ * track is never measured, nor given to the player in place of a Deezer clip: Spotify's audio is
+ * never analysed.
  *
  * Under SOURCE_CASSETTE the audio cache is not read: a recording measures, so the service's
  * answer is recorded, and a replay serves only the recorded audio step (sources/audio.ts). A

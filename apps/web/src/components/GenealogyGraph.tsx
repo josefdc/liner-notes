@@ -58,7 +58,7 @@ import {
   sameCounts,
   upAside,
 } from './genealogy/firstView';
-import { cardName, cardSaid, cardWords, type DrawnLines } from './genealogy/cardWords';
+import { type CardDrawn, cardName, cardSaid, cardWords } from './genealogy/cardWords';
 import { cuePan } from './genealogy/cuePan';
 import { LINK_COLOR, LINK_DASH, LINK_OPACITY, linkWidth } from './genealogy/linkStyle';
 import { GRAPH_TEXT_PX, LINE_LABEL_PX, NODE_LABEL_PX, SUB_LABEL_PX } from './genealogy/textSize';
@@ -88,8 +88,6 @@ import type { GenealogyNode, TrackData } from '../types';
 
 /** Something in the graph that keyboard focus or the pointer can be on: a track or a link. */
 type Item = { kind: 'node'; id: string } | { kind: 'link'; index: number };
-/** A card's words as drawn, line by line: what its name says first (`cardSaid`). */
-type CardDrawn = { title: DrawnLines; meta: DrawnLines; tag: string | null; note?: DrawnLines };
 
 const sameItem = (a: Item | null, b: Item | null) =>
   a !== null &&
@@ -2366,16 +2364,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
             currentId={currentId}
             yearOf={yearOfNode}
             isOrigin={isOrigin}
-            describe={(node) => {
-              // The row's card draws its title and its artist and year whole, then its tag.
-              const { title, meta } = cardWords(node, yearOfNode(node.id));
-              const drawn = {
-                title: { lines: [title] },
-                meta: { lines: meta ? [meta] : [] },
-                tag: node.id === currentId ? 'This track' : isOrigin(node.id) ? 'Origin' : null,
-              };
-              return cardLabel(node, node.id === selectedNode?.id, drawn);
-            }}
+            describe={(node, drawn) => cardLabel(node, node.id === selectedNode?.id, drawn)}
             nameOf={nameOf}
             selectedId={selectedNode?.id ?? null}
             onSelect={(node) => selectRef.current(node.id)}

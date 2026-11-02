@@ -60,6 +60,39 @@ describe('cardSaid', () => {
     ).toBe('More Spell on You, Eddie Johns, undated');
   });
 
+  it('reads a line break at "·" as the pause it stands for, and adds nothing: nothing is cut', () => {
+    expect(
+      cardSaid({ trackTitle: 'Title', trackArtist: 'Ini Kamoze & The Long Collective' }, 1994, {
+        title: { lines: ['Title'] },
+        // The separator starts no line: the year does, alone.
+        meta: { lines: ['Ini Kamoze & The Long Collective', '1994'] },
+        tag: null,
+      }),
+    ).toBe('Title, Ini Kamoze & The Long Collective, 1994');
+  });
+
+  it('adds nothing for a doubled space the card draws as one', () => {
+    expect(
+      cardSaid({ trackTitle: 'Two  Spaces', trackArtist: 'A' }, 2000, {
+        title: { lines: ['Two Spaces'] },
+        meta: { lines: ['A · 2000'] },
+        tag: null,
+      }),
+    ).toBe('Two Spaces, A, 2000');
+  });
+
+  it('adds the whole name where a wide script is broken and cut, with no hyphen', () => {
+    expect(
+      cardSaid({ trackTitle: '夜に駆ける夜に駆ける夜に駆ける', trackArtist: 'YOASOBI' }, 2019, {
+        title: { lines: ['夜に駆ける', '夜に駆け…'], hyphenated: [false, false], truncated: true },
+        meta: { lines: ['YOASOBI · 2019'] },
+        tag: null,
+      }),
+    ).toBe(
+      '夜に駆ける 夜に駆け…, YOASOBI, 2019 (夜に駆ける夜に駆ける夜に駆ける by YOASOBI (2019))',
+    );
+  });
+
   it('adds the whole name where the drawn words cut or break the title', () => {
     const long = { trackTitle: 'One More Time (Daft Punk) / Swoon (Chemical Brothers)' };
     expect(

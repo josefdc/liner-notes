@@ -1,0 +1,212 @@
+// Tests for the Markdown link check (scripts/check-links.mjs). Run with `npm test`.
+
+import { execFileSync, spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import { anchorsOf, brokenLinks, linksOf, slug } from "./check-links.mjs";
+
+const script = join(import.meta.dirname, "check-links.mjs");
+
+/** brokenLinks over an in-memory tree: every file of `tree` is tracked. */
+function check(tree, files = Object.keys(tree).filter((path) => path.endsWith(".md"))) {
+  return brokenLinks(files, { read: (path) => tree[path], tracked: Object.keys(tree) });
+}
+
+describe("slug", () => {
+  it("makes GitHub's anchors", () => {
+    expect(slug("Run it locally")).toBe("run-it-locally");
+    expect(slug("Tech stack and sources")).toBe("tech-stack-and-sources");
+    expect(slug("🐳 Deploying")).toBe("-deploying");
+    expect(slug("What it is: measured, sourced, inferred")).toBe(
+      "what-it-is-measured-sourced-inferred",
+    );
+    expect(slug("`npm run eval` (replay)")).toBe("npm-run-eval-replay");
+    expect(slug("**Bold** and [a link](x.md)")).toBe("bold-and-a-link");
+    expect(slug("Stan (Eminem feat. Dido), `USIR10001280`")).toBe(
+      "stan-eminem-feat-dido-usir10001280",
+    );
+    expect(slug("snake_case stays")).toBe("snake_case-stays");
+    expect(slug("Ünïcode words")).toBe("ünïcode-words");
+  });
+
+  it("numbers repeated headings as GitHub does", () => {
+    const anchors = anchorsOf("# A\n\n## A\n\n### A\n\n## A-1\n");
+    expect([...anchors]).toEqual(["a", "a-1", "a-2", "a-1-1"]);
+  });
+
+  it("reads setext headings and HTML ids, and no heading inside a code block", () => {
+    const anchors = anchorsOf(
+      'Title\n=====\n\nSub\n---\n\n<a id="kept"></a>\n\n```\n# not a heading\n```\n',
+    );
+    expect([...anchors].sort()).toEqual(["kept", "sub", "title"]);
+  });
+});
+
+describe("linksOf", () => {
+  it("finds inline links, images, definitions and HTML attributes, outside code", () => {
+    const text = [
+      'See [the design](docs/design.md#evidence) and ![chart](docs/images/kinds.svg "title").',
+      "[ref]: <docs/privacy.md>",
+      '<img src="docs/images/search.png" alt=""> <a href="#top">top</a>',
+      "Inline `[not](a-link.md)` code.",
+      "```",
+      "[not](in-a-fence.md)",
+      "```",
+      "",
+      "    [not](indented-code.md)",
+      "[parens](docs/a_(b).md)",
+    ].join("\n");
+    expect(linksOf(text)).toEqual([
+      { target: "docs/design.md#evidence", line: 1 },
+      { target: "docs/images/kinds.svg", line: 1 },
+      { target: "docs/privacy.md", line: 2 },
+      { target: "docs/images/search.png", line: 3 },
+      { target: "#top", line: 3 },
+      { target: "docs/a_(b).md", line: 10 },
+    ]);
+  });
+});
+
+describe("brokenLinks", () => {
+  const tree = {
+    "README.md": [
+      "# Liner Notes",
+      "## Known limitations",
+      "[design](docs/design.md#the-verifier) [limits](#known-limitations)",
+      "[dir](docs/) [image](docs/images/a.png) [root](/LICENSE) [web](https://example.com/x.md)",
+      "[mail](mailto:a@example.com)",
+    ].join("\n"),
+    "docs/design.md": "# Design\n\n## The verifier\n\n[back](../README.md#liner-notes)\n",
+    "docs/images/a.png": "",
+    LICENSE: "",
+  };
+
+  it("passes when every relative link and anchor resolves; external links are not read", () => {
+    expect(check(tree)).toEqual([]);
+  });
+
+  it("names a missing file, a missing anchor and a path out of the repository", () => {
+    const planted = {
+      ...tree,
+      "docs/design.md": [
+        "# Design",
+        "[gone](missing.md)",
+        "[anchor](../README.md#no-such-heading)",
+        "[self](#nowhere)",
+        "[out](../../outside.md)",
+        "[image](images/b.png)",
+      ].join("\n"),
+    };
+    expect(check(planted)).toEqual([
+      // README's link to docs/design.md#the-verifier now has no heading to land on.
+      {
+        file: "README.md",
+        line: 3,
+        target: "docs/design.md#the-verifier",
+        reason: "docs/design.md has no anchor #the-verifier",
+      },
+      {
+        file: "docs/design.md",
+        line: 2,
+        target: "missing.md",
+        reason: "docs/missing.md is not a tracked file or directory",
+      },
+      {
+        file: "docs/design.md",
+        line: 3,
+        target: "../README.md#no-such-heading",
+        reason: "README.md has no anchor #no-such-heading",
+      },
+      {
+        file: "docs/design.md",
+        line: 4,
+        target: "#nowhere",
+        reason: "docs/design.md has no anchor #nowhere",
+      },
+      {
+        file: "docs/design.md",
+        line: 5,
+        target: "../../outside.md",
+        reason: "the path leaves the repository",
+      },
+      {
+        file: "docs/design.md",
+        line: 6,
+        target: "images/b.png",
+        reason: "docs/images/b.png is not a tracked file or directory",
+      },
+    ]);
+  });
+
+  it("does not read the anchors of a file that is not Markdown", () => {
+    expect(check({ "a.md": "[x](b.txt#L3)", "b.txt": "" })).toEqual([]);
+  });
+});
+
+describe("the command", () => {
+  const dirs = [];
+  afterEach(() => {
+    for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+  });
+
+  /** A git repository holding `tree`, every file added. */
+  function repo(tree) {
+    const dir = mkdtempSync(join(tmpdir(), "check-links-"));
+    dirs.push(dir);
+    for (const [path, text] of Object.entries(tree)) {
+      mkdirSync(dirname(join(dir, path)), { recursive: true });
+      writeFileSync(join(dir, path), text);
+    }
+    execFileSync("git", ["init", "-q"], { cwd: dir });
+    execFileSync("git", ["add", "-A"], { cwd: dir });
+    return dir;
+  }
+
+  /** Runs the script as the repository at `dir`'s own (a copy under scripts/ there). */
+  function run(dir, args = []) {
+    mkdirSync(join(dir, "scripts"), { recursive: true });
+    writeFileSync(join(dir, "scripts", "check-links.mjs"), readScript());
+    return spawnSync(process.execPath, [join(dir, "scripts", "check-links.mjs"), ...args], {
+      cwd: dir,
+      encoding: "utf8",
+    });
+  }
+
+  const readScript = () => readFileSync(script, "utf8");
+
+  it("exits 0 on good links and 1 on a planted broken one, naming file and line", () => {
+    const dir = repo({
+      "README.md": "# Top\n\n[docs](docs/a.md#part)\n",
+      "docs/a.md": "# A\n\n## Part\n",
+    });
+    const ok = run(dir);
+    expect(ok.status).toBe(0);
+    expect(ok.stdout).toContain("check-links: ok, 2 file(s)");
+
+    writeFileSync(join(dir, "docs", "a.md"), "# A\n\n## Renamed\n\n[gone](b.md)\n");
+    const bad = run(dir);
+    expect(bad.status).toBe(1);
+    expect(bad.stdout).toContain("README.md:3: docs/a.md#part: docs/a.md has no anchor #part");
+    expect(bad.stdout).toContain("docs/a.md:5: b.md: docs/b.md is not a tracked file or directory");
+    expect(bad.stdout).toContain("check-links: 2 broken link(s) in 2 file(s)");
+  });
+
+  it("counts a file that exists but is not tracked as missing", () => {
+    const dir = repo({ "README.md": "[new](new.md)\n" });
+    writeFileSync(join(dir, "new.md"), "# New\n");
+    const result = run(dir, ["README.md"]);
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain("new.md is not a tracked file or directory");
+  });
+
+  it("exits 2 outside a git repository", () => {
+    const dir = mkdtempSync(join(tmpdir(), "check-links-"));
+    dirs.push(dir);
+    writeFileSync(join(dir, "README.md"), "# x\n");
+    const result = run(dir);
+    expect(result.status).toBe(2);
+    expect(result.stdout).toContain("cannot list the tracked files");
+  });
+});

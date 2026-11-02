@@ -81,6 +81,10 @@ jobs:
       - name: Lint
         if: matrix.node == 24
         run: npm run lint
+      # Relative links and #anchors of the tracked Markdown files; external URLs are not fetched.
+      - name: Markdown links
+        if: matrix.node == 24
+        run: npm run check:links
       - name: Honesty guard
         if: matrix.node == 24
         run: npm run guard:honest -- --base HEAD^1

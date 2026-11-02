@@ -58,7 +58,7 @@ import {
   sameCounts,
   upAside,
 } from './genealogy/firstView';
-import { cardName, cardWords } from './genealogy/cardWords';
+import { type CardDrawn, cardName, cardSaid, cardWords } from './genealogy/cardWords';
 import { cuePan } from './genealogy/cuePan';
 import { LINK_COLOR, LINK_DASH, LINK_OPACITY, linkWidth } from './genealogy/linkStyle';
 import { GRAPH_TEXT_PX, LINE_LABEL_PX, NODE_LABEL_PX, SUB_LABEL_PX } from './genealogy/textSize';
@@ -83,6 +83,7 @@ import { Button } from './ui/Button';
 import { isValidImageUrl } from '../utils/image';
 import { useReducedMotion } from '../utils/motion';
 import { useMdUp, useNoHover } from '../utils/layout';
+import { isPageFocus } from '../utils/pageFocus';
 import type { GenealogyNode, TrackData } from '../types';
 
 /** Something in the graph that keyboard focus or the pointer can be on: a track or a link. */
@@ -278,6 +279,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
   wheelZoom = 'plain',
   trackPreviewUrl = null,
   replay = false,
+  detailHeadingLevel = 3,
 }) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -426,8 +428,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     };
   }, [data, yearOfNode]);
   const nodeAriaLabel = useMemo(
-    () => (d: GenealogyNode) => {
-      const name = cardNameOf(d.id);
+    () => (d: GenealogyNode, name: string) => {
       if (d.group === 1) return `${name}, the analyzed track`;
       const link = relations.get(d.id)?.link;
       // No link to the analysed track: its best link to another track (a second hop).
@@ -439,13 +440,18 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
           : 'No direct link to the analyzed track.';
       return `${name}: ${said}`;
     },
-    [cardNameOf, nameOf, relations, links],
+    [nameOf, relations, links],
   );
-  /** A card's name with what Enter does on it: open its details, or close them (selected). */
-  const cardLabel = (d: GenealogyNode, selected: boolean) =>
-    d.group === 1
-      ? nodeAriaLabel(d)
-      : `${nodeAriaLabel(d)} Press Enter ${selected ? 'to close its details' : 'for its details'}.`;
+  /**
+   * A card's name: the words it draws, in their order (`cardSaid`), then its link, then what Enter
+   * does on it: open its details, or close them (selected).
+   */
+  const cardLabel = (d: GenealogyNode, selected: boolean, drawn: CardDrawn) => {
+    const said = nodeAriaLabel(d, cardSaid(d, yearOfNode(d.id), drawn));
+    return d.group === 1
+      ? said
+      : `${said} Press Enter ${selected ? 'to close its details' : 'for its details'}.`;
+  };
   const cardLabelRef = useRef(cardLabel);
   cardLabelRef.current = cardLabel;
 
@@ -710,6 +716,13 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       };
     });
     type Card = (typeof nodes)[number];
+    /** A card's words as it draws them, line by line, for its name. */
+    const drawnOf = (d: Card): CardDrawn => ({
+      title: d.titleWrap,
+      meta: d.metaWrap,
+      tag: d.tag,
+      note: d.shortenedWrap,
+    });
     const layoutOptions = {
       orientation,
       gap: 10,
@@ -1087,6 +1100,9 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
 
     // A wider, invisible line over each link: pointing at it or focusing it shows the link's
     // relation and where it comes from; focused, it shows a band of its own as a focus ring.
+    // A Tab stop of the map's roving focus, so a button, as a card is: focused, it shows what
+    // the link is (a path has no role of its own, and ARIA allows no name without one). Pressing
+    // it does nothing more.
     const linkTarget = g
       .append('g')
       .attr('class', 'link-targets')
@@ -1104,6 +1120,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       .call(withoutOutline)
       .attr('tabindex', -1)
       .attr('data-mid', (d) => `${d.route.mid.x},${d.route.mid.y}`)
+      .attr('role', 'button')
       .attr('aria-label', (d) => describeLink(d.shown, nameOf));
 
     // The chips' leaders, under the cards: a leader never runs over a card's words.
@@ -1131,8 +1148,10 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
         return `translate(${box.x},${box.y})`;
       })
       .attr('tabindex', -1)
-      .attr('role', (d) => (d.node.group === 1 ? 'img' : 'button'))
-      .attr('aria-label', (d) => cardLabelRef.current(d.node, false))
+      // Every card a button, the analysed track's too: a Tab stop of the map's roving focus,
+      // whose focus shows its detail box (pressing the analysed track's does nothing more).
+      .attr('role', 'button')
+      .attr('aria-label', (d) => cardLabelRef.current(d.node, false, drawnOf(d)))
       .call(withoutOutline);
 
     // The card's frame: this track's in the measured cyan, an origin's in the sourced amber,
@@ -1229,6 +1248,11 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     // that ends inside a word (a word longer than the line) ends in a hyphen, and says so.
     const textX = PAD + THUMB + TEXT_GAP;
     const words = node.append('g').attr('class', 'node-label').style('pointer-events', 'none');
+    // A space between one line and the next, so the words read as drawn ("More Spell on You
+    // Eddie Johns"), not run together. It draws nothing: it ends a line, or sits between two
+    // <text> elements, where no text is drawn.
+    const space = () => document.createTextNode(' ');
+    const spaceAfter = (element: Element) => element.after(space());
     const lineText = (
       className: string,
       wrapped: (d: Card) => { lines: string[]; hyphenated: boolean[] },
@@ -1246,6 +1270,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
           const text = select(this);
           const { lines, hyphenated } = wrapped(d);
           lines.forEach((line, index) => {
+            if (index > 0) this.append(space());
             text
               .append('tspan')
               .attr('x', textX)
@@ -1253,6 +1278,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
               .attr('data-hyphen', hyphenated[index] ? '' : null)
               .text(line);
           });
+          spaceAfter(this);
         });
     };
     lineText(
@@ -1276,7 +1302,10 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       .attr('fill', (d) => (d.id === currentId ? genealogyColors.current : genealogyColors.origin))
       .attr('font-family', 'IBM Plex Mono')
       .attr('font-size', `${SUB_LABEL_PX}px`)
-      .text((d) => d.tag ?? '');
+      .text((d) => d.tag ?? '')
+      .each(function () {
+        spaceAfter(this);
+      });
     // Words cut on the card, said in words: "Title shortened" (the ellipsis alone is easy to
     // miss), set apart from the record's words. The whole title is in the card's name, its detail box and its details.
     lineText(
@@ -1436,7 +1465,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       const selected = selectedRef.current;
       node
         .attr('aria-pressed', (d) => (d.id === currentId ? null : String(d.id === selected)))
-        .attr('aria-label', (d) => cardLabelRef.current(d.node, d.id === selected))
+        .attr('aria-label', (d) => cardLabelRef.current(d.node, d.id === selected, drawnOf(d)))
         .select('.select-ring')
         .attr('opacity', (d) => (d.id === selected ? 1 : 0));
       drawActive();
@@ -2064,7 +2093,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     const active = document.activeElement;
     const inPanel = active !== null && (panelRef.current?.contains(active) ?? false);
     setSelectedId(null);
-    if (id && (inPanel || active === document.body)) focusCard(id);
+    if (id && (inPanel || isPageFocus(active))) focusCard(id);
   };
   // Escape closes a list open over the panel first (the links, the previews), then stops A/B
   // listening, then closes the panel, then the hover box. With neither a selection nor a pair
@@ -2110,9 +2139,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || event.defaultPrevented) return;
       const target = event.target;
-      if (target !== document.body && target !== document.documentElement && target !== document) {
-        return;
-      }
+      if (!isPageFocus(target)) return;
       const root = rootRef.current;
       if (!root || (typeof root.checkVisibility === 'function' && !root.checkVisibility())) return;
       if (escapeRef.current()) event.preventDefault();
@@ -2184,6 +2211,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
       onStopListening={ab.stop}
       onAnalyse={() => analyseRef.current(selectedNode)}
       onClose={closeSelection}
+      headingLevel={detailHeadingLevel}
     />
   );
   // Every link hidden by the filters: what is hidden, and a way back.
@@ -2336,7 +2364,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
             currentId={currentId}
             yearOf={yearOfNode}
             isOrigin={isOrigin}
-            describe={(node) => cardLabel(node, node.id === selectedNode?.id)}
+            describe={(node, drawn) => cardLabel(node, node.id === selectedNode?.id, drawn)}
             nameOf={nameOf}
             selectedId={selectedNode?.id ?? null}
             onSelect={(node) => selectRef.current(node.id)}
@@ -2434,7 +2462,7 @@ const GenealogyGraph: React.FC<GenealogyGraphProps> = ({
                           // macOS), the focus is on no element while the cue stays.
                           requestAnimationFrame(() => {
                             if (button.isConnected) return;
-                            if (document.activeElement && document.activeElement !== document.body)
+                            if (document.activeElement && !isPageFocus(document.activeElement))
                               return;
                             focusMapRef.current?.();
                           });

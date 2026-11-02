@@ -159,14 +159,14 @@ const RelationBadge: React.FC<{ rec: RelatedTrack }> = ({ rec }) => {
 
 const EMPTY_LOGS: AgentLog[] = [];
 
-// A connected track without cover art
+// A connected track without cover art (in its card's button: phrasing content only)
 const PlaceholderCover: React.FC = () => (
-  <div
+  <span
     className="w-full h-full flex items-center justify-center"
     style={{ background: placeholderBackground }}
   >
     <Music size={48} data-placeholder-note style={{ color: PLACEHOLDER_NOTE.color }} />
-  </div>
+  </span>
 );
 
 const Dashboard: React.FC<DashboardProps> = ({
@@ -481,21 +481,16 @@ const Dashboard: React.FC<DashboardProps> = ({
             className="flex gap-(--space-lg) overflow-x-auto pb-4 scrollbar-hide pt-2 pl-2 overscroll-contain"
           >
             {(relatedTracks ?? []).map((rec, index) => (
-              <div
+              // A button, so Enter and Space press it; what it holds is phrasing content only
+              // (spans laid out as the blocks they stand for).
+              <button
+                type="button"
                 key={rec.id}
-                role="button"
-                tabIndex={0}
                 onClick={() => handleCardClick(rec)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    handleCardClick(rec);
-                  }
-                }}
                 onMouseEnter={() => setHoveredCardId(rec.id)}
                 onMouseLeave={() => setHoveredCardId(null)}
                 data-hovered={hoveredCardId === rec.id || undefined}
-                className="relative w-[280px] shrink-0 rounded-md cursor-pointer group focus-visible:ring-2 focus-visible:ring-cyber/70 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-hidden animate-fade-in-up opacity-0"
+                className="relative flex flex-col w-[280px] shrink-0 rounded-md text-start cursor-pointer group focus-visible:ring-2 focus-visible:ring-cyber/70 focus-visible:ring-offset-2 focus-visible:ring-offset-void focus-visible:outline-hidden animate-fade-in-up opacity-0"
                 style={{
                   animationDelay: `${index * 80}ms`,
                   animationFillMode: 'forwards',
@@ -503,12 +498,13 @@ const Dashboard: React.FC<DashboardProps> = ({
               >
                 {/* The card lifts inside a box that stays put, so a pointer near its bottom edge
                     does not drop the hover the lift itself causes. */}
-                <div className="h-full bg-void border border-border p-4 rounded-md group-hover:border-cyber/30 group-hover:bg-surface-hover group-hover:-translate-y-1 group-hover:shadow-glow-cyber-subtle transition-[translate,box-shadow,border-color,background-color] duration-(--duration-normal) ease-out-expo">
-                  <div className="relative aspect-square rounded-md overflow-hidden mb-4 bg-void-lighter">
+                <span className="block h-full bg-void border border-border p-4 rounded-md group-hover:border-cyber/30 group-hover:bg-surface-hover group-hover:-translate-y-1 group-hover:shadow-glow-cyber-subtle transition-[translate,box-shadow,border-color,background-color] duration-(--duration-normal) ease-out-expo">
+                  <span className="block relative aspect-square rounded-md overflow-hidden mb-4 bg-void-lighter">
                     {rec.img ? (
                       <img
                         src={rec.img}
-                        alt={rec.title}
+                        // Decorative: the button is named by the title it draws beside it.
+                        alt=""
                         className="w-full h-full object-cover opacity-80 group-hover:opacity-100 group-hover:scale-105 transition-all duration-(--duration-slow)"
                       />
                     ) : (
@@ -516,30 +512,40 @@ const Dashboard: React.FC<DashboardProps> = ({
                     )}
                     {/* Target Scan Overlay on hover */}
                     <TargetScanOverlay isHovered={hoveredCardId === rec.id} />
-                  </div>
+                  </span>
 
-                  <div className="space-y-1">
-                    <h3 className="font-semibold text-white truncate">{rec.title}</h3>
+                  <span className="block space-y-1">
+                    <span data-card-title className="block font-semibold text-white truncate">
+                      {rec.title}
+                    </span>
                     {rec.artist && (
-                      <p className="text-sm text-text-tertiary truncate">{rec.artist}</p>
+                      <span data-card-artist className="block text-sm text-text-tertiary truncate">
+                        {rec.artist}
+                      </span>
                     )}
-                  </div>
+                  </span>
 
-                  <div className="mt-4 pt-3 border-t border-white/5 flex flex-col items-start gap-1.5">
+                  <span className="mt-4 pt-3 border-t border-white/5 flex flex-col items-start gap-1.5">
                     <RelationBadge rec={rec} />
                     {rec.sentence && (
-                      <p data-link-relation className="text-chrome font-mono text-text-secondary">
+                      <span
+                        data-link-relation
+                        className="block text-chrome font-mono text-text-secondary"
+                      >
                         {rec.sentence}
-                      </p>
+                      </span>
                     )}
                     {rec.provenance && (
-                      <p data-link-provenance className="text-chrome font-mono text-text-chip">
+                      <span
+                        data-link-provenance
+                        className="block text-chrome font-mono text-text-chip"
+                      >
                         {rec.provenance}
-                      </p>
+                      </span>
                     )}
-                  </div>
-                </div>
-              </div>
+                  </span>
+                </span>
+              </button>
             ))}
           </div>
 

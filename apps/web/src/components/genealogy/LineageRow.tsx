@@ -3,7 +3,7 @@ import { Music } from 'lucide-react';
 import type { GenealogyNode } from '../../types';
 import { placeholderBackground } from '../../styles/placeholder';
 import { isValidImageUrl } from '../../utils/image';
-import { cardWords } from './cardWords';
+import { type CardDrawn, cardWords } from './cardWords';
 import { relationLabel, relationSentence, relationToTrack, type ShownLink } from './links';
 import { LINK_COLOR } from './linkStyle';
 
@@ -30,8 +30,11 @@ export const LineageRow: React.FC<{
   yearOf: (id: string) => number | null;
   /** True for a track a sourced link says this one uses. */
   isOrigin: (id: string) => boolean;
-  /** A track's name for screen readers: its relation and how it is known. */
-  describe: (node: GenealogyNode) => string;
+  /**
+   * A track's name for screen readers, from the words its card draws (`drawn`): then its
+   * relation and how it is known.
+   */
+  describe: (node: GenealogyNode, drawn: CardDrawn) => string;
   /** How a relation names a track (its title and year). */
   nameOf: (id: string) => string;
   /** The selected track (its details are open under the row), if any. */
@@ -113,8 +116,11 @@ export const LineageRow: React.FC<{
           </span>
         )}
         <span className="flex min-w-0 flex-col font-mono text-chrome">
+          {/* A space between the lines (a flex column draws none): they read apart, as drawn. */}
           <span className="text-text-primary wrap-break-word">{title}</span>
+          {meta && ' '}
           {meta && <span className="text-text-tertiary wrap-break-word">{meta}</span>}
+          {tag && ' '}
           {tag && <span className={isCurrent ? 'text-cyber' : 'text-analog'}>{tag}</span>}
         </span>
       </span>
@@ -123,7 +129,11 @@ export const LineageRow: React.FC<{
     return (
       <button
         type="button"
-        aria-label={describe(node)}
+        aria-label={describe(node, {
+          title: { lines: [title] },
+          meta: { lines: meta ? [meta] : [] },
+          tag,
+        })}
         aria-pressed={selected}
         data-card-id={node.id}
         onClick={() => onSelect(node)}

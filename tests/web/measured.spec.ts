@@ -156,9 +156,11 @@ test.describe("a measured result", () => {
     const lane = timeline.getByRole("group", { name: "Preview window (29.8 s, measured)" });
     await expect(lane).toContainText("position in the song unknown");
     await expect(lane).toContainText("29.8 s");
-    await expect(lane.getByRole("img")).toHaveCount(2);
+    const moments = lane.getByRole("list", { name: "Key moments" }).getByRole("listitem");
+    await expect(moments.getByRole("button")).toHaveCount(2);
+    await expect(lane.getByRole("img")).toHaveCount(0);
     // 18.6 s into a 29.75 s window.
-    await expect(lane.getByRole("img").nth(1)).toHaveAttribute(
+    await expect(moments.nth(1)).toHaveAttribute(
       "style",
       new RegExp(`left: ${((18.6 / 29.75) * 100).toFixed(2)}`),
     );
@@ -321,7 +323,8 @@ test("a partly measured result says what was not measured and why", async ({ pag
   const lane = page
     .getByRole("group", { name: "Song structure" })
     .getByRole("group", { name: "Preview window (22.4 s, measured)" });
-  await expect(lane.getByRole("img")).toHaveCount(2);
+  await expect(lane.getByRole("list", { name: "Key moments" }).getByRole("button")).toHaveCount(2);
+  await expect(lane.getByRole("img")).toHaveCount(0);
   await expect(page.getByTestId("player-audio-line")).toHaveText("123 BPM · 22.4 s preview");
   await screenshot(page, testInfo, "partly-player");
   await screenshot(page, testInfo, "partly-timeline", lane);
@@ -512,7 +515,7 @@ test.describe("a result without the audio block", () => {
     const timeline = page.getByRole("group", { name: "Song structure" });
     await expect(timeline).toContainText("No key moments — no audio preview");
     await expect(timeline).not.toContainText("key moments measured");
-    await expect(timeline.getByRole("img", { name: /Energy peak/ })).toHaveCount(0);
+    await expect(timeline.getByRole("button", { name: /Energy peak/ })).toHaveCount(0);
     await expect(page.getByTestId("player-audio-line")).toHaveText("BPM not measured");
     await screenshot(page, testInfo, "unavailable-player");
   });
@@ -548,9 +551,11 @@ test.describe("a result without the audio block", () => {
     await expect(scores.locator('[data-value-kind="measured"]')).toHaveCount(0);
     await openPlayer(page);
     // Without the window's length the lane still says it is not known.
-    await expect(
-      page.getByRole("group", { name: "Audio preview (about 30 s)" }).getByRole("img"),
-    ).toHaveCount(2);
+    const lane = page.getByRole("group", { name: "Audio preview (about 30 s)" });
+    await expect(lane.getByRole("list", { name: "Key moments" }).getByRole("button")).toHaveCount(
+      2,
+    );
+    await expect(lane.getByRole("img")).toHaveCount(0);
   });
 
   test("shows a saturated energy as missing, with why", async ({ page }, testInfo) => {

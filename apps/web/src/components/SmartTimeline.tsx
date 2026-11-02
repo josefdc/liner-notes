@@ -107,9 +107,9 @@ const SHAPE_PATH: Record<Shape, React.ReactNode> = {
 // web's type leaves out, so such sections count as of unknown origin and are not drawn either:
 // nothing sends that source today. The colour a result sends with each section (chosen by the
 // model) is not used: it would put the measured or sourced colours on an inference. Neighbouring
-// sections alternate two tints and are drawn apart. Each section is focusable, so its boundary
-// reaches 3:1 against the page (WCAG 1.4.11): a 1 px border in the solid inferred violet around
-// the tint.
+// sections alternate two tints and are drawn apart. Each section holds a button that names it and
+// shows its label on focus, so its boundary reaches 3:1 against the page (WCAG 1.4.11): a 1 px
+// border in the solid inferred violet around the tint.
 const SEGMENT_TINTS: [string, string] = [
   'bg-prov-inferred/60 border border-prov-inferred',
   'bg-prov-inferred/35 border border-prov-inferred',
@@ -139,39 +139,54 @@ function placeable(markers: Marker[], length: number | null) {
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
-/** A lane of markers positioned by time over a known length. */
-const MarkerLane: React.FC<{ markers: Marker[]; length: number }> = ({ markers, length }) => (
-  <div className="relative h-6 w-full mt-1">
+/**
+ * A lane of markers positioned by time over a known length, as a list named `label`. Each marker
+ * is a button named by its description, so Tab reaches it and the description shows beside it
+ * on focus as on hover; pressing it does nothing more.
+ */
+const MarkerLane: React.FC<{ markers: Marker[]; length: number; label: string }> = ({
+  markers,
+  length,
+  label,
+}) => (
+  <ul aria-label={label} className="relative h-6 w-full mt-1">
     {markers.map((marker, index) => (
-      <div
+      <li
         // biome-ignore lint/suspicious/noArrayIndexKey: markers can share a time and type
         key={index}
-        className="absolute top-0 -translate-x-1/2 cursor-pointer group"
+        className="absolute top-0 -translate-x-1/2"
         style={{ left: `${Math.min(Math.max((marker.time / length) * 100, 2), 98)}%` }}
-        tabIndex={0}
-        role="img"
-        aria-label={marker.description}
       >
-        {/* The marker's shape (its type), in its colour (how it is known) */}
-        <svg
-          viewBox="0 0 10 10"
-          width={10}
-          height={10}
-          aria-hidden="true"
-          data-shape={marker.shape}
-          fill="currentColor"
-          className="group-hover:scale-125 group-focus-visible:scale-125 transition-transform"
-          style={{ color: marker.color, opacity: marker.intensity ?? 1 }}
+        <button
+          type="button"
+          aria-label={marker.description}
+          className="relative block cursor-pointer group"
         >
-          {SHAPE_PATH[marker.shape]}
-        </svg>
-        {/* Tooltip, in a text colour */}
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 w-32 text-center text-chrome font-mono text-text-secondary transition-opacity z-20 pointer-events-none">
-          {marker.description}
-        </div>
-      </div>
+          {/* The marker's shape (its type), in its colour (how it is known) */}
+          <svg
+            viewBox="0 0 10 10"
+            width={10}
+            height={10}
+            aria-hidden="true"
+            data-shape={marker.shape}
+            fill="currentColor"
+            className="group-hover:scale-125 group-focus-visible:scale-125 transition-transform"
+            style={{ color: marker.color, opacity: marker.intensity ?? 1 }}
+          >
+            {SHAPE_PATH[marker.shape]}
+          </svg>
+          {/* Tooltip, in a text colour: the button's name, shown */}
+          <span
+            aria-hidden="true"
+            data-marker-tip
+            className="block absolute top-4 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 w-32 text-center text-chrome font-mono text-text-secondary transition-opacity z-20 pointer-events-none"
+          >
+            {marker.description}
+          </span>
+        </button>
+      </li>
     ))}
-  </div>
+  </ul>
 );
 
 // The measured layers of the preview: the beat grid, the energy contour and the neutral
@@ -269,17 +284,15 @@ const SectionBands: React.FC<{ sections: MeasuredSection[]; length: number }> = 
   sections,
   length,
 }) => (
-  <div
+  <ul
     data-measured-layer="sections"
-    role="list"
     aria-label="Sections measured in the preview"
     className="relative h-4 w-full"
   >
     {sections.map((section, index) => (
-      <div
+      <li
         // A section's span is unique; labels repeat (A, B, A).
         key={`${section.start}-${section.end}`}
-        role="listitem"
         aria-label={`Section ${section.label}, ${formatTime(section.start)} to ${formatTime(section.end)} (measured)`}
         className={`absolute inset-y-0 overflow-hidden rounded-xs border border-prov-measured flex items-center px-1 text-chrome leading-none font-mono text-text-secondary ${index % 2 === 0 ? 'bg-prov-measured/25' : 'bg-prov-measured/10'}`}
         style={{
@@ -288,9 +301,9 @@ const SectionBands: React.FC<{ sections: MeasuredSection[]; length: number }> = 
         }}
       >
         <span aria-hidden="true">{section.label}</span>
-      </div>
+      </li>
     ))}
-  </div>
+  </ul>
 );
 
 /** The measured layers that can be drawn over a window of `length` seconds; empty ones drop. */
@@ -422,7 +435,9 @@ const SmartTimeline: React.FC<SmartTimelineProps> = ({
       : PREVIEW_LABEL;
 
   return (
-    <div className="w-full mt-8" role="group" aria-label="Song structure">
+    // A fieldset: the group role, its name and its focusable parts in one element (min-w-0
+    // undoes a fieldset's min-content width, so the timeline still shrinks with the page).
+    <fieldset className="w-full min-w-0 mt-8" aria-label="Song structure">
       <div className="flex items-center justify-between gap-2 mb-2">
         <span className="text-chrome font-mono text-text-tertiary uppercase tracking-widest">
           Structure
@@ -464,34 +479,40 @@ const SmartTimeline: React.FC<SmartTimelineProps> = ({
         </div>
       )}
 
-      {/* Structure Bar: the model's sections */}
+      {/* Structure Bar: the model's sections. Each is a list item holding a button that names
+          it, so Tab reaches it and its label shows on focus, as on hover. */}
       {sections.length > 0 && (
-        <div className="h-3 w-full flex gap-px rounded-xs overflow-hidden relative" role="list">
+        <ul className="h-3 w-full flex gap-px rounded-xs overflow-hidden relative">
           {sections.map((seg, index) => (
-            <div
+            <li
               // Labels repeat (two choruses); a segment's span is unique.
               key={`${seg.start}-${seg.end}-${seg.label}`}
-              role="listitem"
-              aria-label={`${seg.label}, ${Math.round(seg.end - seg.start)}% of track`}
-              tabIndex={0}
               data-segment-tint="inferred"
-              className={`h-full relative group transition-all duration-(--duration-normal) hover:brightness-125 focus-visible:brightness-125 focus-visible:outline-hidden forced-colors:focus-visible:-outline-offset-2 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white ${SEGMENT_TINTS[index % 2]}`}
+              className={`h-full relative group transition-all duration-(--duration-normal) hover:brightness-125 has-[:focus-visible]:brightness-125 ${SEGMENT_TINTS[index % 2]}`}
               style={{ width: `${Math.max(seg.end - seg.start, 0)}%` }}
             >
+              <button
+                type="button"
+                aria-label={`${seg.label}, ${Math.round(seg.end - seg.start)}% of track`}
+                className="block h-full w-full focus-visible:outline-hidden forced-colors:focus-visible:-outline-offset-2 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white"
+              />
               {/* Tooltip */}
-              <div className="absolute -top-8 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 bg-void border border-white/20 px-2 py-1 text-chrome font-mono whitespace-nowrap z-10 transition-opacity">
+              <div
+                aria-hidden="true"
+                className="absolute -top-8 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 bg-void border border-white/20 px-2 py-1 text-chrome font-mono whitespace-nowrap z-10 transition-opacity"
+              >
                 {seg.label}
               </div>
-            </div>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
 
       {/* Samples on the song timeline (times inferred by the model), over a faint baseline
           when no section bar is drawn under the axis */}
       {sections.length === 0 && songAxis && <div className="h-px w-full bg-white/10" />}
       {duration !== null && sampleMarkers.inside.length > 0 && (
-        <MarkerLane markers={sampleMarkers.inside} length={duration} />
+        <MarkerLane markers={sampleMarkers.inside} length={duration} label="Samples" />
       )}
       {sampleMarkers.inside.length > 0 && <Note>Sample times: model inference</Note>}
       {sampleMarkers.outside > 0 && (
@@ -505,7 +526,7 @@ const SmartTimeline: React.FC<SmartTimelineProps> = ({
       {/* The preview lane: what was measured on the preview, scaled to it. Its times say
           nothing about where the preview falls in the song. */}
       {momentMarkers.inside.length > 0 || hasLayers ? (
-        <div className="mt-6" role="group" aria-label={previewLabel}>
+        <fieldset className="mt-6 min-w-0" aria-label={previewLabel}>
           <div className="flex justify-between gap-3 text-chrome font-mono text-text-chip uppercase tracking-widest">
             <span>
               {previewLabel}
@@ -542,7 +563,7 @@ const SmartTimeline: React.FC<SmartTimelineProps> = ({
             <div className="h-1 w-full mt-2 rounded-full bg-white/10" />
           )}
           {momentMarkers.inside.length > 0 && (
-            <MarkerLane markers={momentMarkers.inside} length={previewLength} />
+            <MarkerLane markers={momentMarkers.inside} length={previewLength} label="Key moments" />
           )}
           {hasLayers && (
             <div
@@ -553,7 +574,7 @@ const SmartTimeline: React.FC<SmartTimelineProps> = ({
               <span>{layerNames.join(' · ')}</span>
             </div>
           )}
-        </div>
+        </fieldset>
       ) : null}
       {momentMarkers.inside.length === 0 && (
         <Note>
@@ -589,7 +610,7 @@ const SmartTimeline: React.FC<SmartTimelineProps> = ({
       {momentMarkers.outside > 0 && (
         <Note>{`${plural(momentMarkers.outside, 'key moment')} outside the preview, not drawn`}</Note>
       )}
-    </div>
+    </fieldset>
   );
 };
 

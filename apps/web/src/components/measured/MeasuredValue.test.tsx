@@ -678,11 +678,12 @@ describe('the preview lane of a measurement', () => {
     const lane = screen.getByRole('group', { name: 'Preview window (22.4 s, measured)' });
     expect(lane.textContent).toContain('position in the song unknown');
     expect(lane.textContent).toContain('22.4 s');
-    expect(within(lane).getAllByRole('img')).toHaveLength(1);
+    const moments = within(lane).getByRole('list', { name: 'Key moments' });
+    expect(within(moments).getAllByRole('button')).toHaveLength(1);
+    // No measured layer drawn besides it.
+    expect(within(lane).queryAllByRole('img')).toHaveLength(0);
     // 4.2 s of a 22.4 s window, not of an assumed 30 s.
-    expect((within(lane).getByRole('img') as HTMLElement).style.left).toBe(
-      `${(4.2 / 22.4) * 100}%`,
-    );
+    expect(within(moments).getByRole('listitem').style.left).toBe(`${(4.2 / 22.4) * 100}%`);
     expect(screen.getByText('1 key moment outside the preview, not drawn')).toBeTruthy();
   });
 });

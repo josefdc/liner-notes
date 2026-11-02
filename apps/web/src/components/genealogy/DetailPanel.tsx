@@ -112,6 +112,8 @@ export const DetailPanel: React.FC<{
   /** How much less than 60% of the canvas it may take (px), on the canvas. */
   shorterBy?: number;
   panelRef?: React.Ref<HTMLElement>;
+  /** Its heading's level: one below the heading the graph sits under. */
+  headingLevel?: 2 | 3;
 }> = ({
   node,
   year,
@@ -130,8 +132,10 @@ export const DetailPanel: React.FC<{
   bottomOffset = 8,
   shorterBy = 0,
   panelRef,
+  headingLevel = 3,
 }) => {
   const headingId = useId();
+  const Heading = headingLevel === 2 ? 'h2' : 'h3';
   // The title without a year its label ends with: the panel gives the record's year (or
   // "undated") beside it, never a second one from the label.
   const words = cardWords(node, year);
@@ -163,9 +167,9 @@ export const DetailPanel: React.FC<{
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <h3 id={headingId} className="text-text-primary">
+          <Heading id={headingId} className="text-text-primary">
             {title}
-          </h3>
+          </Heading>
           <p className="text-text-tertiary">
             {artist ? `${artist} · ` : ''}
             {year ?? 'undated'}

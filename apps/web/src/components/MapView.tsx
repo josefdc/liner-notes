@@ -133,6 +133,8 @@ const MapScreen: React.FC<Omit<MapViewProps, 'trackData'> & { track: TrackData }
               replay={replay}
               // Nothing scrolls behind the map: the wheel and one finger zoom and pan it.
               wheelZoom="plain"
+              // Under the page's h1: the selected track's heading is an h2.
+              detailHeadingLevel={2}
             />
           </ErrorBoundary>
         ) : (

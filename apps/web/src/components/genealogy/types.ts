@@ -43,4 +43,9 @@ export interface GenealogyGraphProps {
    * trackpad pinch sends that too). A touch pinch zooms either way.
    */
   wheelZoom?: 'plain' | 'modifier';
+  /**
+   * The level of the selected track's heading in its detail panel: one below the heading the
+   * graph sits under (3 under the Player's h2, 2 on the map's own page under its h1).
+   */
+  detailHeadingLevel?: 2 | 3;
 }

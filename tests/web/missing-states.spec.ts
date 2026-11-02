@@ -83,6 +83,7 @@ test("the Player shows not-measured states and no song sections", async ({ page 
   await expect(timeline).not.toContainText(/0:00|3:45/);
   // No fake marker: nothing was detected, so nothing is drawn on the timeline.
   await expect(timeline.getByRole("img")).toHaveCount(0);
+  await expect(timeline.getByRole("button")).toHaveCount(0);
   await expect(timeline).toContainText("No key moments");
 
   await expectNoInventedValues(page);

@@ -77,9 +77,9 @@ describe('the Player with claims', () => {
     render(<Player trackData={provenanceTrack()} onBack={() => {}} />);
     const timeline = screen.getByRole('group', { name: 'Song structure' });
     expect(
-      within(timeline).getByRole('img', { name: /^Sample: Vocal chop from an older record/ }),
+      within(timeline).getByRole('button', { name: /^Sample: Vocal chop from an older record/ }),
     ).toBeTruthy();
-    expect(within(timeline).queryByRole('img', { name: /Horn stab/ })).toBeNull();
+    expect(within(timeline).queryByRole('button', { name: /Horn stab/ })).toBeNull();
   });
 
   it('keeps relations whose claim was rejected out of the genealogy, and the tracks only they related', () => {

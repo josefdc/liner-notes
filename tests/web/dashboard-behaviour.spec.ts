@@ -92,8 +92,8 @@ test("a connected track's card analyses it with no undo toast; Stop and the last
   // The card names the track by its own title and artist, and its relation as the graph does.
   const card = page.getByRole("button").filter({ hasText: "Relation:" });
   await expect(card).toHaveCount(1);
-  await expect(card.locator("h3")).toHaveText("Older Record");
-  await expect(card.locator("h3 + p")).toHaveText("Someone");
+  await expect(card.locator("[data-card-title]")).toHaveText("Older Record");
+  await expect(card.locator("[data-card-artist]")).toHaveText("Someone");
   await expect(card.locator("[data-link-kind]")).toHaveText("Relation: Possible sample");
 
   await card.click();

@@ -7,6 +7,7 @@
 // It does nothing while the focus is in a text field (Escape belongs to the field there), nor
 // when the focus is outside the Player (the page footer, another part of the page), nor when
 // something inside handled it already (`defaultPrevented`: the graph hiding its detail box).
+import { isPageFocus } from '../utils/pageFocus';
 
 /** The input types whose Escape is the browser's or the field's own: every text-like input. */
 const NOT_TEXT_INPUTS: ReadonlySet<string> = new Set([
@@ -125,11 +126,10 @@ export function escapeAction(
   if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing) return 'none';
   const { target } = event;
   if (isTextField(target)) return 'none';
-  const doc = root.ownerDocument;
-  const onPage = target === doc.body || target === doc.documentElement || target === doc;
+  const onPage = isPageFocus(target);
   if (!onPage && !(target instanceof Node && root.contains(target))) return 'none';
-  // The focus is on the key's target: the body when no element has it.
-  const active = target instanceof Element ? target : null;
+  // The focus is on the key's target, or on no control (the page: `isPageFocus`).
+  const active = !onPage && target instanceof Element ? target : null;
   return closable(root, active).length > 0 ? 'close' : 'back';
 }
 

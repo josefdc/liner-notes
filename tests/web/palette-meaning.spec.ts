@@ -35,7 +35,7 @@ test("the Player's timeline draws the model's sections and sample times in viole
     "inferred",
   );
   // Every section is a tint of the inferred violet, whatever colour the result sent.
-  const hues = await timeline.getByRole("listitem").evaluateAll((items) =>
+  const hues = await timeline.locator("li[data-segment-tint]").evaluateAll((items) =>
     items.map((item) => {
       const context = new OffscreenCanvas(1, 1).getContext("2d");
       if (!context) throw new Error("no 2d context");
@@ -51,12 +51,15 @@ test("the Player's timeline draws the model's sections and sample times in viole
     expect(b).toBeGreaterThan(r);
     expect(r).toBeGreaterThan(g);
   }
-  const markers = await timeline.getByRole("img").evaluateAll((items) =>
-    items.map((item) => ({
-      label: item.getAttribute("aria-label") ?? "",
-      colour: getComputedStyle(item.querySelector("svg") as Element).color,
-    })),
-  );
+  const markers = await timeline
+    .getByRole("list", { name: /^(Samples|Key moments)$/ })
+    .getByRole("button")
+    .evaluateAll((items) =>
+      items.map((item) => ({
+        label: item.getAttribute("aria-label") ?? "",
+        colour: getComputedStyle(item.querySelector("svg") as Element).color,
+      })),
+    );
   expect(markers.length).toBeGreaterThan(1);
   for (const { label, colour } of markers) {
     expect(colour, label).toBe(label.includes("inferred by the model") ? INFERRED : MEASURED);

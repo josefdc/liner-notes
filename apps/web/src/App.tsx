@@ -5,6 +5,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import Onboarding from './components/Onboarding';
 import { TrackLinkScreen } from './components/TrackLinkScreen';
 import { lazyWithRetry } from './utils/lazyWithRetry';
+import { isPageFocus, MAIN_CONTENT_ID } from './utils/pageFocus';
 // Loaded again on the screen boundary's "Try again" (or another screen) when their code failed.
 const Dashboard = lazyWithRetry(() => import('./components/Dashboard'));
 const Player = lazyWithRetry(() => import('./components/Player'));
@@ -198,7 +199,7 @@ const App: React.FC = () => {
     // Unless the user has moved it elsewhere meanwhile (from the loading view, or from the
     // page where the loading view's removal left it).
     const active = document.activeElement;
-    if (active && active !== document.body && active !== loadingView()) return;
+    if (active && !isPageFocus(active) && active !== loadingView()) return;
     heading.focus();
   }, []);
   const setDashboardHeading = useCallback(
@@ -607,7 +608,7 @@ const App: React.FC = () => {
       onHistoryMove((route, state) => {
         const target = state as Partial<HistoryEntry> | null;
         const targetPhase = target?.phase;
-        // Not an entry of the app's (the skip link's #main-content): nothing to change.
+        // Not an entry of the app's (one it did not push, such as a fragment typed in the address bar): nothing to change.
         if (!target || !targetPhase) return;
         // Guard: don't interrupt a running analysis or an open track picker
         if (phase === AppPhase.ONBOARDING && !link && (isLoading || status === 'disambiguation')) {
@@ -770,7 +771,14 @@ const App: React.FC = () => {
       // The full-size map takes the window down to its bottom edge.
       footer={link !== null || phase !== AppPhase.MAP}
     >
-      <div id="main-content" className="flex-1 min-h-0 w-full flex flex-col">
+      {/* The page's one main landmark, around whichever screen is shown: the skip link's
+          target. Only while the skip link has given it the focus is it focusable (Layout); it
+          shows no outline then, as the screens' headings do, except in forced-colors mode,
+          which draws one inside its edges. */}
+      <main
+        id={MAIN_CONTENT_ID}
+        className="flex-1 min-h-0 w-full flex flex-col focus-visible:outline-hidden forced-colors:focus-visible:-outline-offset-2"
+      >
         {/* The tracks explored in this chain, above the result's view */}
         {shownTrailOf && (
           <ExploredTrail
@@ -793,6 +801,7 @@ const App: React.FC = () => {
           message="This screen could not be shown"
           action={{ label: 'New search', onClick: handleNewSearch }}
           loadFailedMessage="This screen could not be loaded"
+          isScreen
           onRetried={handleScreenRetried}
           className="flex-1 min-h-0 w-full bg-void"
         >
@@ -808,7 +817,7 @@ const App: React.FC = () => {
             {renderScreen()}
           </Suspense>
         </ErrorBoundary>
-      </div>
+      </main>
     </Layout>
   );
 };

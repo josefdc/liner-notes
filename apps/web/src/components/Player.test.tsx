@@ -116,7 +116,7 @@ describe("the Player's preview lane", () => {
     expect(drawn()).toEqual(['sections', 'energy', 'beats', 'legend']);
     expect(within(lane).getByRole('img', { name: /^Beat grid: 3 beats/ })).toBeTruthy();
     expect(
-      within(lane)
+      within(within(lane).getByRole('list', { name: 'Sections measured in the preview' }))
         .getAllByRole('listitem')
         .map((item) => item.style.width),
     ).toEqual([
@@ -198,7 +198,9 @@ describe('Player', () => {
     );
     timeline = screen.getByRole('group', { name: 'Song structure' });
     const [section] = within(timeline).getAllByRole('listitem');
-    expect(section.getAttribute('aria-label')).toBe('Main, 100% of track');
+    expect(within(section).getByRole('button').getAttribute('aria-label')).toBe(
+      'Main, 100% of track',
+    );
     expect(section.dataset.segmentTint).toBe('inferred');
     expect(timeline.textContent).not.toContain('not analyzed');
   });

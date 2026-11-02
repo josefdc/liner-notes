@@ -536,6 +536,25 @@ for (const [showcase, { open, cards: cardCount, widths, sparse }] of Object.entr
   }
 }
 
+/**
+ * Whether a card's name starts with the words the card draws, in their order, every line apart:
+ * compared as speech input and axe's label-in-name check compare them (the words only, what is
+ * in brackets left out).
+ */
+const namedAsDrawn = (card: ReturnType<Page["locator"]>) =>
+  card.evaluate((element) => {
+    const wordsOf = (text: string) =>
+      text
+        .replace(/\([^()]*\)/g, " ")
+        .replace(/[^\p{L}\p{N}]+/gu, " ")
+        .trim()
+        .toLowerCase()
+        .split(" ");
+    const shown = wordsOf(element.querySelector("g.node-label")?.textContent ?? "");
+    const named = wordsOf(element.getAttribute("aria-label") ?? "");
+    return shown.length > 0 && shown.every((word, i) => named[i] === word);
+  });
+
 test("a long title and a long word are read whole, in the card's name and its detail", async ({
   page,
 }) => {
@@ -547,7 +566,14 @@ test("a long title and a long word are read whole, in the card's name and its de
     "Here Comes the Hotstepper (Heartical Mix) [feat. Somebody Else and the Very Long Collective]";
   const name = `${title} by Ini Kamoze & The Very Long Collective (1994)`;
   const long = graph.locator('g.nodes > g[data-node-id="s1"]');
-  expect((await long.getAttribute("aria-label"))?.startsWith(`${name}:`)).toBe(true);
+  // Its name says the drawn words first, then the track whole where the card cuts or breaks it.
+  expect(await namedAsDrawn(long)).toBe(true);
+  const said = (await long.getAttribute("aria-label")) ?? "";
+  expect(
+    said.startsWith(`${title}, Ini Kamoze & The Very Long Collective, 1994`) ||
+      said.includes(`(${name})`),
+    said,
+  ).toBe(true);
   await long.focus();
   const detail = page.getByTestId("link-detail");
   await expect(detail).toContainText(name);
@@ -555,8 +581,9 @@ test("a long title and a long word are read whole, in the card's name and its de
   expect(await detail.evaluate((box) => box.scrollHeight <= box.clientHeight + 1)).toBe(true);
   // The 50-letter word wraps with a hyphen, and its card's name has it whole.
   const word = graph.locator('g.nodes > g[data-node-id="d3"]');
-  expect(await word.getAttribute("aria-label")).toMatch(
-    /^Supercalifragilisticexpialidociouslyremixedforever by Remixer \(2016\):/,
+  expect(await namedAsDrawn(word)).toBe(true);
+  expect(await word.getAttribute("aria-label")).toContain(
+    "(Supercalifragilisticexpialidociouslyremixedforever by Remixer (2016)):",
   );
   expect(await word.locator("text.card-title tspan[data-hyphen]").count()).toBeGreaterThan(0);
 });
@@ -584,7 +611,11 @@ for (const [width, height] of [
     await expect(graph.locator("g.nodes > g")).toHaveCount(SHOWCASES.wide.cards);
     const card = graph.locator('g.nodes > g[data-node-id="d1"]');
     const name = `${LONG_TITLE} by DJ Somebody Famous (2006)`;
-    expect((await card.getAttribute("aria-label"))?.startsWith(`${name}:`)).toBe(true);
+    // Named by its drawn words first; the title whole either way (drawn whole, or after them).
+    expect(await namedAsDrawn(card)).toBe(true);
+    expect(await card.getAttribute("aria-label")).toContain(
+      width >= 1280 ? `${LONG_TITLE}, DJ Somebody Famous, 2006` : `(${name})`,
+    );
 
     // Brought into view by the keyboard (the pointer off the map): its words, and what it says
     // is cut.
@@ -1258,7 +1289,8 @@ for (const [showcase, width, height, panelOverCues] of [
     // A track selected: its panel opens over the map's bottom, above the cues. The tracks in
     // view are selected in turn until one's panel lies over the bottom cues' strip, a cue there.
     const related = async (each: string) =>
-      (await graph.locator(`g.nodes > g[data-node-id="${each}"][role="button"]`).count()) > 0;
+      // A related track's card is a toggle (the analysed track's is a button that toggles nothing).
+      (await graph.locator(`g.nodes > g[data-node-id="${each}"][aria-pressed]`).count()) > 0;
     let overCues = false;
     let tried = 0;
     for (const id of await cardsInView(graph, headingBand(page))) {
@@ -1320,7 +1352,7 @@ test("with a 20 px default font, an 800 px window has the map down a column, and
   // covers no cue.
   let overCues = false;
   const ids = await graph
-    .locator('g.nodes > g[role="button"]')
+    .locator("g.nodes > g[aria-pressed]")
     .evaluateAll((cards) => cards.map((card) => card.getAttribute("data-node-id") ?? ""));
   expect(ids.length).toBeGreaterThan(0);
   for (const id of ids) {
@@ -1523,7 +1555,7 @@ for (const count of [1, 2]) {
     // Its tracks are toggle buttons that select them (their details open under the row), named
     // with their relation for screen readers.
     const sample = row.getByRole("button", {
-      name: /^Sourced Sample - Someone \(1984\): Bright Lines/,
+      name: /^Sourced Sample - Someone, 1984(, Origin)?: Bright Lines/,
     });
     await expect(sample).toBeVisible();
     await screenshot(page, testInfo, `compact-${count}`);

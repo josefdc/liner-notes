@@ -133,8 +133,9 @@ export interface KeyMoment {
 
 /**
  * Why measured audio values are missing:
- * - no_preview: no preview clip of the chosen recording was found (by its ISRC on Deezer, as
- *   Spotify's own clip, or as a Deezer search result that is strictly the same recording)
+ * - no_preview: no preview clip of the chosen recording was found (by its ISRC on Deezer, or as
+ *   a Deezer search result that is strictly the same recording; Spotify's own clip is never
+ *   measured)
  * - preview_rejected: the preview URL is not on an allowed audio CDN host
  * - service_unavailable: the audio analysis service did not answer its health check
  * - analysis_failed: the service was reached but the analysis failed, or its answer carried no
@@ -585,8 +586,8 @@ export const SonicAgentState = Annotation.Root({
     default: () => null,
   }),
 
-  // The run's preview clip of the chosen recording, for the player; null when there is none.
-  // Spotify's own clip is used here only when the engineer chose it.
+  // The run's preview clip of the chosen recording, for the player: the Deezer clip the engineer
+  // resolved; null when there is none (Spotify's own clip is not given in its place).
   // The URL is signed and expires within minutes: the checkpointer never saves it
   // (store/checkpointer.ts) and stored results drop it.
   previewUrl: Annotation<string | null>({

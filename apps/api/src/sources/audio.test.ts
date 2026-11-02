@@ -1,6 +1,7 @@
 /**
- * Audio service client. The preview URL check uses the same rules as the audio service (https
- * only, host p.scdn.co or a subdomain of dzcdn.net, default port, no userinfo, no IP literal).
+ * Audio service client. The preview URL checks use the same rules as the audio service (https
+ * only, default port, no userinfo, no IP literal): a clip the player may load is on p.scdn.co or
+ * a subdomain of dzcdn.net; a clip sent for analysis is on a subdomain of dzcdn.net only.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -10,6 +11,7 @@ import {
   audioServiceHealth,
   checkAudioServiceHealth,
   isAllowedPreviewUrl,
+  isAnalysablePreviewUrl,
   readServiceMeasurement,
   resolvePreview,
 } from "./audio.js";
@@ -62,8 +64,37 @@ describe("isAllowedPreviewUrl", () => {
     ["empty", ""],
   ])("rejects %s", (_label, url) => {
     expect(isAllowedPreviewUrl(url)).toBe(false);
+    expect(isAnalysablePreviewUrl(url)).toBe(false);
+  });
+
+  it("sends only Deezer's clips for analysis, never Spotify's", () => {
+    expect(isAnalysablePreviewUrl("https://cdnt-preview.dzcdn.net/api/1/1/a/b/0/x.mp3")).toBe(true);
+    expect(isAnalysablePreviewUrl("https://cdnt-preview.dzcdn.net:443/api/1/x.mp3")).toBe(true);
+    expect(isAnalysablePreviewUrl("https://p.scdn.co/mp3-preview/abc123?cid=1")).toBe(false);
+    expect(isAnalysablePreviewUrl("https://p.scdn.co:443/mp3-preview/abc123")).toBe(false);
   });
 });
+
+/** A Deezer search answer whose one entry strictly matches TRACK_BY_SEARCH, with `clip`. */
+const searchHit = (clip: string) => ({
+  total: 1,
+  data: [
+    {
+      id: 1,
+      title: "Ice Ice Baby",
+      preview: clip,
+      duration: 270,
+      artist: { id: 1, name: "Vanilla Ice" },
+      album: { id: 1, title: "To the Extreme", cover_medium: "" },
+    },
+  ],
+});
+const TRACK_BY_SEARCH = {
+  title: "Ice Ice Baby",
+  artist: "Vanilla Ice",
+  album: "To the Extreme",
+  durationMs: 270_000,
+};
 
 describe("audio service client", () => {
   const SERVICE = "http://audio.test:3002";
@@ -141,12 +172,14 @@ describe("audio service client", () => {
 
 describe("what Node reads of the service's answer: the v2 block only", () => {
   const SERVICE = "http://audio.test:3002";
-  const CLIP = "https://p.scdn.co/mp3-preview/own";
-  const TRACK = { title: "Ice Ice Baby", artist: "Vanilla Ice", previewUrl: CLIP };
+  const CLIP = "https://cdnt-preview.dzcdn.net/api/1/1/a/b/c/own.mp3?hdnea=exp=1";
+  const TRACK = TRACK_BY_SEARCH;
+  const MATCH = { provider: "deezer", method: "search", deezerId: 1, score: 1 } as const;
 
-  /** The service measures Spotify's own clip and answers `answer`. */
+  /** The service measures the Deezer clip a search found, and answers `answer`. */
   function service(answer: unknown, health: unknown = { status: "ok" }) {
     return stubFetch((call) => {
+      if (call.url.startsWith("https://api.deezer.com/search/track?")) return json(searchHit(CLIP));
       if (call.url.startsWith("https://api.deezer.com/")) {
         return json({ error: { code: 800, message: "no data" } });
       }
@@ -291,7 +324,7 @@ describe("what Node reads of the service's answer: the v2 block only", () => {
   it("asks neither Deezer nor /health again for what the run already knows", async () => {
     const net = service(serviceAnswer(audioV2()));
     const audioRun = {
-      preview: { previewUrl: CLIP, match: { provider: "spotify", method: "id", score: null } },
+      preview: { previewUrl: CLIP, match: MATCH },
       serviceAvailable: true,
     };
 
@@ -309,7 +342,7 @@ describe("what Node reads of the service's answer: the v2 block only", () => {
   it("measures nothing when the run knows the service did not answer", async () => {
     const net = service(serviceAnswer(audioV2()));
     const audioRun = {
-      preview: { previewUrl: CLIP, match: { provider: "spotify", method: "id", score: null } },
+      preview: { previewUrl: CLIP, match: MATCH },
       serviceAvailable: false,
     };
     const data = JSON.parse(
@@ -322,16 +355,17 @@ describe("what Node reads of the service's answer: the v2 block only", () => {
 
 describe("a preview the service refuses for what the file is", () => {
   const SERVICE = "http://audio.test:3002";
-  const CLIP = "https://p.scdn.co/mp3-preview/own";
-  const TRACK = { title: "Ice Ice Baby", artist: "Vanilla Ice", previewUrl: CLIP };
+  const CLIP = "https://cdnt-preview.dzcdn.net/api/1/1/a/b/c/own.mp3?hdnea=exp=1";
+  const TRACK = TRACK_BY_SEARCH;
   const PREFIX = "The preview is not analysable audio: ";
   const M4A = `${PREFIX}it is an MP4 (M4A) or AAC file, a format the service does not decode`;
   const TRUNCATED = `${PREFIX}the MP3 decodes to less audio than its MPEG audio frames hold`;
   const READ_FAILED = `${PREFIX}the MP3 could not be decoded to the end of its MPEG audio frames`;
 
-  /** The service answers /analyze with `body` and `status` for Spotify's own clip. */
+  /** The service answers /analyze with `body` and `status` for the Deezer clip a search found. */
   function refusing(body: unknown, status: number) {
     return stubFetch((call) => {
+      if (call.url.startsWith("https://api.deezer.com/search/track?")) return json(searchHit(CLIP));
       if (call.url.startsWith("https://api.deezer.com/")) {
         return json({ error: { code: 800, message: "no data" } });
       }
@@ -416,7 +450,6 @@ describe("the chosen track's preview clip", () => {
   const SERVICE = "http://audio.test:3002";
   const ISRC_CLIP = "https://cdnt-preview.dzcdn.net/api/1/1/a/b/c/isrc.mp3?hdnea=exp=1~hmac=a";
   const SEARCH_CLIP = "https://cdnt-preview.dzcdn.net/api/1/1/a/b/c/found.mp3?hdnea=exp=1~hmac=b";
-  const SPOTIFY_CLIP = "https://p.scdn.co/mp3-preview/own";
   const TRACK = {
     title: "Ice Ice Baby",
     artist: "Vanilla Ice",
@@ -461,12 +494,12 @@ describe("the chosen track's preview clip", () => {
     vi.restoreAllMocks();
   });
 
-  it("takes the Deezer entry for the ISRC first, before Spotify's own clip", async () => {
+  it("takes the Deezer entry for the ISRC first", async () => {
     network({
       isrc: { ...deezerEntry(1, "Ice Ice Baby", "Vanilla Ice", ISRC_CLIP), isrc: TRACK.isrc },
     });
 
-    const preview = await resolvePreview({ ...TRACK, spotifyPreviewUrl: SPOTIFY_CLIP }, undefined);
+    const preview = await resolvePreview(TRACK, undefined);
 
     expect(preview).toEqual({
       previewUrl: ISRC_CLIP,
@@ -474,16 +507,28 @@ describe("the chosen track's preview clip", () => {
     });
   });
 
-  it("takes Spotify's own clip before a search result when the ISRC has no Deezer preview", async () => {
+  it("takes a strict Deezer search result when the ISRC has no Deezer preview", async () => {
     const net = network({ search: [deezerEntry(2, "Ice Ice Baby", "Vanilla Ice", SEARCH_CLIP)] });
 
-    const preview = await resolvePreview({ ...TRACK, spotifyPreviewUrl: SPOTIFY_CLIP }, undefined);
+    const preview = await resolvePreview(TRACK, undefined);
 
     expect(preview).toEqual({
-      previewUrl: SPOTIFY_CLIP,
-      match: { provider: "spotify", method: "id", score: null },
+      previewUrl: SEARCH_CLIP,
+      match: { provider: "deezer", method: "search", deezerId: 2, score: 1 },
     });
-    expect(net.calls.some((call) => call.url.includes("/search/track"))).toBe(false);
+    expect(net.calls.some((call) => call.url.includes("/search/track"))).toBe(true);
+  });
+
+  it("says there is no preview on Deezer when neither lookup finds one", async () => {
+    network({});
+
+    const preview = await resolvePreview(TRACK, undefined);
+
+    expect(preview).toEqual({
+      previewUrl: null,
+      match: null,
+      detail: "No preview of this recording on Deezer",
+    });
   });
 
   it("measures a strictly matched search result and returns its clip and match", async () => {
@@ -555,17 +600,6 @@ describe("the chosen track's preview clip", () => {
       previewSourceError: { source: "deezer", code: "rate_limited" },
     });
     expect(net.calls.some((call) => call.url.startsWith(SERVICE))).toBe(false);
-  });
-
-  it("still uses Spotify's own clip after a Deezer error, and reports the error", async () => {
-    network({ isrc: { error: { type: "Exception", message: "Quota limit exceeded", code: 4 } } });
-
-    const preview = await resolvePreview({ ...TRACK, spotifyPreviewUrl: SPOTIFY_CLIP }, undefined);
-
-    expect(preview).toMatchObject({
-      previewUrl: SPOTIFY_CLIP,
-      sourceError: { source: "deezer", code: "rate_limited" },
-    });
   });
 
   it("gives the player no clip from a host the service would refuse", async () => {

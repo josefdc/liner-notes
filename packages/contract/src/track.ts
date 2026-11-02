@@ -220,6 +220,8 @@ export type ModelUnavailableReason = z.infer<typeof ModelUnavailableReason>;
  * - `id`: an entry read by its id: the provider's own clip of the chosen track (Spotify), or an
  *   entry the provider offers in place of the ISRC entry (Deezer), checked like a search match;
  * - `search`: a search result that strictly matches the track.
+ * The API measures Deezer clips only. `spotify` stays so that results stored when Spotify's own
+ * clip was measured still parse; Spotify is a search and metadata source.
  */
 export const PreviewMatch = z.object({
   provider: z.enum(["deezer", "spotify"]),

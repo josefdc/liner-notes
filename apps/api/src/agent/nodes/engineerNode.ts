@@ -26,7 +26,9 @@
  * lookup could not be finished (Deezer could not be read, which is also recorded as a source
  * error, or a request had no slot of its pace in time and was not sent), nothing is measured,
  * the reason is `preview_lookup_incomplete`, and the result is not stored (composerNode.ts). A
- * cached measurement, or one of Spotify's own clip, is still served when the lookup is unfinished.
+ * cached measurement is still served when the lookup is unfinished. Spotify's own clip of the
+ * track is never measured, nor given to the player in place of a Deezer clip: Spotify is a search
+ * and metadata source only.
  *
  * Under SOURCE_CASSETTE the audio cache is not read: a recording measures, so the service's
  * answer is recorded, and a replay serves only the recorded audio step (sources/audio.ts). A
@@ -48,6 +50,7 @@ import {
   type AudioServiceHealth,
   audioServiceHealth,
   isAllowedPreviewUrl,
+  isAnalysablePreviewUrl,
   type PreviewLookupError,
   type PreviewResolution,
   type PreviewSourceMatch,
@@ -223,14 +226,14 @@ export function measuredSummary(measurement: AudioMeasurement): {
  * - the Deezer entry for the ISRC, or an entry read by id that carries the requested ISRC and
  *   passed the same checks: `isrc`;
  * - a Deezer entry read by id that does not carry it and matched strictly: `id`, with its score;
- * - a strict search match: `search`, with its score;
- * - Spotify's own clip of the chosen track: `{spotify, id}`, no score.
+ * - a strict search match: `search`, with its score.
+ * The contract also names `{spotify, id}`, for results stored when Spotify's own clip was
+ * measured; no measurement made now has it.
  */
 export function previewProvenance(
   match: PreviewSourceMatch | null | undefined,
 ): SonicAgentStateType["preview"] {
   if (!match) return null;
-  if (match.provider === "spotify") return { provider: "spotify", method: "id", score: null };
   if (match.method === "isrc" || (match.method === "id" && match.score === null)) {
     return { provider: "deezer", method: "isrc", score: null };
   }
@@ -254,7 +257,6 @@ function previewRequest(state: SonicAgentStateType): TrackPreviewRequest {
     ...(track?.album ? { album: track.album } : {}),
     isrc: state.isrc ?? track?.isrc ?? null,
     durationMs: track?.durationMs ?? null,
-    spotifyPreviewUrl: track?.previewUrl ?? null,
   };
 }
 
@@ -412,7 +414,7 @@ export async function engineerNode(
 
   // Said only when a measurement is attempted: a clip the service accepts, and a service that
   // answered its health probe. Otherwise the next line says why nothing was measured.
-  if (health !== null && fresh.previewUrl && isAllowedPreviewUrl(fresh.previewUrl)) {
+  if (health !== null && fresh.previewUrl && isAnalysablePreviewUrl(fresh.previewUrl)) {
     writer?.({
       type: "status",
       code: "AUDIO-INIT",
@@ -430,17 +432,16 @@ export async function engineerNode(
     // analyzeAudioPreview reports failures in its result (source "unavailable") instead of throwing.
     // The run's abort signal stops the analysis when the client leaves.
     config.signal?.throwIfAborted();
-    const { spotifyPreviewUrl, ...trackRequest } = request;
     const audioRun: AudioRunContext = {
       preview: fresh,
       serviceAvailable: health !== null,
       analyzerVersion: health?.analyzerVersion ?? null,
       trackId: track.id,
     };
-    const analysisResult = await analyzeAudioPreview.invoke(
-      { ...trackRequest, previewUrl: spotifyPreviewUrl },
-      { signal: config.signal, configurable: { audioRun } },
-    );
+    const analysisResult = await analyzeAudioPreview.invoke(request, {
+      signal: config.signal,
+      configurable: { audioRun },
+    });
     analysis = JSON.parse(analysisResult) as AudioAnalysisResult;
     measurement = toAudioMeasurement(analysis);
   } catch (error) {

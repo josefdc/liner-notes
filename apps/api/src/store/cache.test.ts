@@ -80,9 +80,6 @@ describe("SonicCache audio", () => {
     expect(
       audioTrackKeys({ provider: "deezer", method: "id", deezerId: 2, score: 0.9 }, "sp1", ISRC),
     ).toEqual([own]);
-    expect(audioTrackKeys({ provider: "spotify", method: "id", score: null }, "sp1", ISRC)).toEqual(
-      [own],
-    );
     // No ISRC, or a malformed one: the track's own key only.
     expect(audioTrackKeys(ISRC_MATCH, "sp1", null)).toEqual([own]);
     expect(audioTrackKeys(ISRC_MATCH, "sp1", "not-an-isrc")).toEqual([own]);
@@ -108,6 +105,22 @@ describe("SonicCache audio", () => {
     // A newer analyzer (or an older one): a miss, the track is measured again.
     expect(cache.getAudio(`isrc:${ISRC}`, NEXT_VERSION)).toBeNull();
     expect(cache.getAudio(`isrc:${ISRC}`, "2.0.0+essentia")).toBeNull();
+  });
+
+  it("serves no measurement made on Spotify's own clip, stored before Spotify previews were no longer measured", () => {
+    const spotifyClip = { provider: "spotify", method: "id", score: null };
+    insertRaw(
+      "spotify:sp1",
+      ANALYZER_VERSION,
+      JSON.stringify(measurementOf(audioV2(), spotifyClip as never)),
+    );
+    expect(cache.getAudio("spotify:sp1", ANALYZER_VERSION)).toBeNull();
+    expect(cache.getNewestAudio("spotify:sp1")).toBeNull();
+    // Nor is one written: the cache keeps measurements of Deezer clips only.
+    expect(() =>
+      cache.putAudio("spotify:sp2", "sp2", measurementOf(audioV2(), spotifyClip as never)),
+    ).toThrow(TypeError);
+    expect(db.prepare("SELECT COUNT(*) FROM audio_cache").pluck().get()).toBe(1);
   });
 
   it("serves a measurement with the reasons its block gives for what it withheld", () => {
@@ -154,14 +167,9 @@ describe("SonicCache audio", () => {
     expect(isrcRowServes(`isrc:${ISRC}`, row, { ...ISRC_MATCH, method: "id", score: null })).toBe(
       true,
     );
-    // Another entry for the ISRC, a search match, Spotify's own clip, or no clip at all (the
-    // entry turned down by this track's checks, or Deezer not read): not served.
-    for (const fresh of [
-      { ...ISRC_MATCH, deezerId: 1 },
-      SEARCH_MATCH,
-      { provider: "spotify" as const, method: "id" as const, score: null },
-      null,
-    ]) {
+    // Another entry for the ISRC, a search match, or no clip at all (the entry turned down by
+    // this track's checks, or Deezer not read): not served.
+    for (const fresh of [{ ...ISRC_MATCH, deezerId: 1 }, SEARCH_MATCH, null]) {
       expect(isrcRowServes(`isrc:${ISRC}`, row, fresh)).toBe(false);
     }
     // A row without the entry's id is never served under the ISRC.

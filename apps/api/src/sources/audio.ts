@@ -9,8 +9,9 @@
  * key, mode, energy, ...) are ignored, and an answer without a readable block is no measurement.
  *
  * The clip is a preview of the chosen recording only (see resolvePreview): the Deezer entry for
- * its ISRC, Spotify's own clip of the chosen track, or a Deezer search result that strictly
- * matches it. Never another recording's clip: with no such preview nothing is measured.
+ * its ISRC, or a Deezer search result that strictly matches it. Never another recording's clip:
+ * with no such preview nothing is measured. Spotify's own clip is never measured: Spotify's terms
+ * restrict using its content for machine learning, so Spotify is a search and metadata source.
  * Calls the Python audio analysis service for the measurement. When there is no preview or
  * the service cannot measure it, the result has source "unavailable", no block and a reason;
  * nothing is estimated. A preview the service refuses for what the file is (a format it does not
@@ -76,10 +77,11 @@ const log = logger("Audio");
 // =============================================================================
 
 /**
- * How the run's preview clip was matched to the chosen track: a Deezer match (see DeezerMatch),
- * or Spotify's own clip of the chosen track (`id`: no matching needed).
+ * How the run's preview clip was matched to the chosen track: a Deezer match (see DeezerMatch).
+ * The contract's PreviewMatch still names `spotify`, so results stored when Spotify's own clip
+ * was measured stay readable; no clip of Spotify's is measured now.
  */
-export type PreviewSourceMatch = DeezerMatch | { provider: "spotify"; method: "id"; score: null };
+export type PreviewSourceMatch = DeezerMatch;
 
 /** Deezer could not be read while the clip was looked up (its quota, the network). */
 export interface PreviewLookupError {
@@ -90,7 +92,7 @@ export interface PreviewLookupError {
 
 /**
  * The chosen track's preview clip, or why there is none. `sourceError` is set whenever Deezer
- * could not be read, also when Spotify's own clip was used instead. `incomplete` is set when there
+ * could not be read. `incomplete` is set when there
  * is no clip and the lookup could not be finished: a Deezer request was not sent (its pace had no
  * slot in time, which is no source error) or Deezer could not be read. No clip is known to be
  * missing then.
@@ -144,10 +146,12 @@ const SERVICE_TIMEOUT = 30000; // 30 seconds for audio processing
 // Optional shared secret the service requires on /analyze when it is configured.
 const audioServiceToken = () => process.env.AUDIO_SERVICE_TOKEN || "";
 
-// Preview clips are only sent for analysis when they come from the Spotify or Deezer CDNs.
-// Same rules as the audio service (services/audio/preview.py), so a URL the service would
-// refuse is reported here as preview_rejected instead of failing inside the analysis.
-const PREVIEW_HOSTS = new Set(["p.scdn.co"]);
+// Preview clips the player may load come from the Deezer or Spotify CDNs (isAllowedPreviewUrl).
+// Only Deezer's are sent for analysis (isAnalysablePreviewUrl), with the same rules as the audio
+// service (services/audio/preview.py), so a URL the service would refuse is reported here as
+// preview_rejected instead of failing inside the analysis. Spotify's (p.scdn.co) are played,
+// never analysed: Spotify's terms restrict using its content for machine learning.
+const SPOTIFY_PREVIEW_HOST = "p.scdn.co";
 const PREVIEW_HOST_SUFFIX = ".dzcdn.net";
 const MAX_PREVIEW_URL_LENGTH = 2048;
 const URL_CHARS = /^[A-Za-z0-9\-._~:/?#[\]@!$&'()*+,;=%]+$/;
@@ -155,18 +159,30 @@ const DNS_LABEL = "[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?";
 const HOSTNAME = new RegExp(`^${DNS_LABEL}(?:\\.${DNS_LABEL})+$`);
 const IPV4 = /^\d{1,3}(?:\.\d{1,3}){3}$/;
 
-export function isAllowedPreviewUrl(previewUrl: string): boolean {
-  if (!previewUrl || previewUrl.length > MAX_PREVIEW_URL_LENGTH) return false;
-  if (!URL_CHARS.test(previewUrl) || !previewUrl.startsWith("https://")) return false;
+/** The host of a well-formed preview URL on an https default port, or null. */
+function previewHostOf(previewUrl: string): string | null {
+  if (!previewUrl || previewUrl.length > MAX_PREVIEW_URL_LENGTH) return null;
+  if (!URL_CHARS.test(previewUrl) || !previewUrl.startsWith("https://")) return null;
 
   // Authority as written (before any normalisation by the URL parser)
   const authority = previewUrl.slice("https://".length).split(/[/?#]/, 1)[0];
-  if (authority.includes("@")) return false;
+  if (authority.includes("@")) return null;
   const [host, port, ...rest] = authority.split(":");
-  if (rest.length > 0 || (port !== undefined && port !== "443")) return false;
-  if (!HOSTNAME.test(host) || IPV4.test(host)) return false;
-  if (host.split(".").some((label) => label.startsWith("xn--"))) return false;
-  return PREVIEW_HOSTS.has(host) || host.endsWith(PREVIEW_HOST_SUFFIX);
+  if (rest.length > 0 || (port !== undefined && port !== "443")) return null;
+  if (!HOSTNAME.test(host) || IPV4.test(host)) return null;
+  if (host.split(".").some((label) => label.startsWith("xn--"))) return null;
+  return host;
+}
+
+/** A preview clip the player may load: on Deezer's or Spotify's preview CDN. */
+export function isAllowedPreviewUrl(previewUrl: string): boolean {
+  const host = previewHostOf(previewUrl);
+  return host !== null && (host === SPOTIFY_PREVIEW_HOST || host.endsWith(PREVIEW_HOST_SUFFIX));
+}
+
+/** A preview clip the audio service measures: on Deezer's preview CDN only. */
+export function isAnalysablePreviewUrl(previewUrl: string): boolean {
+  return previewHostOf(previewUrl)?.endsWith(PREVIEW_HOST_SUFFIX) ?? false;
 }
 
 function unavailable(reason: AudioUnavailableReason, error?: string): AudioAnalysisResult {
@@ -272,10 +288,8 @@ export function readServiceMeasurement(answer: unknown): ServiceMeasurement {
 // The preview clip
 // =============================================================================
 
-/** What resolvePreview needs: the chosen track and Spotify's own clip of it, if any. */
-export interface TrackPreviewRequest extends PreviewRequest {
-  spotifyPreviewUrl?: string | null;
-}
+/** What resolvePreview needs: the chosen track. */
+export type TrackPreviewRequest = PreviewRequest;
 
 type DeezerRejected = Extract<DeezerPreviewResult, { found: false }>["rejected"];
 
@@ -290,8 +304,8 @@ function rejectionSummary(results: DeezerPreviewResult[]): string {
 
 /**
  * The chosen track's preview clip, in this order: the Deezer entry for its ISRC (or that entry's
- * readable alternative), Spotify's own clip of the chosen track, a Deezer search result that is
- * strictly the same recording. Nothing else: with none of them there is no preview. A Deezer
+ * readable alternative), then a Deezer search result that is strictly the same recording. Nothing
+ * else, and never Spotify's own clip: with neither there is no preview. A Deezer
  * error (its quota, the network) is reported, never read as "not found". A request Deezer's pace
  * had no slot for in time was not sent, and is no source error (sources/pacing.ts). After either,
  * with no clip, the lookup could not be finished (`incomplete`): only a lookup Deezer answered at
@@ -327,15 +341,6 @@ export async function resolvePreview(
         }
       : {};
 
-  if (request.spotifyPreviewUrl) {
-    log.info("Using Spotify's own preview of the chosen track");
-    return {
-      previewUrl: request.spotifyPreviewUrl,
-      match: { provider: "spotify", method: "id", score: null },
-      ...failure(byIsrc),
-    };
-  }
-
   // After a Deezer error a search would fail the same way, and one the pace had no slot for
   // would wait as long.
   const bySearch =
@@ -346,10 +351,10 @@ export async function resolvePreview(
   const answered = rejectionSummary(bySearch === byIsrc ? [byIsrc] : [byIsrc, bySearch]);
   const incomplete = failed.sourceError !== undefined || bySearch.notAsked === true;
   const detail = failed.sourceError
-    ? `The preview lookup on Deezer could not be finished, as Deezer could not be read (${failed.sourceError.message}), and Spotify has no preview of this track${answered}`
+    ? `The preview lookup on Deezer could not be finished, as Deezer could not be read (${failed.sourceError.message})${answered}`
     : bySearch.notAsked
-      ? `The preview lookup on Deezer could not be finished, as a request had no slot of Deezer's pace in time and was not sent, and Spotify has no preview of this track${answered}`
-      : `No preview of this recording on Deezer or Spotify${answered}`;
+      ? `The preview lookup on Deezer could not be finished, as a request had no slot of Deezer's pace in time and was not sent${answered}`
+      : `No preview of this recording on Deezer${answered}`;
   if (failed.sourceError) log.warn(detail);
   else log.info(detail);
   return {
@@ -728,10 +733,9 @@ const STEP_REASONS: ReadonlySet<string> = new Set<AudioUnavailableReason>([
  */
 function recordedMatch(match: unknown): PreviewSourceMatch | null {
   if (match === null || typeof match !== "object") return null;
+  // A recorded match of Spotify's own clip (made before its clips were no longer measured) is
+  // none of these shapes: it is read as no match.
   const { provider, method, deezerId, score } = match as Record<string, unknown>;
-  if (provider === "spotify" && method === "id" && score === null) {
-    return { provider, method, score };
-  }
   const isScore = score === null || (typeof score === "number" && Number.isFinite(score));
   if (
     provider === "deezer" &&
@@ -895,14 +899,15 @@ function failedAnalysis(error: unknown, signal: AbortSignal | undefined): AudioA
 }
 
 /**
- * Measures the chosen track from its preview clip (see resolvePreview). The result carries the
+ * Measures the chosen track from its preview clip (see resolvePreview), never Spotify's own clip.
+ * The result carries the
  * clip and how it was matched, for the run's player; without a clip of the chosen recording
  * nothing is measured. Under SOURCE_CASSETTE=record each outcome is recorded (recordAudioStep);
  * under replay the recorded outcome for the track is served instead, with no clip, and neither
  * Deezer nor the service is asked (replayedAudioStep).
  */
 export const analyzeAudioPreview = tool(
-  async ({ previewUrl, title, artist, artistNames, album, isrc, durationMs }, config) => {
+  async ({ title, artist, artistNames, album, isrc, durationMs }, config) => {
     // The run's signal stops every request below (Deezer, the service's health and analysis).
     const signal = config?.signal;
     const known = audioRunContext(config);
@@ -925,7 +930,6 @@ export const analyzeAudioPreview = tool(
           album,
           isrc,
           durationMs,
-          spotifyPreviewUrl: previewUrl,
         },
         signal,
       ));
@@ -965,7 +969,7 @@ export const analyzeAudioPreview = tool(
       ...lookupError,
     });
 
-    if (!isAllowedPreviewUrl(effectivePreviewUrl)) {
+    if (!isAnalysablePreviewUrl(effectivePreviewUrl)) {
       log.info("Preview URL host not allowed; audio not measured");
       // Neither analysed nor given to the player.
       return finish(
@@ -1011,14 +1015,9 @@ export const analyzeAudioPreview = tool(
     name: "analyze_audio_preview",
     description:
       "Measure tempo, key and loudness from a preview clip of the chosen recording: the Deezer " +
-      "entry for its ISRC, Spotify's own clip, or a Deezer search result that is strictly the " +
-      "same recording. Returns no measurement and a reason when none is possible.",
+      "entry for its ISRC, or a Deezer search result that is strictly the same recording. " +
+      "Returns no measurement and a reason when none is possible.",
     schema: z.object({
-      previewUrl: z
-        .string()
-        .nullable()
-        .optional()
-        .describe("Spotify's own preview clip of the chosen track, if it has one"),
       title: z.string().optional().describe("Song title"),
       artist: z.string().optional().describe("Artist name (the credited artists joined)"),
       artistNames: z.array(z.string()).optional().describe("The credited artists one by one"),

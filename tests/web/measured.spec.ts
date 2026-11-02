@@ -208,7 +208,7 @@ for (const width of [390, 1440]) {
     await expect(hero.getByText(/confidence|preview|essentia|analyzer/)).toHaveCount(0);
 
     // Each value and its chip are one unit, laid out the same way for every value: on one line
-    // from md up, the chip right under its value on a phone (where the two do not fit on one
+    // from lg up, the chip right under its value below it (where the two may not fit on one
     // line), always closer to its own value than to the next one, every unit at the same edge.
     const pairs = await hero.locator("[data-value-pair]").evaluateAll((elements) =>
       elements.map((pair) => {
@@ -229,7 +229,7 @@ for (const width of [390, 1440]) {
     );
     expect(pairs.length).toBe(8);
     for (const pair of pairs) {
-      expect(width < 768 ? pair.stacked : pair.sameLine, `${pair.text} laid out`).toBe(true);
+      expect(width < 1024 ? pair.stacked : pair.sameLine, `${pair.text} laid out`).toBe(true);
       expect(pair.inner, `${pair.text}: its value and chip`).toBeLessThanOrEqual(4);
     }
     if (width < 768) {
@@ -278,6 +278,46 @@ for (const width of [390, 1440]) {
     );
     expect(problems).toEqual([]);
   });
+}
+
+// The hero's values and their chips stay inside the hero at a phone's, a tablet's and a
+// desktop's width: none runs past its edge, where the card would cut it. The full-result
+// fixture's chips are the longest ("Model estimate, basis unknown").
+for (const [width, height] of [
+  [390, 844],
+  [768, 1024],
+  [820, 1180],
+  [1024, 768],
+  [1440, 900],
+] as const) {
+  for (const [name, fixture] of [
+    ["full-result", loadFixture("full-result")],
+    ["measured-v2", measured],
+  ] as const) {
+    test(`the hero's values and chips stay inside it (${name}, ${width} px)`, async ({ page }) => {
+      const problems = collectProblems(page);
+      await page.setViewportSize({ width, height });
+      await useMockApi(page, fixture);
+      await analyzeAndOpenDashboard(page, "Bright Lines");
+      const hero = page
+        .locator("section")
+        .filter({ has: page.getByRole("list", { name: "Audio values" }) });
+      const outside = await hero.evaluate((section) => {
+        const style = getComputedStyle(section);
+        const box = section.getBoundingClientRect();
+        const right = box.right - Number.parseFloat(style.paddingRight);
+        return [...section.querySelectorAll("[data-value-pair] > *")]
+          .map((element) => ({
+            text: element.textContent ?? "",
+            right: element.getBoundingClientRect().right,
+          }))
+          .filter((element) => element.right > right + 0.5)
+          .map((element) => `${element.text} ends at ${element.right}, past ${right}`);
+      });
+      expect(outside).toEqual([]);
+      expect(problems).toEqual([]);
+    });
+  }
 }
 
 test("a partly measured result says what was not measured and why", async ({ page }, testInfo) => {

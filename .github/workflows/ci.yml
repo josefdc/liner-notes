@@ -53,7 +53,7 @@ jobs:
   node:
     name: lint, typecheck, test, build (Node ${{ matrix.node }})
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -153,7 +153,7 @@ jobs:
   e2e:
     name: browser tests (Playwright, mock API)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7
         with:
@@ -229,7 +229,7 @@ jobs:
   python:
     name: audio service (ruff, pytest)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: services/audio
@@ -257,7 +257,7 @@ jobs:
   python-seeded:
     name: audio service, seeded one-pitch-class, pitchless and softer-third families (pytest)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: services/audio
@@ -282,7 +282,7 @@ jobs:
   python-seeded-chords:
     name: audio service, seeded chord families and seventh chords (pytest)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: services/audio

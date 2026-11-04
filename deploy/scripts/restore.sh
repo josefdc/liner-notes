@@ -228,8 +228,9 @@ for id in "${holders[@]}"; do
   docker stop "$id" >/dev/null
 done
 
-# The volumes as they are now, in case this restore was a mistake.
-stamp=$(date -u +%Y%m%dT%H%M%SZ)
+# The volumes as they are now, in case this restore was a mistake; never over an earlier copy
+# (a restore in the same second as the last one waits for the next second).
+stamp=$(new_stamp "$project-pre-restore-" "nothing changed")
 safety="$backup_dir/$project-pre-restore-$stamp.tar.gz"
 partial="$backup_dir/.$(basename "$safety").partial"
 # shellcheck disable=SC2016 # expanded in the container

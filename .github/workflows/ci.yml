@@ -53,8 +53,8 @@ jobs:
   node:
     name: lint, typecheck, test, build (Node ${{ matrix.node }})
     runs-on: ubuntu-latest
-    # On GitHub's 2-vCPU runners, 18 to 23 min with Node 24 and about 16 with Node 26; the slowest
-    # runners take Vitest about 1.6 times as long, so Node 24 may need about 28.
+    # On GitHub's 2-vCPU runners, 18 to 23 min with Node 24 and 10 to 16 with Node 26; the slowest
+    # runners take Vitest about 1.6 times as long as in the 18-min run, so Node 24 may need about 28.
     timeout-minutes: 40
     strategy:
       fail-fast: false

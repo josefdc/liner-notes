@@ -53,7 +53,8 @@ jobs:
   node:
     name: lint, typecheck, test, build (Node ${{ matrix.node }})
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # On GitHub's 2-vCPU runners Vitest gets one worker: about 23 min with Node 24, 15 with Node 26.
+    timeout-minutes: 35
     strategy:
       fail-fast: false
       matrix:
@@ -153,7 +154,8 @@ jobs:
   e2e:
     name: browser tests (Playwright, mock API)
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    # 694 tests at one worker on GitHub's 2-vCPU runners: about 65 min.
+    timeout-minutes: 100
     steps:
       - uses: actions/checkout@v7
         with:
@@ -229,7 +231,7 @@ jobs:
   python:
     name: audio service (ruff, pytest)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: services/audio
@@ -257,7 +259,7 @@ jobs:
   python-seeded:
     name: audio service, seeded one-pitch-class, pitchless and softer-third families (pytest)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: services/audio
@@ -282,7 +284,7 @@ jobs:
   python-seeded-chords:
     name: audio service, seeded chord families and seventh chords (pytest)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: services/audio

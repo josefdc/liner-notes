@@ -62,7 +62,7 @@ printf '#!/bin/sh\n[ "$1" = run ] && printf "session %%s %%s\\n" "$(ps -o sid= -
 chmod +x "$work/bin/docker"
 # ... and a date that, while $work/same-second holds "<stamp> <n>", gives <stamp> to the next n
 # calls for a file's time, then the real time: two runs start in one second, however long each
-# takes.
+# takes. A <stamp> of "-" makes those calls exit 1 instead (a clock that cannot be read).
 real_date=$(command -v date)
 cat >"$work/bin/date" <<SH
 #!/bin/sh
@@ -71,6 +71,7 @@ if [ "\$*" = "-u +%Y%m%dT%H%M%SZ" ] && [ -s "\$f" ]; then
   read -r stamp n <"\$f"
   if [ "\$n" -gt 0 ]; then
     echo "\$stamp \$((n - 1))" >"\$f"
+    [ "\$stamp" != - ] || exit 1
     echo "\$stamp"
     exit 0
   fi
@@ -597,6 +598,7 @@ echo "$stuck 1000" >"$work/same-second"
 t0=$SECONDS
 if out=$(restore --yes "$b4" 2>&1); then fail "a restore ran on a clock that did not move: $out"; fi
 took=$((SECONDS - t0))
+[ "$(cut -d' ' -f2 "$work/same-second")" -gt 0 ] || fail "the clock was let go before the restore gave up"
 grep -q "clock has not moved on from $stuck in 10 s; nothing changed" <<<"$out" ||
   fail "a clock that did not move failed the restore for another reason: $out"
 grep -q "stopping $container" <<<"$out" || fail "the restore on a clock that did not move stopped no API: $out"
@@ -642,11 +644,28 @@ stuck=20000101T000000Z
 n=$(backups | wc -l)
 echo "$stuck 1000" >"$work/same-second"
 if out=$(backup 2>&1); then fail "a backup ran on a clock that did not move: $out"; fi
+[ "$(cut -d' ' -f2 "$work/same-second")" -gt 0 ] || fail "the clock was let go before the backup gave up"
 grep -q "clock has not moved on from $stuck in 10 s; no backup was written" <<<"$out" ||
   fail "a clock that did not move failed the backup for another reason: $out"
 [ "$(backups | wc -l)" = "$n" ] || fail "a backup on a clock that did not move left an archive"
 rm "$work/same-second" "$BACKUP_DIR/$project-$stuck.tar.gz"
 echo "ok: a backup on a clock that does not move fails within 10 s and writes nothing"
+
+# A clock that cannot be read (date exits 1), and one that gives no UTC time: the backup fails
+# before it copies anything, with no archive written.
+n=$(backups | wc -l)
+echo "- 1" >"$work/same-second"
+if out=$(backup 2>&1); then fail "a backup ran on a clock that could not be read: $out"; fi
+grep -q "backup: cannot read the clock; no backup was written" <<<"$out" ||
+  fail "a clock that could not be read failed the backup for another reason: $out"
+echo "2026-11-04 1" >"$work/same-second"
+if out=$(backup 2>&1); then fail "a backup ran on a clock that gave no UTC time: $out"; fi
+grep -q 'backup: the clock gave "2026-11-04", not a UTC time; no backup was written' <<<"$out" ||
+  fail "a clock that gave no UTC time failed the backup for another reason: $out"
+[ "$(backups | wc -l)" = "$n" ] || fail "a backup on a broken clock left an archive"
+if find "$BACKUP_DIR" -maxdepth 1 -name '*.partial*' | grep -q .; then fail "a backup on a broken clock left a partial archive"; fi
+rm "$work/same-second"
+echo "ok: a backup on a clock that cannot be read, or gives no UTC time, fails and writes nothing"
 
 # Every container the scripts ran: no network, no capabilities, no new privileges, read-only.
 runs=$(wc -l <"$work/docker-runs.log")

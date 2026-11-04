@@ -24,7 +24,7 @@
 # with no valid spend log is refused before any stop into a volume with none, until
 # spend-log.sh place puts the backup's log there. Two backups, or two restores, in one second
 # each read the volumes and write an archive of their own, never over the first; a clock that
-# does not move fails the backup.
+# does not move fails the backup, and fails the restore with the API started again.
 # Every container the scripts start has no network, no capabilities and a read-only image
 # filesystem.
 set -euo pipefail
@@ -585,6 +585,33 @@ fi
 [ "$(markers)" = "m1-first,m2-second,m3-after-backups" ] || fail "markers after two restores in one second: $(markers)"
 echo "ok: two restores in one second wrote two pre-restore copies, each of the volumes as they were"
 
+# A clock that does not move, on the name of a pre-restore copy that exists (a file of its own):
+# the restore fails within 10 s of stopping the API, writes no copy, changes nothing and starts
+# the API again.
+stuck=20000101T000000Z
+: >"$BACKUP_DIR/$project-pre-restore-$stuck.tar.gz"
+n=$(pre_restores | wc -l)
+before=$(started)
+lines=$(spend_records)
+echo "$stuck 1000" >"$work/same-second"
+t0=$SECONDS
+if out=$(restore --yes "$b4" 2>&1); then fail "a restore ran on a clock that did not move: $out"; fi
+took=$((SECONDS - t0))
+grep -q "clock has not moved on from $stuck in 10 s; nothing changed" <<<"$out" ||
+  fail "a clock that did not move failed the restore for another reason: $out"
+grep -q "stopping $container" <<<"$out" || fail "the restore on a clock that did not move stopped no API: $out"
+grep -q "$container is healthy" <<<"$out" || fail "the restore on a clock that did not move did not start the API again: $out"
+[ "$took" -le 60 ] || fail "the restore on a clock that did not move took $took s"
+if [ "$(started)" = "$before" ] || [ "$(health)" != healthy ]; then
+  fail "the API is not running again after a restore on a clock that did not move"
+fi
+[ "$(pre_restores | wc -l)" = "$n" ] || fail "a restore on a clock that did not move wrote a pre-restore copy"
+if find "$BACKUP_DIR" -maxdepth 1 -name '*.partial*' | grep -q .; then fail "a restore on a clock that did not move left a partial copy"; fi
+[ "$(markers)" = "m1-first,m2-second,m3-after-backups" ] || fail "a restore on a clock that did not move changed the database: $(markers)"
+[ "$(spend_records)" = "$lines" ] || fail "a restore on a clock that did not move changed the spend log"
+rm "$work/same-second" "$BACKUP_DIR/$project-pre-restore-$stuck.tar.gz"
+echo "ok: a restore on a clock that does not move fails in $took s, changes nothing and starts the API again"
+
 # Two backups in one second: the second reads the volumes again (a marker and a cut spend line
 # added since the first), writes an archive of its own and exits 3 for its own spend log.
 stamp=$("$real_date" -u +%Y%m%dT%H%M%SZ)
@@ -608,15 +635,17 @@ fi
 [ "$(sha256sum <"$s1")" = "$sum1" ] || fail "the second backup in one second changed the first one's archive"
 echo "ok: two backups in one second wrote two archives; the second read the volumes again and gave exit 3"
 
-# A clock that does not move: the name stays taken, and the backup fails within 10 s with no
-# archive written.
+# A clock that does not move, on the name of a backup that exists (a file of its own): the
+# backup fails within 10 s with no archive written.
+stuck=20000101T000000Z
+: >"$BACKUP_DIR/$project-$stuck.tar.gz"
 n=$(backups | wc -l)
-echo "$stamp 1000" >"$work/same-second"
+echo "$stuck 1000" >"$work/same-second"
 if out=$(backup 2>&1); then fail "a backup ran on a clock that did not move: $out"; fi
-grep -q "clock has not moved on from $stamp in 10 s; no backup was written" <<<"$out" ||
+grep -q "clock has not moved on from $stuck in 10 s; no backup was written" <<<"$out" ||
   fail "a clock that did not move failed the backup for another reason: $out"
 [ "$(backups | wc -l)" = "$n" ] || fail "a backup on a clock that did not move left an archive"
-rm "$work/same-second"
+rm "$work/same-second" "$BACKUP_DIR/$project-$stuck.tar.gz"
 echo "ok: a backup on a clock that does not move fails within 10 s and writes nothing"
 
 # Every container the scripts ran: no network, no capabilities, no new privileges, read-only.

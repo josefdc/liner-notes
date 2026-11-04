@@ -70,15 +70,17 @@ take_lock() {
 # <prefix><stamp>.tar.gz in BACKUP_DIR. When a run earlier in the same second has that name, it
 # waits for the next second (the caller holds the lock, so no other run takes the name meanwhile):
 # a file is never reused or replaced. It fails, adding $2, if the name is still taken after 10 s
-# (a clock that does not move).
+# (a clock that does not move), or if the clock cannot be read. It runs in a command substitution,
+# where set -e is off, so it checks each step itself.
 new_stamp() {
   local stamp deadline=$((SECONDS + 10))
-  stamp=$(date -u +%Y%m%dT%H%M%SZ)
-  while [ -e "$backup_dir/$1$stamp.tar.gz" ]; do
+  while :; do
+    stamp=$(date -u +%Y%m%dT%H%M%SZ) || fail "cannot read the clock; $2"
+    [[ $stamp =~ ^[0-9]{8}T[0-9]{6}Z$ ]] || fail "the clock gave \"$stamp\", not a UTC time; $2"
+    [ -e "$backup_dir/$1$stamp.tar.gz" ] || break
     [ "$SECONDS" -lt "$deadline" ] ||
       fail "$1$stamp.tar.gz exists, and the clock has not moved on from $stamp in 10 s; $2"
     sleep 0.2
-    stamp=$(date -u +%Y%m%dT%H%M%SZ)
   done
   echo "$stamp"
 }

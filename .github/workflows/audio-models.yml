@@ -33,7 +33,8 @@ jobs:
   pytest-models:
     name: audio service with Essentia and the models (pytest)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # 20 to 33 min on GitHub's 2-vCPU runners.
+    timeout-minutes: 50
     defaults:
       run:
         working-directory: services/audio

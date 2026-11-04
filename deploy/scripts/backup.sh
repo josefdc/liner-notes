@@ -50,13 +50,10 @@ mkdir -p "$backup_dir"
 backup_dir=$(cd "$backup_dir" && pwd)
 take_lock "no backup was written"
 
-stamp=$(date -u +%Y%m%dT%H%M%SZ)
+# A run in the same second as the last one waits for the next second: every run reads the
+# volumes and writes an archive of its own.
+stamp=$(new_stamp "$project-" "no backup was written")
 name="$project-$stamp.tar.gz"
-if [ -e "$backup_dir/$name" ]; then
-  # A run in the same second already wrote it.
-  echo "$backup_dir/$name"
-  exit 0
-fi
 partial="$backup_dir/.$name.partial"
 trap 'rm -f "$partial" "$partial.sha256"' EXIT
 

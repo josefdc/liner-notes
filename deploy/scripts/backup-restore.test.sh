@@ -22,7 +22,9 @@
 # the volumes are copied first, -wal included, also with no API running; a -wal left beside a
 # damaged or lost database is not applied to the restored one; spend logs are merged; a backup
 # with no valid spend log is refused before any stop into a volume with none, until
-# spend-log.sh place puts the backup's log there.
+# spend-log.sh place puts the backup's log there. Two backups, or two restores, in one second
+# each read the volumes and write an archive of their own, never over the first; a clock that
+# does not move fails the backup, and fails the restore with the API started again.
 # Every container the scripts start has no network, no capabilities and a read-only image
 # filesystem.
 set -euo pipefail
@@ -58,6 +60,25 @@ mkdir "$work/bin"
 printf '#!/bin/sh\n[ "$1" = run ] && printf "session %%s %%s\\n" "$(ps -o sid= -p $$ | tr -d " ")" "$*" >>"%s"\nexec %s "$@"\n' \
   "$work/docker-runs.log" "$(command -v docker)" >"$work/bin/docker"
 chmod +x "$work/bin/docker"
+# ... and a date that, while $work/same-second holds "<stamp> <n>", gives <stamp> to the next n
+# calls for a file's time, then the real time: two runs start in one second, however long each
+# takes. A <stamp> of "-" makes those calls exit 1 instead (a clock that cannot be read).
+real_date=$(command -v date)
+cat >"$work/bin/date" <<SH
+#!/bin/sh
+f="$work/same-second"
+if [ "\$*" = "-u +%Y%m%dT%H%M%SZ" ] && [ -s "\$f" ]; then
+  read -r stamp n <"\$f"
+  if [ "\$n" -gt 0 ]; then
+    echo "\$stamp \$((n - 1))" >"\$f"
+    [ "\$stamp" != - ] || exit 1
+    echo "\$stamp"
+    exit 0
+  fi
+fi
+exec $real_date "\$@"
+SH
+chmod +x "$work/bin/date"
 backup() { PATH="$work/bin:$PATH" "$here/backup.sh"; }
 restore() { PATH="$work/bin:$PATH" "$here/restore.sh" "$@"; }
 spend_log() { PATH="$work/bin:$PATH" "$here/spend-log.sh" "$@"; }
@@ -119,6 +140,18 @@ spend_append() {
 spend_records() {
   docker run --rm --pull never --network none -v "$spend:/app/spend" --entrypoint sh "$image" -c \
     'if [ -f /app/spend/llm-spend.jsonl ]; then grep -c . /app/spend/llm-spend.jsonl || true; else echo none; fi'
+}
+
+# The markers in the database of an archive: archive_markers <file>.
+archive_markers_js='
+  const D = require("node:module").createRequire("/app/apps/api/package.json")("better-sqlite3");
+  const db = new D("/tmp/in/sonic-agent.db");
+  const rows = db.prepare("SELECT key FROM store_items WHERE namespace = ? ORDER BY key").all("[\"backup-test\"]");
+  console.log(rows.map((row) => row.key).join(","));'
+archive_markers() {
+  # shellcheck disable=SC2016 # expanded in the container
+  docker run --rm -i --pull never --network none -e "JS=$archive_markers_js" --entrypoint sh "$image" -c \
+    'mkdir /tmp/in && tar -xzf - -C /tmp/in && node -e "$JS"' <"$1"
 }
 
 # The project's backups (exact names), oldest first.
@@ -527,6 +560,112 @@ for decoy in "$project-2-20991231T235959Z.tar.gz" "$project-pre-restore-20991231
 done
 [ "$(pre_restores | wc -l)" -ge 5 ] || fail "KEEP=2 removed pre-restore copies"
 echo "ok: KEEP=2 left the two newest backups, and no other project's file or pre-restore copy"
+
+# Two restores in one second (the clock held there for the copies' names): the second copies the
+# volumes as they are then, under a name of its own, and leaves the first copy as it was.
+n=$(pre_restores | wc -l)
+stamp=$("$real_date" -u +%Y%m%dT%H%M%SZ)
+echo "$stamp 2" >"$work/same-second"
+out=$(restore --yes "$b4" 2>&1) || fail "the first restore in one second failed: $out"
+p1="$BACKUP_DIR/$project-pre-restore-$stamp.tar.gz"
+grep -qx "restore: the volumes as they were are in $p1" <<<"$out" || fail "the first restore in one second did not copy to $p1: $out"
+sum1=$(sha256sum <"$p1")
+put_marker m7-between-restores
+out=$(restore --yes "$b4" 2>&1) || fail "the second restore in one second failed: $out"
+[ "$(cut -d' ' -f2 "$work/same-second")" = 0 ] || fail "the second restore did not start in the first one's second"
+p2=$(sed -n 's/^restore: the volumes as they were are in //p' <<<"$out")
+if [ -z "$p2" ] || [ "$p2" = "$p1" ] || [ ! -f "$p2" ]; then
+  fail "the second restore in one second wrote no pre-restore copy of its own (${p2:-none}): $out"
+fi
+[ "$(pre_restores | wc -l)" = $((n + 2)) ] || fail "two restores in one second left $(($(pre_restores | wc -l) - n)) new pre-restore copies"
+[ "$(sha256sum <"$p1")" = "$sum1" ] || fail "the second restore in one second wrote over the first one's copy"
+(cd "$BACKUP_DIR" && sha256sum -c --status "$(basename "$p1").sha256") || fail "the first pre-restore copy's checksum no longer matches"
+[ "$(archive_markers "$p1")" = "m1-first,m2-second,m3-after-backups" ] || fail "the first pre-restore copy holds: $(archive_markers "$p1")"
+[ "$(archive_markers "$p2")" = "m1-first,m2-second,m3-after-backups,m7-between-restores" ] ||
+  fail "the second pre-restore copy holds: $(archive_markers "$p2")"
+[ "$(markers)" = "m1-first,m2-second,m3-after-backups" ] || fail "markers after two restores in one second: $(markers)"
+echo "ok: two restores in one second wrote two pre-restore copies, each of the volumes as they were"
+
+# A clock that does not move, on the name of a pre-restore copy that exists (a file of its own):
+# the restore fails within 10 s of stopping the API, writes no copy, changes nothing and starts
+# the API again.
+stuck=20000101T000000Z
+: >"$BACKUP_DIR/$project-pre-restore-$stuck.tar.gz"
+n=$(pre_restores | wc -l)
+before=$(started)
+lines=$(spend_records)
+echo "$stuck 1000" >"$work/same-second"
+t0=$SECONDS
+if out=$(restore --yes "$b4" 2>&1); then fail "a restore ran on a clock that did not move: $out"; fi
+took=$((SECONDS - t0))
+[ "$(cut -d' ' -f2 "$work/same-second")" -gt 0 ] || fail "the clock was let go before the restore gave up"
+grep -q "clock has not moved on from $stuck in 10 s; nothing changed" <<<"$out" ||
+  fail "a clock that did not move failed the restore for another reason: $out"
+grep -q "stopping $container" <<<"$out" || fail "the restore on a clock that did not move stopped no API: $out"
+grep -q "$container is healthy" <<<"$out" || fail "the restore on a clock that did not move did not start the API again: $out"
+[ "$took" -le 60 ] || fail "the restore on a clock that did not move took $took s"
+if [ "$(started)" = "$before" ] || [ "$(health)" != healthy ]; then
+  fail "the API is not running again after a restore on a clock that did not move"
+fi
+[ "$(pre_restores | wc -l)" = "$n" ] || fail "a restore on a clock that did not move wrote a pre-restore copy"
+if find "$BACKUP_DIR" -maxdepth 1 -name '*.partial*' | grep -q .; then fail "a restore on a clock that did not move left a partial copy"; fi
+[ "$(markers)" = "m1-first,m2-second,m3-after-backups" ] || fail "a restore on a clock that did not move changed the database: $(markers)"
+[ "$(spend_records)" = "$lines" ] || fail "a restore on a clock that did not move changed the spend log"
+rm "$work/same-second" "$BACKUP_DIR/$project-pre-restore-$stuck.tar.gz"
+echo "ok: a restore on a clock that does not move fails in $took s, changes nothing and starts the API again"
+
+# Two backups in one second: the second reads the volumes again (a marker and a cut spend line
+# added since the first), writes an archive of its own and exits 3 for its own spend log.
+stamp=$("$real_date" -u +%Y%m%dT%H%M%SZ)
+echo "$stamp 2" >"$work/same-second"
+s1=$(backup 2>"$work/s1.err") || fail "the first backup in one second failed: $(cat "$work/s1.err")"
+[ "$s1" = "$BACKUP_DIR/$project-$stamp.tar.gz" ] || fail "the first backup in one second is $s1, not of $stamp"
+sum1=$(sha256sum <"$s1")
+put_marker m8-between-backups
+printf '%s' "$(spend_line 0.08)" | head -c 40 | spend_append
+code=0
+s2=$(backup 2>"$work/s2.err") || code=$?
+[ "$(cut -d' ' -f2 "$work/same-second")" = 0 ] || fail "the second backup did not start in the first one's second"
+[ "$code" = 3 ] || fail "the second backup in one second, over a cut spend line, gave exit $code: $s2 $(cat "$work/s2.err")"
+if [ "$s2" = "$s1" ] || [ ! -f "$s2" ] || [ ! -f "$s2.sha256" ]; then
+  fail "the second backup in one second wrote no archive of its own: $s2"
+fi
+[ "$(tar -tzf "$s2" | sort | tr '\n' ' ')" = "llm-spend.jsonl.invalid sonic-agent.db " ] ||
+  fail "the second backup in one second holds: $(tar -tzf "$s2" | tr '\n' ' ')"
+[ "$(archive_markers "$s2")" = "m1-first,m2-second,m3-after-backups,m8-between-backups" ] ||
+  fail "the second backup in one second holds the markers: $(archive_markers "$s2")"
+[ "$(sha256sum <"$s1")" = "$sum1" ] || fail "the second backup in one second changed the first one's archive"
+echo "ok: two backups in one second wrote two archives; the second read the volumes again and gave exit 3"
+
+# A clock that does not move, on the name of a backup that exists (a file of its own): the
+# backup fails within 10 s with no archive written.
+stuck=20000101T000000Z
+: >"$BACKUP_DIR/$project-$stuck.tar.gz"
+n=$(backups | wc -l)
+echo "$stuck 1000" >"$work/same-second"
+if out=$(backup 2>&1); then fail "a backup ran on a clock that did not move: $out"; fi
+[ "$(cut -d' ' -f2 "$work/same-second")" -gt 0 ] || fail "the clock was let go before the backup gave up"
+grep -q "clock has not moved on from $stuck in 10 s; no backup was written" <<<"$out" ||
+  fail "a clock that did not move failed the backup for another reason: $out"
+[ "$(backups | wc -l)" = "$n" ] || fail "a backup on a clock that did not move left an archive"
+rm "$work/same-second" "$BACKUP_DIR/$project-$stuck.tar.gz"
+echo "ok: a backup on a clock that does not move fails within 10 s and writes nothing"
+
+# A clock that cannot be read (date exits 1), and one that gives no UTC time: the backup fails
+# before it copies anything, with no archive written.
+n=$(backups | wc -l)
+echo "- 1" >"$work/same-second"
+if out=$(backup 2>&1); then fail "a backup ran on a clock that could not be read: $out"; fi
+grep -q "backup: cannot read the clock; no backup was written" <<<"$out" ||
+  fail "a clock that could not be read failed the backup for another reason: $out"
+echo "2026-11-04 1" >"$work/same-second"
+if out=$(backup 2>&1); then fail "a backup ran on a clock that gave no UTC time: $out"; fi
+grep -q 'backup: the clock gave "2026-11-04", not a UTC time; no backup was written' <<<"$out" ||
+  fail "a clock that gave no UTC time failed the backup for another reason: $out"
+[ "$(backups | wc -l)" = "$n" ] || fail "a backup on a broken clock left an archive"
+if find "$BACKUP_DIR" -maxdepth 1 -name '*.partial*' | grep -q .; then fail "a backup on a broken clock left a partial archive"; fi
+rm "$work/same-second"
+echo "ok: a backup on a clock that cannot be read, or gives no UTC time, fails and writes nothing"
 
 # Every container the scripts ran: no network, no capabilities, no new privileges, read-only.
 runs=$(wc -l <"$work/docker-runs.log")

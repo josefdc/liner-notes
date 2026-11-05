@@ -6,7 +6,8 @@ const ACCEPTED_CODINGS = new Set(["identity", "gzip", "deflate"]);
 /**
  * Refuses a request body in any other content coding with 415 `unsupported_media_type`, before
  * the body parser sees it. The JSON parser also decodes brotli, whose decoder allocates a
- * window of up to 16 MB for a body of a few bytes, well before the decoded-size limit stops it.
+ * window of up to 16 MB for a body of a few bytes, well before the decoded-size limit stops it,
+ * and zstd.
  * Several codings at once (e.g. "gzip, br") are refused too. A request without a body passes.
  */
 export const acceptedEncodingsOnly: RequestHandler = (req, _res, next) => {

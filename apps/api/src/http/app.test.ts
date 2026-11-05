@@ -398,11 +398,11 @@ describe("content encodings", () => {
   });
 
   it("keeps serving when bytes reach the decoder after the body was read", async () => {
-    // body-parser 2.3.0 leaves the decoder without an error listener once it has read the body
-    // (GHSA-27r3-jxmh-p828). A gzip member followed by a zero byte, or a deflate stream followed
-    // by any byte, ends the decoder before the request ends, so the route answers first; what is
-    // sent after the answer then reaches the finished decoder. An error it throws would end the process, and
-    // vitest fails the run on one.
+    // body-parser before 2.4.0 left the decoder without an error listener once it had read the
+    // body (GHSA-27r3-jxmh-p828). A gzip member followed by a zero byte, or a deflate stream
+    // followed by any byte, ends the decoder before the request ends, so the route answers first;
+    // what is sent after the answer then reaches the finished decoder. An error it throws would
+    // end the process, and vitest fails the run on one.
     const { post, close } = await listen(app());
     try {
       const json = JSON.stringify({ padding: "a" });

@@ -7,7 +7,9 @@ than by type of change, and versions follow
 
 ## [Unreleased]
 
-The relaunch of the prototype as Liner Notes, to be released as v0.1.0. Given a song, the app
+## [0.1.0] - 2026-11-05
+
+The relaunch of the prototype as Liner Notes. Given a song, the app
 traces its samples, credits, history and sound, and marks each value as measured, sourced or
 inferred, or as missing with its reason.
 
@@ -92,16 +94,28 @@ inferred, or as missing with its reason.
 - A two-stage audio image without the ffmpeg binary or wget (the FFmpeg libraries Essentia links
   in remain), image size budgets, and a runbook with backup and restore scripts (#169, #212,
   #267).
+- A second backup in the same second writes its own archive (#304).
 
 ### Tooling and CI
 
 - Biome, ruff, Vitest and Playwright, run in CI (#42, #44, #117).
 - A release-age check for changed npm lock entries (#275).
 - Visual baselines from 768 to 1680 px, rendered in a pinned Playwright container (#298).
+- Job time limits set from measured run times on GitHub's 2-vCPU runners (#302).
+- Took body-parser 2.4.0 and dropped the late decoder error listener (#305).
+
+### Demo and documentation
+
+- A static demo that replays the showcase in the browser with no server, with its own metadata,
+  link preview and plain article for each address (#306).
+- From 150 BPM up, the Dashboard says a tempo may be double the felt one, and what half is (#306).
+- A README that leads with the demo, the detail moved into `docs/`, and contributing, security and
+  conduct files (#307).
 
 ### Licence
 
 - Licensed under AGPL-3.0-only (`LICENSE`), with third-party notices, model weight and dataset
   licences, and the source offer for network users in `NOTICE`.
 
-[Unreleased]: https://github.com/josefdc/liner-notes/commits/main
+[Unreleased]: https://github.com/josefdc/liner-notes/compare/v0.1.0...main
+[0.1.0]: https://github.com/josefdc/liner-notes/releases/tag/v0.1.0

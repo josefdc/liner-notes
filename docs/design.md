@@ -78,7 +78,7 @@ left out and counted.
 excerpt and the claim together. It is not a check of the claim against the world. A wrong
 excerpt supports a wrong claim, and the judge can misread an excerpt
 ([Praise You](failures.md#verifier-reason-misstates-its-excerpt-praise-you)). The judge's error
-rates on a perturbed set are in the README ("Evaluation").
+rates on a perturbed set are in [Evaluation](evaluation.md).
 
 ## Retrieved and proposed edges
 
@@ -99,7 +99,7 @@ run read.
 The showcase tracks are served from recorded runs (`fixtures/replays`) when live analysis is off
 or unavailable (`REPLAY_MODE`), and the page says so: "Recorded run", with the date and commit
 the run was recorded at. A replay asks no model, source or audio service anything. The showcase
-is chosen by a rule from the golden run (`evals/agent/showcase.mjs`), not by hand; the README's
+is chosen by a rule from the golden run (`evals/agent/showcase.mjs`), not by hand; [Evaluation](evaluation.md#the-showcase)'s
 "The showcase" section gives the rule.
 
 ## Alternatives that were rejected
@@ -128,9 +128,9 @@ is chosen by a rule from the golden run (`evals/agent/showcase.mjs`), not by han
 - **Analysing Spotify's previews.** Spotify's terms restrict using its content for machine
   learning. Only Deezer previews are measured, and Spotify's audio is no longer analysed (runs
   measured on it before can still be served by run link until retention removes them; see the
-  README's known limitations). Spotify supplies search, track metadata, cover images and the
+  the known limitations). Spotify supplies search, track metadata, cover images and the
   preview clips the map plays; the Player credits those clips, the full-size map does not
-  ([README](../README.md#known-limitations); [NOTICE](../NOTICE)).
+  ([Known limitations](limitations.md); [NOTICE](../NOTICE)).
 - **Lyrics.** Not shown and not sent to a model: publishers' rights apply to the text, and the
   app's claims do not need it. Genius is read for song relationships only.
 - **A second judge from another model family.** Not rejected but unavailable: the Gemini
@@ -139,5 +139,5 @@ is chosen by a rule from the golden run (`evals/agent/showcase.mjs`), not by han
 
 ## Known limits
 
-The known limitations are listed once, in the [README](../README.md#known-limitations). The
+The known limitations are listed once, in the [Known limitations](limitations.md). The
 cases with a replay or a run record to show them are in [failures.md](failures.md).

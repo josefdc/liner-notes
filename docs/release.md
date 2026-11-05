@@ -32,8 +32,7 @@ cd services/audio && uv sync --frozen && uv run ruff check . && uv run ruff form
 For the first release there is no previous tag: use `--base <release commit>^`, the release
 commit's parent. Also run the agent eval replay with the network denied, as CI does (the "Agent eval
 replay" and "Agent eval report and judge replay" steps of the `node` job), and
-`docker compose -f deploy/compose.prod.yml build` followed by `deploy/check-stack.sh` (README,
-"Deploying"), as `.github/workflows/docker.yml` does.
+`docker compose -f deploy/compose.prod.yml build` followed by `deploy/check-stack.sh` ([Deployment](deployment.md)), as `.github/workflows/docker.yml` does.
 
 Every step must pass. Keep the output: the release notes quote the test counts.
 
@@ -47,11 +46,11 @@ On the release commit, checked out from `main`:
   (`node --test evals/agent/showcase.test.mjs`);
 - `node evals/agent/kinds.mjs --check` passes: `evals/reports/agent-kinds.md` and
   `docs/images/agent-kinds.svg` are what the committed run records give. It does not read the
-  README;
+  prose;
 - `npm run check:links` passes: every relative link and anchor in the tracked Markdown files
   points at a tracked file or heading. It checks no figure and no external link;
-- checked by hand, since no script reads the README's prose: every number in its "What the
-  results hold, by kind" and "Evaluation" sections is the one in the report it cites;
+- checked by hand, since no script reads the prose: every number in the README and in
+  [`docs/evaluation.md`](evaluation.md) is the one in the report it cites;
 - `git status` is clean.
 
 ## 3. CHANGELOG
@@ -72,7 +71,7 @@ gh release create vX.Y.Z --draft --verify-tag --title "vX.Y.Z" --notes-file <not
 ```
 
 The notes are the version's CHANGELOG section, then the local CI results of step 1 (each job
-and its counts), and the known limitations of the README by link. Images are built from the tag
+and its counts), and the [known limitations](limitations.md) by link. Images are built from the tag
 (`IMAGE_TAG=<short hash>`, `deploy/RUNBOOK.md`, "Deploy a new release"); they are not attached
 to the release.
 

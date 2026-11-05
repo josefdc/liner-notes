@@ -8,7 +8,7 @@
 # 127.0.0.1:3180 for local use; in production PROXY_BIND=0.0.0.0, PROXY_PORT=80 and
 # PROXY_TLS_PORT=443, with SITE_ADDRESS set to the site's hostname. The API and the audio
 # service publish nothing: browsers reach the API through Caddy only (/api/*), and only the API
-# calls the audio service. See the README ("Deploying").
+# calls the audio service. See docs/deployment.md.
 #
 # deploy/compose.dev.yml runs the same images on a machine without Cloudflare, as a project of
 # its own (liner-notes-dev) that never touches this one.
@@ -44,7 +44,7 @@ services:
         published: "${PROXY_PORT:-3180}"
         host_ip: "${PROXY_BIND:-127.0.0.1}"
         protocol: tcp
-      # HTTPS, when SITE_ADDRESS is a hostname (Caddy redirects port 80 to it; README,
+      # HTTPS, when SITE_ADDRESS is a hostname (Caddy redirects port 80 to it; docs/deployment.md,
       # "Certificates").
       - target: 443
         published: "${PROXY_TLS_PORT:-3181}"
@@ -99,7 +99,7 @@ services:
       REPLAY_MODE: ${REPLAY_MODE:-fallback}
       SQLITE_DB_PATH: /app/data/sonic-agent.db
       # The spend log lives on its own volume; live model calls are refused until it exists
-      # (README, "Deploying").
+      # (docs/deployment.md, "Deploying").
       LLM_SPEND_LOG: /app/spend/llm-spend.jsonl
       AUDIO_ANALYSIS_URL: http://audio:3002
       # Required: compose stops with these messages when one is missing.
@@ -150,7 +150,7 @@ services:
     volumes:
       # The database. The file keeps its name. The volume is <project>_sonic-data, which is the
       # earlier root docker-compose.yml's volume only when that stack ran as the project
-      # "liner-notes" (a checkout directory of that name); otherwise move the data over (README).
+      # "liner-notes" (a checkout directory of that name); otherwise move the data over (docs/deployment.md).
       - sonic-data:/app/data
       - llm-spend:/app/spend
     tmpfs:

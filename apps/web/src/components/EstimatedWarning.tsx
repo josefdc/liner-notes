@@ -5,6 +5,7 @@ import {
   type AudioField,
   audioNoticeOf,
   audioReadings,
+  doubleTimeHint,
   missingModelOutput,
   modelUnavailableText,
   QUERY_MATCH_TITLE,
@@ -79,15 +80,18 @@ export const ReadingValue: React.FC<{
   reading: Reading;
   size?: 'sm' | 'md';
   layout?: 'full' | 'compact' | 'summary';
-}> = ({ reading, size = 'sm', layout = 'full' }) =>
-  reading.state === 'missing' ? (
-    <MissingValue
-      label={reading.label}
-      status={reading.status}
-      reason={reading.reason}
-      size={size}
-    />
-  ) : (
+}> = ({ reading, size = 'sm', layout = 'full' }) => {
+  if (reading.state === 'missing') {
+    return (
+      <MissingValue
+        label={reading.label}
+        status={reading.status}
+        reason={reading.reason}
+        size={size}
+      />
+    );
+  }
+  const value = (
     <MeasuredValue
       label={reading.label}
       value={reading.value}
@@ -103,6 +107,15 @@ export const ReadingValue: React.FC<{
       icon={ICONS[reading.field]?.(size === 'md' ? 12 : 10)}
     />
   );
+  const hint = reading.field === 'bpm' ? doubleTimeHint(reading.value) : null;
+  if (!hint) return value;
+  return (
+    <span className="inline-flex flex-col items-start gap-1">
+      {value}
+      <span className="max-w-60 text-chrome font-mono text-text-chip text-left">— {hint}</span>
+    </span>
+  );
+};
 
 /**
  * Measured audio values (BPM, key, loudness or the older energy) and, separately, the

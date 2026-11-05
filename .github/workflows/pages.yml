@@ -1,0 +1,67 @@
+name: pages
+
+# The static demo on GitHub Pages: no server, no keys, no model calls
+# (scripts/build-static-demo.mjs). Set the repository's Pages source to "GitHub Actions" once.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/web/**"
+      - "fixtures/replays/**"
+      - "packages/contract/**"
+      - "apps/api/src/replay/**"
+      - "scripts/build-static-demo.mjs"
+      - "scripts/static-demo-pages.mjs"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build the static demo
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      # .npmrc's strict-allow-scripts is enforced from npm 11.18 on; older npm would ignore it.
+      - name: Use npm 11.18 or later
+        run: |
+          if ! npx -y semver@7.7.3 -r '>=11.18.0' "$(npm --version)" >/dev/null; then
+            npm install -g npm@11.19.1
+          fi
+      - run: npm ci
+      - run: npm run build -w packages/contract
+      - name: Build the demo
+        run: npm run demo:build -- --site "https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}"
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: apps/web/dist-demo
+          include-hidden-files: true
+
+  deploy:
+    name: deploy to GitHub Pages
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

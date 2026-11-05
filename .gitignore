@@ -97,3 +97,6 @@ deploy/site.d/*
 
 # Backups of a deployment's database and spend log (deploy/scripts/backup.sh)
 deploy/backups/
+
+# The static demo build (scripts/build-static-demo.mjs)
+apps/web/dist-demo/

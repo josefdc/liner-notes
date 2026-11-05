@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseRoute, routeUrl } from './route';
+import { basePath, parseRoute, routeUrl } from './route';
 
 describe('parseRoute', () => {
   it('reads the search and a track with or without its words', () => {
@@ -79,5 +79,42 @@ describe('routeUrl', () => {
     }
     expect(routeUrl(routes[2])).toBe('/t/4cOdK2wGLETKBW3PvgPWqT?q=AC%2FDC+%26+Co%3F+%231');
     expect(routeUrl(routes[4])).toBe('/t/4cOdK2wGLETKBW3PvgPWqT/map?q=AC%2FDC+%26+Co%3F+%231');
+  });
+});
+
+describe('a build served under a path', () => {
+  const BASE = '/liner-notes';
+
+  it('reads its addresses under that path', () => {
+    expect(parseRoute('/liner-notes/', '', BASE)).toEqual({ kind: 'search' });
+    expect(parseRoute('/liner-notes', '', BASE)).toEqual({ kind: 'search' });
+    expect(parseRoute('/liner-notes/t/abc/', '?q=x', BASE)).toEqual({
+      kind: 'track',
+      trackId: 'abc',
+      query: 'x',
+    });
+    expect(parseRoute('/liner-notes/t/abc/map/', '', BASE)).toEqual({
+      kind: 'map',
+      trackId: 'abc',
+      query: null,
+    });
+  });
+
+  it('knows no address outside that path', () => {
+    expect(parseRoute('/', '', BASE)).toBeNull();
+    expect(parseRoute('/t/abc', '', BASE)).toBeNull();
+    expect(parseRoute('/liner-notes-2/t/abc', '', BASE)).toBeNull();
+  });
+
+  it('writes its addresses under that path', () => {
+    expect(routeUrl({ kind: 'search' }, BASE)).toBe('/liner-notes/');
+    expect(routeUrl({ kind: 'map', trackId: 'abc', query: 'x y' }, BASE)).toBe(
+      '/liner-notes/t/abc/map?q=x+y',
+    );
+  });
+
+  it('takes the last slash off the base', () => {
+    expect(basePath('/')).toBe('');
+    expect(basePath('/liner-notes/')).toBe('/liner-notes');
   });
 });

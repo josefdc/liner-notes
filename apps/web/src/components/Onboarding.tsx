@@ -31,6 +31,8 @@ import { LoadAttempt, lazyWithRetry } from '../utils/lazyWithRetry';
 // Loaded only when live analysis turns out to be unavailable; loaded again on "Try again" when
 // its code failed.
 const BudgetBanner = lazyWithRetry(() => import('./BudgetBanner'));
+const DemoShowcase = lazyWithRetry(() => import('./DemoShowcase'));
+const STATIC_DEMO = import.meta.env.VITE_STATIC_DEMO === '1';
 
 /**
  * Shows the paused-analysis banner, or, when its code cannot be loaded (a page older than the
@@ -568,7 +570,9 @@ const Onboarding: React.FC<OnboardingProps> = ({
         // with justify-content would push the top out of reach of the scroll on a short window.
         // On a phone it starts near the top, leaving the room below to the suggestions (and the
         // on-screen keyboard).
-        <div className="z-10 text-center space-y-12 animate-fade-in-up max-w-md mx-auto mt-(--space-lg) mb-auto sm:my-auto py-(--space-lg) px-4">
+        <div
+          className={`z-10 text-center ${STATIC_DEMO ? 'space-y-6' : 'space-y-12'} animate-fade-in-up max-w-md mx-auto mt-(--space-lg) mb-auto sm:my-auto py-(--space-lg) px-4`}
+        >
           <div className="relative inline-block">
             <div className="absolute -inset-4 bg-cyber blur-3xl opacity-20 animate-pulse"></div>
             <Network size={64} className="text-cyber relative z-10 mx-auto" />
@@ -591,6 +595,12 @@ const Onboarding: React.FC<OnboardingProps> = ({
             isBusy={isAnalyzing}
             inputRef={setSearchInput}
           />
+
+          {STATIC_DEMO && !(status === 'error' && isLiveUnavailable(errorCode)) && (
+            <Suspense fallback={null}>
+              <DemoShowcase onPick={handleAnalyzeRecorded} />
+            </Suspense>
+          )}
 
           {/* Live analysis paused (budget) or off (recordings only): say so and offer the
               recorded tracks; never a result in place of the analysis */}

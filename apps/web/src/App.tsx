@@ -16,7 +16,7 @@ import { fetchStoredRun } from './hooks/agent/storedRun';
 import { preloadsResults } from './components/console/progress';
 import { isSpotifyTrackId } from './utils/spotify';
 import type { AnalyzeOptions } from './hooks/agent/types';
-import { currentRoute, onHistoryMove, writeHistoryEntry } from './router/route';
+import { currentRoute, onHistoryMove, routeUrl, writeHistoryEntry } from './router/route';
 import { screenKey } from './router/screenKey';
 import { ShownResults } from './router/shownResults';
 import {
@@ -292,6 +292,18 @@ const App: React.FC = () => {
   // Another track on the same kind of screen (a breadcrumb step, Back from one map to another)
   // is a screen change too: the link that had the focus may be gone.
   const shownResult = isResultScreen(screen) ? (effectiveTrackData?.id ?? null) : null;
+  // The page's title follows what it shows; the full-size map sets its own (MapView).
+  const [searchTitle] = useState(() =>
+    currentRoute()?.kind === 'search' ? document.title : 'Liner Notes',
+  );
+  const shownTitle = shownResult ? effectiveTrackData?.title : null;
+  const shownArtist = shownResult ? effectiveTrackData?.artist : null;
+  useEffect(() => {
+    if (screen === AppPhase.MAP) return;
+    document.title = shownTitle
+      ? `${[shownTitle, shownArtist].filter(Boolean).join(' by ')}: samples, credits and history | Liner Notes`
+      : searchTitle;
+  }, [screen, shownTitle, shownArtist, searchTitle]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: a new result moves the focus too
   useLayoutEffect(() => {
     focusWait.current = null;
@@ -534,7 +546,12 @@ const App: React.FC = () => {
     const entry = entryRef.current;
     if (entry.search || entry.index > 0) return;
     writeHistory(
-      { phase: AppPhase.ONBOARDING, index: entry.index + 1, search: true, url: '/' },
+      {
+        phase: AppPhase.ONBOARDING,
+        index: entry.index + 1,
+        search: true,
+        url: routeUrl({ kind: 'search' }),
+      },
       'push',
     );
   }, [writeHistory]);
@@ -562,7 +579,11 @@ const App: React.FC = () => {
     if (!link) return;
     const query = withinQueryLimit(link.query ?? link.trackId);
     writeHistory(
-      { phase: AppPhase.ONBOARDING, index: entryRef.current.index, url: '/' },
+      {
+        phase: AppPhase.ONBOARDING,
+        index: entryRef.current.index,
+        url: routeUrl({ kind: 'search' }),
+      },
       'replace',
     );
     setLink(null);
@@ -721,7 +742,7 @@ const App: React.FC = () => {
             onAnalyzeTrack={handleAnalyzeTrack}
             onNewSearch={handleNewSearch}
             headingRef={setPlayerHeading}
-            mapHref={mapAddress === '/' ? null : mapAddress}
+            mapHref={mapAddress === routeUrl({ kind: 'search' }) ? null : mapAddress}
             onOpenMap={handleOpenMap}
             initialTab={playerTab}
             onTabChange={handleTabChange}

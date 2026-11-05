@@ -23,6 +23,7 @@ import {
 } from "../config/settings.js";
 import { mkdtempSync, rmSync } from "node:fs";
 import { request as httpRequest } from "node:http";
+import { createRequire } from "node:module";
 import { connect } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -398,11 +399,12 @@ describe("content encodings", () => {
   });
 
   it("keeps serving when bytes reach the decoder after the body was read", async () => {
-    // body-parser 2.3.0 leaves the decoder without an error listener once it has read the body
-    // (GHSA-27r3-jxmh-p828). A gzip member followed by a zero byte, or a deflate stream followed
-    // by any byte, ends the decoder before the request ends, so the route answers first; what is
-    // sent after the answer then reaches the finished decoder. An error it throws would end the process, and
-    // vitest fails the run on one.
+    // body-parser before 2.4.0 left the decoder without an error listener once it had read the
+    // body (GHSA-27r3-jxmh-p828). A gzip member followed by a zero byte, or a deflate stream
+    // followed by any byte, ends the decoder before the request ends, so the route answers first;
+    // what is sent after the answer then reaches the finished decoder. An error it throws would
+    // end the process, and vitest fails the run on one. On Node 24 only the gzip cases raised one
+    // with body-parser 2.3.0; the deflate cases take the same path.
     const { post, close } = await listen(app());
     try {
       const json = JSON.stringify({ padding: "a" });
@@ -446,7 +448,15 @@ describe("content encodings", () => {
     }
   });
 
-  it("refuses brotli, several codings and unknown codings with 415", async () => {
+  it("runs the body parser 2.4.0 or later, which keeps an error listener on its decoder", () => {
+    // The test above fails only through vitest's unhandled-error check, so this pins the floor too.
+    const fromExpress = createRequire(createRequire(import.meta.url).resolve("express"));
+    const { version } = fromExpress("body-parser/package.json") as { version: string };
+    const [major = 0, minor = 0] = version.split(".").map(Number);
+    expect(major > 2 || (major === 2 && minor >= 4), version).toBe(true);
+  });
+
+  it("refuses brotli, zstd, several codings and unknown codings with 415", async () => {
     const { post, close } = await listen(app());
     try {
       const body = brotliCompressSync(JSON.stringify({ padding: "a" }));
@@ -454,6 +464,7 @@ describe("content encodings", () => {
         "br",
         "BR",
         " br ",
+        "zstd",
         "gzip, br",
         "gzip, deflate",
         "compress",

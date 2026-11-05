@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+message: "If you use Liner Notes in your work, please cite it as below."
+title: "Liner Notes"
+abstract: "An open-source AI agent that traces a song's samples, credits and history, and labels every claim as measured, sourced or inferred."
+type: software
+authors:
+  - family-names: "Duarte"
+    given-names: "Jose Felipe"
+repository-code: "https://github.com/josefdc/liner-notes"
+url: "https://josefdc.github.io/liner-notes/"
+license: AGPL-3.0-only
+version: 0.1.0
+keywords:
+  - music
+  - music-information-retrieval
+  - llm-agents
+  - fact-checking
+  - musicbrainz

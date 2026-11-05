@@ -1,0 +1,14 @@
+name: Idea
+description: A feature, a data source or a change to how something works
+labels: ["idea"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does it solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you have in mind

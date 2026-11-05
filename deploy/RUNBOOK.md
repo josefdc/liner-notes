@@ -1,6 +1,6 @@
 # Deploy runbook
 
-Liner Notes on one server behind Cloudflare. The README ("Deploying") explains the stack; this page
+Liner Notes on one server behind Cloudflare. [`docs/deployment.md`](../docs/deployment.md) explains the stack; this page
 is the order of operations. Commands run from the checkout on the server (`/srv/liner-notes` here)
 as the deploy user, after `alias dc='docker compose -f deploy/compose.prod.yml'`. Never
 `dc down -v` a deployment: it deletes its volumes, database and spend log.
@@ -35,7 +35,7 @@ as the deploy user, after `alias dc='docker compose -f deploy/compose.prod.yml'`
 ## Go public (only under Guard 2)
 
 1. **Cloudflare.** A proxied **A** record only (compose publishes on IPv4); "Full (strict)" with
-   README's "Certificates"; HSTS on; Rocket Loader, Web Analytics' automatic setup and Bot Fight
+   "Certificates" in `docs/deployment.md`; HSTS on; Rocket Loader, Web Analytics' automatic setup and Bot Fight
    Mode's JavaScript detections off (the CSP blocks them); a Turnstile widget for the hostname.
 2. **Publish.** In `deploy/.env`: `SITE_ADDRESS` (the hostname), `PROXY_BIND=0.0.0.0`,
    `PROXY_PORT=80`, `PROXY_TLS_PORT=443`, `CORS_ORIGINS=https://<hostname>`, the widget's keys,
@@ -58,7 +58,7 @@ dc up -d --build && dc ps                    # then /api/ready, as above
 `deploy/.env.example` explains every setting: `cp deploy/.env.example deploy/.env && chmod 600
 deploy/.env`, owned by the deploy user, never committed or printed (nor `dc config`'s output).
 After a change, `dc up -d`; `VITE_*` are built into the page: `dc up -d --build web`. Outside the
-file: a read-only deploy key (`~deploy/.ssh`), the Origin CA key (README), the backups.
+file: a read-only deploy key (`~deploy/.ssh`), the Origin CA key (`docs/deployment.md`), the backups.
 
 ## Azure: quota, budget alert, the app's cap
 
@@ -114,7 +114,7 @@ To stop all spending: `REPLAY_MODE=only`, `dc up -d api`; `/api/ready` shows pro
 
 ## Rollback
 
-Each release keeps its images (`IMAGE_TAG`; `dc images`). Go back with web and API together (README,
+Each release keeps its images (`IMAGE_TAG`; `dc images`). Go back with web and API together (`docs/deployment.md`,
 "Order"): `git checkout <previous commit>`, its `IMAGE_TAG` in `deploy/.env`, `dc up -d --no-build`
 (`--build` if its images are gone). An older API refuses a newer schema ("schema version N is newer
 than this code supports" in `dc logs api`): restore the pre-deploy copy with the previous image:

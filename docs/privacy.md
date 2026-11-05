@@ -21,7 +21,7 @@ The API keeps one SQLite database (`SQLITE_DB_PATH`; tables in `apps/api/src/sto
 - **Checkpoints** (LangGraph's SQLite saver, `apps/api/src/store/checkpointer.ts`): the state of
   a run in progress, so it can resume after the track picker. Preview links are removed before a
   checkpoint is written, with one known exception: the percent-encoded clip link a failed
-  download's detail can hold ([README, "Known limitations"](../README.md#known-limitations)) is
+  download's detail can hold (["Known limitations"](limitations.md)) is
   kept in the run's checkpoint until the checkpoint is deleted. The link is a
   signed CDN URL that expires in about 15 minutes.
 - **Caches** (`audio_cache`, `research_cache`, `artwork_cache`, `musicbrainz_recording_cache`):
@@ -66,7 +66,7 @@ measurement after 30 days and a low-confidence one after 24 hours, research answ
   memory (its default store: `apps/api/src/http/middleware/rateLimit.ts` sets no other) for the
   length of each window. The raw address is held there only, never written to disk.
 - **Caddy** (the web image) logs addresses shortened to their network, and writes the typed text
-  and the run token as `REDACTED` or not at all ([README, "Client addresses"](../README.md#deploying)).
+  and the run token as `REDACTED` or not at all ([Deployment, "Client addresses"](deployment.md)).
 - `npm run test:replay` checks the API's log for IP addresses, query strings, the typed query and
   the configured keys, and fails if it finds one.
 

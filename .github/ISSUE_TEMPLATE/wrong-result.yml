@@ -1,0 +1,24 @@
+name: Wrong result
+description: A page states something false, or misses a documented relation
+labels: ["wrong result"]
+body:
+  - type: input
+    id: song
+    attributes:
+      label: Song and artist
+    validations:
+      required: true
+  - type: textarea
+    id: shown
+    attributes:
+      label: What the page shows
+      description: The claim or link, and its label (measured, sourced or inferred).
+    validations:
+      required: true
+  - type: textarea
+    id: correct
+    attributes:
+      label: What is correct, and where it says so
+      description: A link to a record or a reliable source.
+    validations:
+      required: true

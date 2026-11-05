@@ -7,12 +7,12 @@ network and no model call. Run the commands from the repository root. The replay
 (`evals/agent/runs/2026-10-31`) are the golden run's, recorded at the commit kept by the tag
 `golden-run-2026-10-31`. The `showcase.mjs` commands need `npm ci` and the contract package
 built (`npm run build -w packages/contract`). Every known limitation, including those with no case here, is listed in
-the [README](../README.md#known-limitations).
+the [known limitations](limitations.md).
 
 The second part of this page, "Unmatched edges in the agent eval", is written for the agent
 evaluation: its report links here for each proposal the scorer did not match to gold. Its last
 section, [Bitter Sweet Symphony's tempo](#a-measured-tempo-to-read-with-care-bitter-sweet-symphony-gbaaa9700049),
-is also the README's tempo octave error case; the showcase replay holds the same value:
+is also the tempo octave error case in the [known limitations](limitations.md); the showcase replay holds the same value:
 
 ```bash
 node -p 'require("./fixtures/replays/the-verve-bitter-sweet-symphony.json").analysis.audio.tempo'
@@ -30,7 +30,7 @@ node -p 'require("./fixtures/replays/the-verve-bitter-sweet-symphony.json").anal
   (`apps/api/src/agent/relationText.ts`). "MusicBrainz lists X as a recording sampled in Y" and
   "draws on X" are not among them, so the claim is kept as one that may add information.
 - **Also**: Gangsta's Paradise is left out of the showcase for the same reason: its page would
-  show "Possible sample" next to the documented sample (README, "The showcase").
+  show "Possible sample" next to the documented sample ([Evaluation, "The showcase"](evaluation.md#the-showcase)).
 - **Record**: `fixtures/replays/one-more-time-daft-punk.json`, claims `5f2d565f…` (model) and
   `a2e538c5…` (code); `evals/agent/runs/2026-10-31/results/USTB10250016.json` for Gangsta's
   Paradise.

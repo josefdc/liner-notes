@@ -22,7 +22,7 @@ are using, at no charge, from its repository:
 
 The web app's footer links to it ("Source"). Anyone who runs a modified version for others
 must offer that version's source in the same way: setting VITE_SOURCE_URL when the web app is
-built points the footer link at it (see README.md).
+built points the footer link at it (see docs/development.md).
 
 
 Third-party software

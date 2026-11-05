@@ -526,6 +526,20 @@ export function formatBpm(bpm: number): string {
   return String(Math.round(bpm * 10) / 10);
 }
 
+/** The tempo from which a measured value is flagged as possibly double the felt one. */
+const DOUBLE_TIME_FROM_BPM = 150;
+
+/**
+ * What a shown tempo may hide: beat trackers can report double the felt tempo, and their
+ * confidence does not flag it. Says what half would be; the measured value stays as measured.
+ * Null below DOUBLE_TIME_FROM_BPM, or for a value that is not a number.
+ */
+export function doubleTimeHint(shownBpm: string): string | null {
+  const bpm = Number(shownBpm);
+  if (!Number.isFinite(bpm) || bpm < DOUBLE_TIME_FROM_BPM) return null;
+  return `may be double the felt tempo; half is ${formatBpm(bpm / 2)}`;
+}
+
 function formatModelScore(score: ModelScore): string {
   const [low, high] = score.range;
   return low === 0 && high === 1

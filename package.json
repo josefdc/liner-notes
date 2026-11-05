@@ -30,6 +30,9 @@
     "test:visual:update": "node scripts/visual.mjs --update-snapshots=changed",
     "test:replay": "node scripts/replay-e2e.mjs && REPLAY_INTERRUPT_TEST=1 vitest run --project scripts replay-interrupt",
     "contract:check": "npm run build -w packages/contract && node packages/contract/scripts/contract-check.mjs",
+    "demo:build": "node scripts/build-static-demo.mjs",
+    "demo:preview": "node scripts/serve-static-demo.mjs",
+    "demo:cards": "node scripts/static-demo-cards.mjs",
     "eval": "node evals/agent/eval.mjs",
     "eval:table": "node evals/agent/report.mjs"
   },

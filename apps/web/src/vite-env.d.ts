@@ -10,6 +10,8 @@ declare global {
      * which only an API without a Turnstile secret, outside production, accepts.
      */
     readonly VITE_TURNSTILE_SITE_KEY?: string;
+    /** `1` in the static demo's build (scripts/build-static-demo.mjs): no API behind the page. */
+    readonly VITE_STATIC_DEMO?: string;
   }
 }
 

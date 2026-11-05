@@ -55,7 +55,8 @@ export function addressOf(
   if (link) return routeUrl({ kind, trackId: link.trackId, query: link.query });
   // Only a Spotify track id makes a link that loads again: a result under any other id (a
   // recording's placeholder) keeps the search's address rather than one the page calls invalid.
-  if (phase === AppPhase.ONBOARDING || !isSpotifyTrackId(track?.id)) return '/';
+  if (phase === AppPhase.ONBOARDING || !isSpotifyTrackId(track?.id))
+    return routeUrl({ kind: 'search' });
   const query = `${track.title ?? ''} ${track.artist ?? ''}`.trim() || null;
   return routeUrl({ kind, trackId: track.id, query });
 }

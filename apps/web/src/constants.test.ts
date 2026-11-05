@@ -21,6 +21,7 @@ import {
   normalizeTrack,
   type Reading,
   SATURATED_ENERGY_TEXT,
+  doubleTimeHint,
 } from './constants';
 import type { TrackData } from './types';
 
@@ -811,5 +812,18 @@ describe('model scores shown in part', () => {
     expect(fingerprintSubtitle(stylesOnly, false)).toBe(
       'Style scores from audio models run on the preview',
     );
+  });
+});
+
+describe('doubleTimeHint', () => {
+  it('flags a fast tempo as possibly double, and says what half is', () => {
+    expect(doubleTimeHint('171.2')).toBe('may be double the felt tempo; half is 85.6');
+    expect(doubleTimeHint('150')).toBe('may be double the felt tempo; half is 75');
+  });
+
+  it('says nothing below the threshold or for what is not a number', () => {
+    expect(doubleTimeHint('149.9')).toBeNull();
+    expect(doubleTimeHint('122.9')).toBeNull();
+    expect(doubleTimeHint('C major')).toBeNull();
   });
 });

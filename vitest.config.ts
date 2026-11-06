@@ -1,5 +1,10 @@
 import { defineConfig } from "vitest/config";
 
+// A test's default time limit: Vitest's 5 s locally, and 30 s in CI, where GitHub's 2-vCPU runners
+// run the CPU-heavy tests several times slower than a workstation (some take over a minute there).
+// A test that sets its own limit keeps it.
+const testTimeout = process.env.CI ? 30_000 : 5_000;
+
 // One run covers every workspace: `npm test` (or `npx vitest run --project api`).
 export default defineConfig({
   test: {
@@ -7,6 +12,7 @@ export default defineConfig({
       {
         test: {
           name: "api",
+          testTimeout,
           root: "apps/api",
           environment: "node",
           // Tests never load a settings file (see test/setup/noDotenv.ts), replay model calls
@@ -27,6 +33,7 @@ export default defineConfig({
         extends: "./apps/web/vite.config.ts",
         test: {
           name: "web",
+          testTimeout,
           root: "apps/web",
           environment: "happy-dom",
           include: ["src/**/*.test.{ts,tsx}", "test/**/*.test.{ts,tsx}", "config/**/*.test.ts"],
@@ -35,6 +42,7 @@ export default defineConfig({
       {
         test: {
           name: "contract",
+          testTimeout,
           root: "packages/contract",
           environment: "node",
           include: ["src/**/*.test.ts"],
@@ -43,6 +51,7 @@ export default defineConfig({
       {
         test: {
           name: "scripts",
+          testTimeout,
           root: "scripts",
           environment: "node",
           include: ["**/*.test.{mjs,ts}"],

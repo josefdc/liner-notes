@@ -3238,7 +3238,11 @@ describe("text redaction against the rules before #202", { timeout: 30_000 }, ()
       return isMediaUrl(plain) ? plain : url;
     });
 
-  it("differs from before only where it redacts a secret or a link more", () => {
+  // Both scrubbers over the whole corpus: about 14 s on Node 26 and 38 s on Node 24 on GitHub's
+  // 2-vCPU runners, so it gets the room the other corpus-wide checks here have.
+  it("differs from before only where it redacts a secret or a link more", {
+    timeout: 120_000,
+  }, () => {
     const changed = corpus.filter((text) => scrubText(text) !== scrubTextBefore(text));
     // Either a pure redaction, or an escaped media link read exactly as before its plain form was
     // (the e-mail and phone rules then read the text around it as around a plain link).

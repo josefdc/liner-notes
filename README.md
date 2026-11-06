@@ -104,32 +104,40 @@ went well; the figures above cover every row. The full list is in
 ## How it works
 
 ```mermaid
-flowchart LR
-  browser["Browser<br/>React app"] -->|"/api, server-sent events"| caddy["Caddy<br/>(web image)"]
-  caddy --> api["API<br/>Express 5"]
-  api --> graph
-  subgraph graph["LangGraph run"]
-    direction LR
-    scout --> clarification{"track picker<br/>(when unsure)"}
-    scout --> engineer
-    scout --> historian
-    clarification --> engineer
-    clarification --> historian
-    engineer --> composer
+flowchart TB
+  user(["You type a song"]) --> web["Web app<br/>React, D3"]
+  web -->|"/api, server-sent events"| api["API<br/>Express 5"]
+  api --> scout
+
+  subgraph agent["LangGraph agent"]
+    direction TB
+    scout["scout<br/>finds the recording"] --> picker{"track picker<br/>when unsure"}
+    scout --> engineer["engineer<br/>measures the audio"]
+    scout --> historian["historian<br/>gathers the evidence"]
+    picker --> engineer
+    picker --> historian
+    engineer --> composer["composer<br/>writes the notes"]
     historian --> composer
-    composer --> verifier
+    composer --> verifier["verifier<br/>checks every claim"]
   end
-  scout -.-> spotify["Spotify<br/>search, metadata"]
-  engineer -.-> deezer["Deezer<br/>preview clip"]
-  engineer -.-> audio["Audio service<br/>FastAPI, Essentia"]
-  historian -.-> records["MusicBrainz, Discogs, SecondHandSongs,<br/>Genius, ListenBrainz, Last.fm, Tavily"]
-  composer -.-> llm["Azure OpenAI<br/>research planner, composer,<br/>judge, More facts"]
-  historian -.->|research planner| llm
+
+  verifier --> page(["Page: measured, sourced,<br/>inferred or missing"])
+
+  engineer -.-> audio[("Deezer preview,<br/>audio service: Essentia")]
+  historian -.-> records[("MusicBrainz, Discogs,<br/>SecondHandSongs, Genius,<br/>ListenBrainz, Last.fm, Tavily")]
+  scout -.-> spotify[("Spotify")]
+  composer -.-> llm[("Azure OpenAI")]
   verifier -.-> llm
-  api -.->|More facts| llm
-  api --- db[("SQLite<br/>runs, caches,<br/>checkpoints")]
-  api --- replays[("fixtures/replays<br/>recorded runs")]
+
+  classDef measured stroke:#00b8c4,stroke-width:2px
+  classDef sourced stroke:#e09a00,stroke-width:2px
+  classDef model stroke:#9b7ae0,stroke-width:2px
+  class engineer,audio measured
+  class historian,records sourced
+  class composer,verifier,llm model
 ```
+
+Cyan marks what is measured, amber what is sourced from records, and violet model work.
 
 - **scout** finds the track on Spotify; when the match is not clear it stops at the **track
   picker** and waits for the visitor's choice.
